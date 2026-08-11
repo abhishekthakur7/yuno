@@ -1,0 +1,94 @@
+{
+  "description": "MVP mechanism fixture v2: standalone, independently publishable, fully valid manifest. Carries three topic identities forward from v1 (alpha/beta/dsa-one -- same stable_id, proving identity continuity across versions), drops v1's fixture-topic-gamma (expresses the canonical-graph half of spec §6.1 step 8's 'upstream-deleted topic' fixture that IS expressible without overlays/goal-local state -- see the loader module docstring for what remains a gap until IDK-104/106), and adds one new topic. v2 is validated and published independently of v1; no diff/merge (IDK-407/D9) is exercised here.",
+  "version_label": "fixture-canonical-v2",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-alpha",
+      "stable_slug": "fixture-topic-alpha",
+      "title": "[SYNTHETIC] Fixture Topic Alpha (v2)",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "implement",
+      "recommended_layer": "Implementation",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-beta",
+      "stable_slug": "fixture-topic-beta",
+      "title": "[SYNTHETIC] Fixture Topic Beta (v2)",
+      "subject": "aws",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "implement",
+      "recommended_layer": "Implementation",
+      "checkpoint_start": 1,
+      "checkpoint_end": 2
+    },
+    {
+      "stable_id": "fixture-topic-dsa-one",
+      "stable_slug": "fixture-topic-dsa-one",
+      "title": "[SYNTHETIC] Fixture Topic DSA One (v2)",
+      "subject": "dsa",
+      "scope_tags": ["fixture-tag-dsa"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "understand",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 1,
+      "checkpoint_end": 2
+    },
+    {
+      "stable_id": "fixture-topic-delta",
+      "stable_slug": "fixture-topic-delta",
+      "title": "[SYNTHETIC] Fixture Topic Delta",
+      "subject": "rdb",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-2",
+      "target_capability": "choose",
+      "recommended_layer": "Alternatives",
+      "checkpoint_start": 2,
+      "checkpoint_end": 3
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-v2-alpha-beta",
+      "from_stable_id": "fixture-topic-alpha",
+      "to_stable_id": "fixture-topic-beta",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture ordering: alpha before beta."
+    },
+    {
+      "id": "fixture-relation-v2-beta-delta",
+      "from_stable_id": "fixture-topic-beta",
+      "to_stable_id": "fixture-topic-delta",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture ordering: beta before delta."
+    },
+    {
+      "id": "fixture-relation-v2-dsa-one-delta",
+      "from_stable_id": "fixture-topic-dsa-one",
+      "to_stable_id": "fixture-topic-delta",
+      "relation_type": "scenario",
+      "rationale": "CUR-02 fixture: DSA topic re-bound to delta after gamma's removal."
+    }
+  ],
+  "content_revisions": [
+    {
+      "id": "fixture-content-v2-alpha-implementation",
+      "topic_stable_id": "fixture-topic-alpha",
+      "layer": "Implementation",
+      "kind": "fixture-kind-example",
+      "status": "published",
+      "markdown_ref": "fixture://canonical/v2/fixture-topic-alpha/implementation.md",
+      "markdown_hash": "fixture-markdown-hash-v2-alpha-implementation",
+      "prompt_template_version": null
+    }
+  ],
+  "approval": {
+    "approver_role": "designated_editorial_approver",
+    "basis_ref": "fixture-approval-basis-v2"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "description": "Invalid: a topic's subject is outside ALLOWED_SUBJECTS (CUR-01's boundary categories). The subject value itself is a transparently synthetic placeholder, not a real technology name, so this fixture cannot be mistaken for a real curriculum-boundary decision. Engineered to trigger exactly ViolationCode.OUT_OF_BOUNDARY_CURRICULUM_TAG and nothing else.",
+  "version_label": "fixture-canonical-invalid-out-of-boundary",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-out-of-boundary",
+      "stable_slug": "fixture-topic-out-of-boundary",
+      "title": "[SYNTHETIC] Fixture Topic Out Of Boundary",
+      "subject": "fixture-out-of-boundary-subject",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [],
+  "content_revisions": []
+}

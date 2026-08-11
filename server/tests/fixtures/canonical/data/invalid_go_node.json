@@ -1,0 +1,21 @@
+{
+  "description": "Invalid: a topic with subject='go' (CUR-02 defers Go+AWS to Later). This also falls outside ALLOWED_SUBJECTS, so it deliberately trips BOTH ViolationCode.GO_NODE_PRESENT and ViolationCode.OUT_OF_BOUNDARY_CURRICULUM_TAG at once -- validation.py's own docstring documents the Go check as an intentionally redundant, defence-in-depth rule layered on top of the general boundary check, so this overlap is the expected/correct behaviour, not a fixture bug.",
+  "version_label": "fixture-canonical-invalid-go-node",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-go",
+      "stable_slug": "fixture-topic-go",
+      "title": "[SYNTHETIC] Fixture Topic Go",
+      "subject": "go",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [],
+  "content_revisions": []
+}

@@ -1,0 +1,98 @@
+.learning-app {
+  --app-ink: #172521;
+  --app-muted: #596660;
+  --app-line: #d8dfdc;
+  --app-paper: #fbfcfb;
+  --app-green: #176b55;
+  --app-green-dark: #0f4e3e;
+  min-height: 100vh;
+  color: var(--app-ink);
+  background: var(--app-paper);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+.learning-app button,
+.app-nav-drawer button { font: inherit; }
+.learning-app :focus-visible,
+.app-nav-drawer :focus-visible { outline: 3px solid #75b9a4; outline-offset: 2px; }
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  height: 64px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 0 36px;
+  border-bottom: 1px solid var(--app-line);
+  background: rgba(255,255,255,.98);
+}
+.app-wordmark { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; font-weight: 780; font-size: 18px; letter-spacing: -.025em; cursor: pointer; }
+.app-mark { height: 20px; display: grid; grid-template-columns: repeat(3, 4px); align-items: end; gap: 3px; }
+.app-mark span { display: block; border-radius: 3px; background: var(--app-green); }
+.app-mark span:nth-child(1) { height: 10px; }.app-mark span:nth-child(2) { height: 20px; }.app-mark span:nth-child(3) { height: 15px; }
+.app-primary-nav { height: 100%; display: flex; align-items: stretch; gap: 24px; }
+.app-primary-nav button { position: relative; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: #53605c; font-size: 13px; font-weight: 680; cursor: pointer; }
+.app-primary-nav button.is-active { color: var(--app-ink); }
+.app-primary-nav button.is-active::after { content: ""; position: absolute; inset: auto 0 0; height: 3px; background: var(--app-green); }
+.app-header-actions { justify-self: end; display: flex; align-items: center; gap: 7px; }
+.app-search-button, .app-menu-button, .app-mobile-menu, .app-icon-button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #40504a; font-size: 12px; font-weight: 700; cursor: pointer; }
+.app-search-button:hover, .app-menu-button:hover, .app-menu-button.is-active { border-color: #b9c7c2; background: #f3f7f5; }
+.app-avatar { width: 40px; height: 40px; display: grid; place-items: center; margin-left: 3px; border: 1px solid #b8c5c0; border-radius: 50%; color: var(--app-green-dark); background: #edf4f1; font-size: 12px; font-weight: 800; }
+.app-mobile-menu { display: none; }
+
+.app-course-band { min-height: 70px; display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center; gap: 22px; padding: 10px 36px; border-bottom: 1px solid var(--app-line); background: #f7f9f8; }
+.app-course-back { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; justify-self: start; padding: 0; border: 0; background: transparent; color: var(--app-green); font-size: 13px; font-weight: 740; cursor: pointer; }
+.app-course-name { min-width: 0; display: flex; flex-direction: column; }
+.app-course-name span { color: var(--app-muted); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.app-course-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.app-band-progress { min-width: 300px; display: flex; align-items: center; gap: 12px; color: var(--app-muted); font-size: 11px; }
+.app-band-progress > div { width: 120px; height: 5px; overflow: hidden; border-radius: 4px; background: #d9e2de; }
+.app-band-progress > div span { display: block; width: 36%; height: 100%; background: var(--app-green); }
+
+.app-menu-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(14,30,25,.56); }
+.app-nav-drawer {
+  --app-ink: #172521; --app-muted: #596660; --app-line: #d8dfdc; --app-green: #176b55; --app-green-dark: #0f4e3e;
+  position: fixed; z-index: 110; inset: 0 0 0 auto; width: min(420px, 94vw); height: 100dvh; overflow-y: auto; color: var(--app-ink); background: #fff; box-shadow: -24px 0 60px rgba(8,26,20,.2); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.app-drawer-head { min-height: 108px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px; border-bottom: 1px solid var(--app-line); }
+.app-drawer-head h2 { margin: 0; font-size: 20px; }
+.app-drawer-head p { margin: 5px 0 0; color: var(--app-muted); font-size: 12px; }
+.app-icon-button { flex: 0 0 auto; border-color: #c5cfcb; }
+.app-drawer-nav { padding: 8px 20px 28px; }
+.app-drawer-group { padding-top: 18px; }
+.app-drawer-group > span { display: block; padding: 0 8px 9px; color: var(--app-muted); font-size: 9px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.app-drawer-group > button { width: 100%; min-height: 62px; display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: center; gap: 10px; padding: 10px 9px; border: 0; border-top: 1px solid #edf0ef; background: transparent; text-align: left; cursor: pointer; }
+.app-drawer-group > button:hover, .app-drawer-group > button.is-current { background: #eef6f2; }
+.app-drawer-group > button > svg { color: var(--app-green); }
+.app-drawer-group > button > span { min-width: 0; display: flex; flex-direction: column; }
+.app-drawer-group > button strong { font-size: 13px; }.app-drawer-group > button small { margin-top: 2px; color: var(--app-muted); font-size: 11px; }
+
+@media (max-width: 980px) {
+  .app-header { grid-template-columns: 1fr auto; padding-inline: 22px; }
+  .app-primary-nav { display: none; }
+  .app-header-actions { grid-column: 2; }
+  .app-menu-button { display: none; }
+  .app-mobile-menu { display: inline-flex; }
+  .app-course-band { padding-inline: 22px; grid-template-columns: auto minmax(0,1fr); }
+  .app-band-progress { display: none; }
+}
+
+@media (max-width: 600px) {
+  .app-header { height: 58px; padding-inline: 14px; gap: 10px; }
+  .app-wordmark { font-size: 0; min-width: 44px; }
+  .app-mark { margin-inline: auto; }
+  .app-search-button { display: none; }
+  .app-avatar { width: 40px; height: 40px; }
+  .app-course-band { min-height: 62px; padding: 7px 14px; gap: 9px; }
+  .app-course-back { min-width: 44px; padding: 0 9px; font-size: 0; }
+  .app-course-name strong { font-size: 12px; }
+  .app-nav-drawer { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-app *, .learning-app *::before, .learning-app *::after, .app-menu-overlay, .app-nav-drawer { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, typecheck, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      # --- Python / FastAPI side -------------------------------------------------
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          working-directory: server
+
+      - name: Install Python dependencies
+        working-directory: server
+        run: uv sync --locked
+
+      - name: Ruff
+        working-directory: server
+        run: uv run ruff check
+
+      - name: Import boundaries (lint-imports)
+        working-directory: server
+        run: uv run lint-imports
+
+      - name: Pytest
+        working-directory: server
+        run: uv run pytest
+
+      # --- React / TypeScript side -------------------------------------------------
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6.0.10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Vitest
+        run: pnpm test
+
+      # --- Boundary: fails if the OpenAPI schema and its generated TS client
+      #     have drifted apart (spec Sec 5.1). Runs the Python app's own
+      #     `--check` (needs the uv-synced venv above) and the TS drift check.
+      - name: OpenAPI drift check
+        run: pnpm openapi:check

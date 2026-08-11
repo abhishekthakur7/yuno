@@ -1,0 +1,33 @@
+{
+  "description": "Invalid: one topic's stable_id is blank. Engineered to trigger exactly ViolationCode.MISSING_STABLE_ID and nothing else.",
+  "version_label": "fixture-canonical-invalid-missing-stable-id",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "",
+      "stable_slug": "fixture-topic-blank",
+      "title": "[SYNTHETIC] Fixture Topic With No Stable Id",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-ok",
+      "stable_slug": "fixture-topic-ok",
+      "title": "[SYNTHETIC] Fixture Topic Ok",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [],
+  "content_revisions": []
+}

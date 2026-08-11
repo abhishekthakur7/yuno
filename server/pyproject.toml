@@ -1,0 +1,133 @@
+[project]
+name = "yuno"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy>=2",
+    "alembic",
+    "python-ulid",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+    "import-linter",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yuno"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff.lint]
+# SLF001 (private-member access) mechanically enforces the repository
+# owner-scoping boundary: repositories keep their `Session` private so no
+# caller can bypass `owner_scoped_select` by querying it directly. Without
+# this rule that boundary is convention only.
+extend-select = ["SLF"]
+
+[tool.importlinter]
+# Spec §3.2 dependency direction, expressed module-first (spec §3.3):
+# `yuno.api` is the one composition layer above everything, `yuno.shared`
+# is cross-cutting primitives every module may depend on (and which must
+# never depend back on a module), and each `yuno.modules.*` package is
+# internally layered the same way `yuno` used to be as a whole.
+# `yuno.config`, `yuno.models` and `yuno.unit_of_work` are composition-root
+# glue outside this stack and are intentionally not declared here.
+root_package = "yuno"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Composition-root layering: api > modules > shared (spec §3.2)"
+type = "layers"
+# Highest to lowest: higher layers may import lower, never the reverse.
+layers = [
+    "yuno.api",
+    "yuno.modules",
+    "yuno.shared",
+]
+
+[[tool.importlinter.contracts]]
+name = "Per-module layering (spec §3.3)"
+type = "layers"
+# Reapplies `yuno`'s old top-level layering inside every module: `service`
+# may import `repository`/`models`/`ports`/`domain`; `repository` may
+# import `models`/`ports`/`domain`; `models` (ORM) and `ports` (protocols)
+# may import `domain`; nothing imports back up. `(service)` and
+# `(repository)` are optional (not every module has both yet). A new
+# module ticket adds its own name to `containers` below.
+containers = [
+    "yuno.modules.identity",
+    "yuno.modules.audit",
+    "yuno.modules.canonical",
+]
+layers = [
+    "(service)",
+    "(repository)",
+    "models",
+    "ports",
+    "domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain and application are framework-free (spec §3.2, SYS-01/NFR-07)"
+type = "forbidden"
+source_modules = [
+    "yuno.shared.domain",
+    "yuno.shared.application",
+    "yuno.modules.identity.domain",
+    "yuno.modules.identity.ports",
+    "yuno.modules.identity.service",
+    "yuno.modules.audit.domain",
+    "yuno.modules.audit.ports",
+    "yuno.modules.canonical.domain",
+    "yuno.modules.canonical.ports",
+    "yuno.modules.canonical.validation",
+]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "alembic",
+    "pydantic",
+    "subprocess",
+]
+
+[[tool.importlinter.contracts]]
+name = "Module independence (spec §3.3, IDK-102 scope)"
+type = "independence"
+# `yuno.modules.*` modules must not import each other (spec §3.2:
+# cross-module ORM mutation is forbidden). `identity` and `audit` are
+# cross-cutting: every other module may import them freely, and `identity`
+# itself depends on `audit` (`service.ensure_local_owner` appends an
+# `AuditEvent`). `independence` has no "exempt everywhere" shorthand, so
+# each such edge needs its own `ignore_imports` entry below; the reverse
+# (`audit` importing `identity`) is still forbidden, and no two
+# non-cross-cutting modules may import each other. A later module ticket
+# adds its own name to `modules` below (and an `ignore_imports` entry if
+# it too turns out to be cross-cutting). `canonical`'s offline publisher
+# checks the acting owner's approver grant via `identity` and appends an
+# `AuditEvent` via `audit` -- the same "any module -> identity/audit" edge
+# `identity.service -> audit` already takes.
+modules = [
+    "yuno.modules.identity",
+    "yuno.modules.audit",
+    "yuno.modules.canonical",
+]
+ignore_imports = [
+    "yuno.modules.identity.service -> yuno.modules.audit.**",
+    "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
+    "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
+]

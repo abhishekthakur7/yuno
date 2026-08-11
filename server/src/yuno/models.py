@@ -1,0 +1,18 @@
+"""Import every module's ORM models so `Base.metadata` is complete as soon
+as `yuno.models` is imported.
+
+Composition root, not `yuno.shared`: populating one shared `Base.metadata`
+requires importing every module's `models.py`, which `yuno.shared` must
+never do (see `yuno.shared`'s docstring). The schema-sweep test and
+Alembic autogenerate both rely on this: they import this module once and
+expect `Base.metadata.tables` to already contain every table in the
+system.
+"""
+
+from __future__ import annotations
+
+from yuno.modules.audit import models as audit_models
+from yuno.modules.canonical import models as canonical_models
+from yuno.modules.identity import models as identity_models
+
+__all__ = ["audit_models", "canonical_models", "identity_models"]

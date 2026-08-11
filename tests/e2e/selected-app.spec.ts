@@ -1,0 +1,698 @@
+import { expect, test as base, type Page, type Request } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+
+const routes = [
+  ['/', /Continue building defensible backend judgment/i],
+  ['/app/onboarding', /Shape your classroom/i],
+  ['/app/learn-roadmap', /Your editable roadmap/i],
+  ['/app/topic-studio', /Implement an idempotency boundary/i],
+  ['/app/interview-hub', /Choose the mode you need/i],
+  ['/app/practice', /Reason through the failure boundary/i],
+  ['/app/mock', /idempotency store is unavailable/i],
+  ['/app/reports', /No terminal mock report is available/i],
+  ['/app/evidence', /What your work supports/i],
+  ['/app/imports', /Bring notes in as untrusted material/i],
+  ['/app/canonical-updates', /Review changes before they reach this goal/i],
+  ['/app/search', /Find a lesson, reading, review, or evidence record/i],
+  ['/app/jobs', /Jobs and local activity/i],
+  ['/app/settings', /^Settings$/i],
+] as const
+
+const viewports = [
+  { width: 1440, height: 1000 },
+  { width: 1366, height: 768 },
+  { width: 768, height: 1024 },
+  { width: 390, height: 844 },
+] as const
+
+const fixtureDraft = 'Fail closed for reservation creation, return a retryable failure, and keep the message unacknowledged. Failing open can create an irreversible duplicate. Bound retries, expose the dependency failure, and recover from the queue rather than claiming availability.'
+const exactDraft = '  Preserve this leading space.\nSecond line with a trailing space.  '
+const practiceDraft = 'The commit-before-ack window needs an atomic idempotency key with an explicit retention policy.'
+
+type Diagnostics = { consoleErrors: string[]; pageErrors: string[]; externalRequests: string[] }
+
+const test = base.extend<{ diagnostics: Diagnostics }>({
+  diagnostics: async ({ page }, use) => {
+    const diagnostics: Diagnostics = { consoleErrors: [], pageErrors: [], externalRequests: [] }
+    page.on('console', message => {
+      if (message.type() === 'error') diagnostics.consoleErrors.push(message.text())
+    })
+    page.on('pageerror', error => diagnostics.pageErrors.push(error.message))
+    page.on('request', request => {
+      if (!isLocalRequest(request)) diagnostics.externalRequests.push(`${request.method()} ${request.url()}`)
+    })
+    await use(diagnostics)
+    expect.soft(diagnostics.consoleErrors, 'browser console errors').toEqual([])
+    expect.soft(diagnostics.pageErrors, 'uncaught page errors').toEqual([])
+    expect.soft(diagnostics.externalRequests, 'unexpected non-local requests').toEqual([])
+  },
+})
+
+function isLocalRequest(request: Request) {
+  const url = new URL(request.url())
+  return ['data:', 'blob:'].includes(url.protocol) || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase())
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('learning-app-test-initialized')) return
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('lattice.')) localStorage.removeItem(key)
+    }
+    sessionStorage.setItem('learning-app-test-initialized', 'true')
+  })
+})
+
+async function open(page: Page, route: string) {
+  await page.goto(route)
+  await expect(page.locator('[data-app="lattice-learning"]')).toBeVisible()
+}
+
+async function learningState(page: Page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem('lattice.learning.state.v1') || 'null'))
+}
+
+async function operationsState(page: Page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem('lattice.operations.state.v1') || 'null'))
+}
+
+test('selected application storage migrates once to neutral keys without losing learner state', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await expect.poll(async () => Boolean(await learningState(page))).toBe(true)
+  await expect.poll(async () => Boolean(await operationsState(page))).toBe(true)
+
+  await page.evaluate(() => {
+    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
+    const operations = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
+    localStorage.removeItem('lattice.learning.state.v1')
+    localStorage.removeItem('lattice.operations.state.v1')
+    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
+      ...learning,
+      conceptId: 'concept-b',
+      currentLessonId: 'observability',
+      codeNotes: 'Preserve this exact selected-application note.',
+    }))
+    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({ ...operations, progress: 'simple' }))
+  })
+
+  await page.reload()
+  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('observability')
+  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Preserve this exact selected-application note.')
+  await expect.poll(async () => (await operationsState(page))?.progress).toBe('simple')
+  await expect.poll(() => page.evaluate(() => ({
+    learning: Boolean(localStorage.getItem('lattice.learning.state.v1')),
+    operations: Boolean(localStorage.getItem('lattice.operations.state.v1')),
+    legacyLearning: Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')),
+    legacyOperations: Boolean(localStorage.getItem('lattice.selected.operations.v1')),
+  }))).toEqual({ learning: true, operations: true, legacyLearning: false, legacyOperations: false })
+
+  const migratedLearning = await learningState(page)
+  const migratedOperations = await operationsState(page)
+  await page.reload()
+  await expect.poll(async () => await learningState(page)).toEqual(migratedLearning)
+  await expect.poll(async () => await operationsState(page)).toEqual(migratedOperations)
+})
+
+test('partial legacy storage is deeply hydrated and copied forward without concept identity', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await page.evaluate(() => {
+    localStorage.removeItem('lattice.learning.state.v1')
+    localStorage.removeItem('lattice.operations.state.v1')
+    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
+      version: 1,
+      conceptId: 'concept-b',
+      onboarding: { goalName: 'Migrated partial goal' },
+      practice: { draft: 'Partial practice draft' },
+      mock: { status: 'paused' },
+      roadmap: { observability: { skipped: true } },
+    }))
+    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({
+      version: 1,
+      owner: { name: 'Migrated owner' },
+      review: { enabled: false },
+    }))
+  })
+  await page.reload()
+
+  await expect.poll(async () => {
+    const learning = await learningState(page)
+    return {
+      conceptId: learning?.conceptId,
+      goalName: learning?.onboarding.goalName,
+      path: learning?.onboarding.path,
+      approved: learning?.onboarding.approved,
+      practiceDraft: learning?.practice.draft,
+      practiceMode: learning?.practice.mode,
+      mockStatus: learning?.mock.status,
+      mockPriorTurns: learning?.mock.priorTurns.length,
+      observabilitySkipped: learning?.roadmap.observability.skipped,
+      observabilityDepth: learning?.roadmap.observability.depth,
+    }
+  }).toEqual({
+    conceptId: undefined,
+    goalName: 'Migrated partial goal',
+    path: 'Learn',
+    approved: false,
+    practiceDraft: 'Partial practice draft',
+    practiceMode: 'answering',
+    mockStatus: 'paused',
+    mockPriorTurns: 2,
+    observabilitySkipped: true,
+    observabilityDepth: 'Production',
+  })
+  await expect.poll(async () => {
+    const operations = await operationsState(page)
+    return {
+      owner: operations?.owner,
+      review: operations?.review,
+      imports: operations?.importStatements,
+    }
+  }).toEqual({
+    owner: { name: 'Migrated owner', role: 'Senior backend engineer' },
+    review: { enabled: false, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
+    imports: [],
+  })
+  await expect.poll(() => page.evaluate(() => ({
+    legacyLearning: localStorage.getItem('lattice.concept-b.learner-state.v1'),
+    legacyOperations: localStorage.getItem('lattice.selected.operations.v1'),
+  }))).toEqual({ legacyLearning: null, legacyOperations: null })
+})
+
+test('valid neutral storage wins and does not consume legacy storage', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await page.evaluate(() => {
+    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
+    const operations = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
+    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({ ...learning, codeNotes: 'Neutral learning wins.' }))
+    localStorage.setItem('lattice.operations.state.v1', JSON.stringify({ ...operations, progress: 'detailed' }))
+    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({ ...learning, conceptId: 'concept-b', codeNotes: 'Legacy must lose.' }))
+    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({ ...operations, progress: 'simple' }))
+  })
+  await page.reload()
+
+  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Neutral learning wins.')
+  await expect.poll(async () => (await operationsState(page))?.progress).toBe('detailed')
+  await expect.poll(() => page.evaluate(() => ({
+    legacyLearning: Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')),
+    legacyOperations: Boolean(localStorage.getItem('lattice.selected.operations.v1')),
+  }))).toEqual({ legacyLearning: true, legacyOperations: true })
+})
+
+test('wrong legacy concept identity is ignored without deleting its payload', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await page.evaluate(() => {
+    localStorage.removeItem('lattice.learning.state.v1')
+    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
+      version: 1,
+      conceptId: 'concept-a',
+      codeNotes: 'This payload must never migrate.',
+    }))
+  })
+  await page.reload()
+
+  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Assumption: the ledger and reservation write share one database boundary.')
+  await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')))).toBe(true)
+})
+
+test('malformed nested storage falls back field by field without runtime errors or default loss', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await page.evaluate(() => {
+    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({
+      version: 1,
+      onboarding: null,
+      roadmap: { observability: { depth: 42, learnerState: [], skipped: 'yes' } },
+      roadmapOrder: [null, 'observability'],
+      practice: { questionIndex: -4, attempts: {}, hintRequested: 'yes' },
+      mock: { priorTurns: [null], completedTurns: [null], reportKind: 'invented' },
+      evidence: [null],
+    }))
+    localStorage.setItem('lattice.operations.state.v1', JSON.stringify({
+      version: 1,
+      owner: null,
+      review: { duration: 'forever', retrieval: 'yes' },
+      importStatements: [null, { id: 4, decision: 'trusted' }],
+      acceptedUpdates: {},
+    }))
+  })
+  await page.reload()
+
+  await expect(page.getByRole('heading', { level: 1, name: /^Settings$/i })).toBeVisible()
+  await expect.poll(async () => {
+    const learning = await learningState(page)
+    return {
+      onboarding: learning?.onboarding,
+      practice: learning?.practice,
+      mockPriorTurns: learning?.mock.priorTurns.length,
+      mockReport: learning?.mock.reportKind,
+      observability: learning?.roadmap.observability,
+      evidence: learning?.evidence,
+    }
+  }).toEqual({
+    onboarding: { path: 'Learn', target: 'Senior', goalName: 'Resilient order fulfillment', diagnostic: 'skip', approved: false, sourceMaterial: '' },
+    practice: { questionIndex: 0, draft: '', hintRequested: false, mode: 'answering', attempts: [] },
+    mockPriorTurns: 2,
+    mockReport: null,
+    observability: { id: 'observability', depth: 'Production', learnerState: 'unverified', skipped: false },
+    evidence: [],
+  })
+  await expect.poll(async () => {
+    const operations = await operationsState(page)
+    return { owner: operations?.owner, review: operations?.review, imports: operations?.importStatements, updates: operations?.acceptedUpdates }
+  }).toEqual({
+    owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
+    review: { enabled: true, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
+    imports: [],
+    updates: [],
+  })
+})
+
+test('persisted current lesson moves to an adjacent active lesson when that lesson is skipped', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/topic-studio')
+  await page.evaluate(() => {
+    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
+    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({
+      ...learning,
+      currentLessonId: 'observability',
+      roadmap: {
+        ...learning.roadmap,
+        observability: { ...learning.roadmap.observability, skipped: true },
+      },
+    }))
+  })
+  await page.reload()
+
+  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('failure-injection')
+  await expect(page.getByRole('heading', { level: 1, name: /Use bounded failure injection to inspect recovery/i })).toBeVisible()
+})
+
+async function expectNoHorizontalOverflow(page: Page, label: string) {
+  const dimensions = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth,
+    visualOffset: window.visualViewport?.offsetLeft ?? 0,
+  }))
+  expect(dimensions.document, `${label}: document overflow`).toBeLessThanOrEqual(dimensions.viewport)
+  expect(dimensions.body, `${label}: body overflow`).toBeLessThanOrEqual(dimensions.viewport)
+  expect(dimensions.visualOffset, `${label}: visual viewport panned`).toBeLessThanOrEqual(0.5)
+}
+
+test('all 14 canonical routes render at every required viewport without overflow or runtime/network errors', async ({ page, diagnostics }) => {
+  void diagnostics
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    for (const [route, heading] of routes) {
+      await open(page, route)
+      await expect(page.getByRole('heading', { level: 1 }).first()).toHaveText(heading)
+      await expectNoHorizontalOverflow(page, `${route} at ${viewport.width}x${viewport.height}`)
+    }
+  }
+})
+
+test('all canonical routes have no automated WCAG A or AA violations', async ({ page, diagnostics }) => {
+  void diagnostics
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  for (const [route] of routes) {
+    await open(page, route)
+    const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+    expect(violations, `${route}: automated accessibility violations`).toEqual([])
+  }
+})
+
+test('Home keeps historical Resume separate from a dismissible recommendation', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/')
+  const resumeRegion = page.getByRole('region', { name: /Implement an idempotency boundary/i })
+  const recommendation = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
+  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await expect(recommendation.getByRole('button', { name: /Open · 14 min/i })).toBeVisible()
+  await recommendation.getByRole('button', { name: /Dismiss recommended next item/i }).click()
+  await expect(recommendation).toHaveCount(0)
+  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.recommendationDismissed).toBe(true)
+})
+
+test('Home recommendation stays distinct when the saved Resume lesson changes', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/learn-roadmap')
+  await page.getByRole('button', { name: /^02 Trace the commit-and-acknowledgement failure window/i }).click()
+  await open(page, '/')
+  const resumeRegion = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
+  const recommendation = page.getByRole('region', { name: /Model the delivery contract before choosing a pattern/i })
+  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await expect(recommendation).toContainText(/nearest earlier active checkpoint/i)
+  await expect(recommendation).toContainText(/likely known/i)
+})
+
+test('Home recommends the next active checkpoint at the beginning without wrapping', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/learn-roadmap')
+  await page.getByRole('button', { name: /^01 Model the delivery contract before choosing a pattern/i }).click()
+  await open(page, '/')
+  const resumeRegion = page.getByRole('region', { name: /Model the delivery contract before choosing a pattern/i })
+  const recommendation = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
+  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await expect(recommendation).toContainText(/nearest later active checkpoint/i)
+  await expect(recommendation).not.toContainText(/nearest earlier active checkpoint/i)
+})
+
+test('onboarding previews the full roadmap and requires explicit approval', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/onboarding')
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
+  await page.getByRole('button', { name: /Preview full roadmap/i }).click()
+  await expect(page.getByRole('heading', { level: 1, name: /Approve the whole roadmap/i })).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
+  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
+  await expect(page).toHaveURL(/\/app\/learn-roadmap$/)
+  await expect(page.getByText(/Roadmap approved/i)).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+})
+
+test('onboarding preview keeps full depth labels usable and tablet controls inside their card', async ({ page, diagnostics }) => {
+  void diagnostics
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await open(page, '/app/onboarding')
+  await page.getByRole('button', { name: /Preview full roadmap/i }).click()
+  const depthWidth = await page.getByRole('combobox', { name: /^Depth$/i }).first().evaluate(element => element.getBoundingClientRect().width)
+  expect(depthWidth, 'depth control is wide enough for Implementation').toBeGreaterThanOrEqual(140)
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await expectNoHorizontalOverflow(page, 'onboarding preview at 768x1024')
+  const bounds = await page.evaluate(() => {
+    const card = document.querySelector('.sb-card')?.getBoundingClientRect()
+    const controls = Array.from(document.querySelectorAll('.sb-preview select, .sb-preview button')).map(element => {
+      const box = element.getBoundingClientRect()
+      return { left: box.left, right: box.right, width: box.width }
+    })
+    return { card: card ? { left: card.left, right: card.right } : null, controls }
+  })
+  expect(bounds.card).not.toBeNull()
+  for (const control of bounds.controls) {
+    expect(control.width, 'roadmap control has usable rendered width').toBeGreaterThanOrEqual(44)
+    expect(control.left, 'roadmap control stays inside the card left edge').toBeGreaterThanOrEqual((bounds.card?.left ?? 0) - 0.5)
+    expect(control.right, 'roadmap control stays inside the card right edge').toBeLessThanOrEqual((bounds.card?.right ?? 0) + 0.5)
+  }
+})
+
+test('onboarding changes invalidate approval and saved source material transfers only on request', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/onboarding')
+  const source = '# Questions\n- How long can a duplicate key remain trustworthy?'
+  await page.getByRole('textbox', { name: /Optional notes or questions/i }).fill(source)
+  await page.getByRole('button', { name: /Preview full roadmap/i }).click()
+  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+
+  await open(page, '/app/onboarding')
+  await page.getByRole('combobox', { name: /Target level/i }).selectOption('Staff')
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
+  await open(page, '/app/imports')
+  await expect(page.getByText(/Source material is available to copy/i)).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /Paste Markdown or plain text/i })).toHaveValue('')
+  await page.getByRole('button', { name: /Copy into review/i }).click()
+  await expect(page.getByRole('textbox', { name: /Paste Markdown or plain text/i })).toHaveValue(source)
+  await expect.poll(async () => (await operationsState(page))?.importStatements.length).toBe(0)
+})
+
+test('roadmap depth, knowledge, skip, and order edits survive reload', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/onboarding')
+  await page.getByRole('button', { name: /Preview full roadmap/i }).click()
+  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+  await open(page, '/app/learn-roadmap')
+  await page.getByRole('combobox', { name: /^Depth$/i }).first().selectOption('Production')
+  await page.getByRole('combobox', { name: /^Knowledge$/i }).first().selectOption('new')
+  await page.getByRole('button', { name: /^Skip$/i }).first().click()
+  await page.getByRole('button', { name: /Move Model the delivery contract before choosing a pattern later/i }).click()
+  await expect.poll(async () => (await learningState(page))?.roadmapOrder.indexOf('delivery-contract')).toBe(1)
+  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
+  await page.reload()
+  await expect(page.getByRole('button', { name: /Move Model the delivery contract before choosing a pattern earlier/i })).toBeEnabled()
+  await expect.poll(async () => {
+    const state = await learningState(page)
+    const choice = state?.roadmap['delivery-contract']
+    return { depth: choice?.depth, knowledge: choice?.learnerState, skipped: choice?.skipped, position: state?.roadmapOrder.indexOf('delivery-contract') }
+  }).toEqual({ depth: 'Production', knowledge: 'new', skipped: true, position: 1 })
+})
+
+test('skip and reorder change active course position and previous-next progression', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/learn-roadmap')
+  const atomicRow = page.getByRole('article').filter({ hasText: /Keep the business write and duplicate marker atomic/i })
+  await atomicRow.getByRole('button', { name: /^Skip$/i }).click()
+  await page.getByRole('button', { name: /^03 Implement an idempotency boundary under concurrent retries/i }).click()
+  await expect(page.getByText(/Position 3 of 10 active/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Next: Design for delayed, duplicated, and out-of-order deliveries/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Next: Keep the business write and duplicate marker atomic/i })).toHaveCount(0)
+})
+
+test('roadmap and curriculum selections change and preserve the current lesson', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/learn-roadmap')
+  await page.getByRole('button', { name: /^08 Instrument retry, duplicate, and latency signals/i }).click()
+  await expect(page).toHaveURL(/\/app\/topic-studio$/)
+  await expect(page.getByRole('heading', { level: 1, name: /Instrument retry, duplicate, and latency signals/i })).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('observability')
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: /Instrument retry, duplicate, and latency signals/i })).toBeVisible()
+  await page.getByRole('button', { name: /^Use bounded failure injection to inspect recovery/i }).click()
+  await expect(page.getByRole('heading', { level: 1, name: /Use bounded failure injection to inspect recovery/i })).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('failure-injection')
+})
+
+test('Topic Studio Run is exploratory and Submit alone appends evidence', async ({ page, diagnostics }) => {
+  void diagnostics
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await open(page, '/app/topic-studio')
+  const openLab = page.getByRole('button', { name: /Open implementation lab/i })
+  const openLabBox = await openLab.boundingBox()
+  expect(openLabBox).not.toBeNull()
+  expect((openLabBox?.y ?? 0) + (openLabBox?.height ?? 0), 'primary lesson action is in the first viewport').toBeLessThanOrEqual(768)
+  await openLab.click()
+  await expect(page.getByRole('textbox', { name: /Java code/i })).toBeInViewport()
+  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+  await page.getByRole('button', { name: /Run static checks/i }).click()
+  await expect(page.getByText(/Carries a stable request key/i)).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.runResult?.status).toBeTruthy()
+  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+  await page.getByRole('button', { name: /Submit evidence/i }).click()
+  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(1)
+})
+
+test('Practice reveals a requested hint, then feedback, repair, and append-only history', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/practice')
+  await expect(page.getByText(/Name the failure window first/i)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Repair answer/i })).toHaveCount(0)
+  await page.getByRole('button', { name: /Request hint/i }).click()
+  await expect(page.getByText(/Name the failure window first/i)).toBeVisible()
+  await page.getByRole('textbox', { name: /Your response/i }).fill(practiceDraft)
+  await page.getByRole('button', { name: /Submit response/i }).click()
+  await expect(page.getByRole('heading', { name: /Facts and corrections/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Trade-offs to defend/i })).toBeVisible()
+  await page.getByRole('button', { name: /Repair answer/i }).click()
+  await expect(page.getByRole('textbox', { name: /Your response/i })).toHaveValue(practiceDraft)
+  await page.getByRole('textbox', { name: /Your response/i }).fill(`${practiceDraft} Repaired.`)
+  await page.getByRole('button', { name: /Submit response/i }).click()
+  await expect(page.getByText(/Earlier attempts \(1\)/i)).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.practice.attempts.length).toBe(2)
+})
+
+test('Mock pause/resume preserves the exact draft and evaluation appears only after terminal completion', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/mock')
+  const answer = page.getByRole('textbox', { name: /Your response/i })
+  await expect(answer).toHaveValue('')
+  await expect(page.getByRole('button', { name: /Complete interview/i })).toBeDisabled()
+  await answer.fill(exactDraft)
+  await expect(page.getByText(/Facts in transcript/i)).toHaveCount(0)
+  const exit = page.getByRole('button', { name: /Save & exit/i })
+  await exit.click()
+  const pauseDialog = page.getByRole('alertdialog', { name: /Pause this mock/i })
+  await pauseDialog.getByRole('button', { name: /Keep answering/i }).click()
+  await expect(exit).toBeFocused()
+  await exit.click()
+  await pauseDialog.getByRole('button', { name: /^Save & exit$/i }).click()
+  await page.getByRole('button', { name: /Open Mock interview/i }).click()
+  await expect(page.getByRole('textbox', { name: /Your response/i })).toHaveValue(exactDraft)
+  await expect.poll(async () => (await learningState(page))?.mock.draft).toBe(exactDraft)
+  await page.getByRole('textbox', { name: /Your response/i }).fill(fixtureDraft)
+  const complete = page.getByRole('button', { name: /Complete interview/i })
+  await complete.click()
+  const completeDialog = page.getByRole('alertdialog', { name: /Complete the interview/i })
+  await completeDialog.getByRole('button', { name: /Return to answer/i }).click()
+  await expect(complete).toBeFocused()
+  await expect(page.getByText(/Facts in transcript/i)).toHaveCount(0)
+  await complete.click()
+  await completeDialog.getByRole('button', { name: /Complete & view report/i }).click()
+  await expect(page).toHaveURL(/\/app\/reports$/)
+  await expect(page.getByRole('heading', { name: /Facts in transcript/i })).toBeVisible()
+  await expect.poll(async () => (await learningState(page))?.mock.reportKind).toBe('fixture-evaluation')
+})
+
+test('Evidence is unavailable before submission and derives its conclusion from submitted learner state', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/evidence')
+  await expect(page.getByRole('heading', { name: /No submitted lab evidence is available yet/i })).toBeVisible()
+  await page.getByRole('button', { name: /Open Topic Studio/i }).click()
+  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('idempotency-retry')
+  await page.getByRole('button', { name: /Submit evidence/i }).click()
+  const conclusion = (await learningState(page))?.evidence.at(-1)?.conclusion
+  await open(page, '/app/evidence')
+  await expect(page.getByRole('heading', { name: conclusion })).toBeVisible()
+  await page.getByRole('button', { name: /Open transfer check/i }).click()
+  await expect(page).toHaveURL(/\/app\/practice$/)
+})
+
+test('parsed imports remain personal untrusted material and cannot create evidence or completion', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/imports')
+  const source = '# Notes\n- SQS may redeliver the same message after a durable commit.\n- A lookup before a write does not arbitrate concurrent requests.'
+  await page.getByRole('textbox', { name: /Paste Markdown or plain text/i }).fill(source)
+  await page.getByRole('button', { name: /Parse locally/i }).click()
+  await expect(page.getByText(/Parsed as untrusted/i)).toBeVisible()
+  await expect(page.getByText(/^untrusted$/i)).toHaveCount(2)
+  await expect(page.getByText(/Mapping is a learner decision, not verification/i)).toBeVisible()
+  await expect.poll(async () => (await operationsState(page))?.importStatements.every((item: { decision: string }) => item.decision === 'untrusted')).toBe(true)
+  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+})
+
+test('canonical curriculum updates stay pending until an explicit acceptance action', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/canonical-updates')
+  await expect.poll(async () => (await operationsState(page))?.updateDecision).toBe('pending')
+  await expect.poll(async () => (await operationsState(page))?.goalVersion).toBe('2026.07')
+  await expect(page.getByLabel(/Local goal pinned to 2026\.07/i)).toBeVisible()
+  await expect(page.getByText(/nothing changes until you explicitly accept a selection/i)).toBeVisible()
+  await page.evaluate(() => {
+    const value = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
+    delete value.goalVersion
+    localStorage.setItem('lattice.operations.state.v1', JSON.stringify(value))
+  })
+  await page.reload()
+  await expect.poll(async () => (await operationsState(page))?.updateDecision).toBe('pending')
+  await expect.poll(async () => (await operationsState(page))?.goalVersion).toBe('2026.07')
+  await page.getByRole('checkbox', { name: /Select Dead-letter recovery/i }).uncheck()
+  await page.getByRole('radio', { name: /Adopt the new canonical wording/i }).check()
+  await page.getByRole('checkbox', { name: /Approve this exact local selection/i }).check()
+  await page.getByRole('button', { name: /Accept selected/i }).click()
+  await expect(page.getByText(/2 selected changes accepted locally/i)).toBeVisible()
+  await expect(page.getByText(/No server or canonical source was mutated/i)).toBeVisible()
+  await expect.poll(async () => {
+    const state = await operationsState(page)
+    return { decision: state?.updateDecision, goalVersion: state?.goalVersion, updates: state?.acceptedUpdates, conflict: state?.acceptedConflictResolution }
+  }).toEqual({ decision: 'accepted', goalVersion: '2026.08', updates: ['visibility', 'idempotency'], conflict: 'canonical-adopted' })
+  await expect(page.getByLabel(/Local goal pinned to 2026\.08/i)).toBeVisible()
+  await page.reload()
+  await expect.poll(async () => {
+    const state = await operationsState(page)
+    return { goalVersion: state?.goalVersion, updates: state?.acceptedUpdates, conflict: state?.acceptedConflictResolution }
+  }).toEqual({ goalVersion: '2026.08', updates: ['visibility', 'idempotency'], conflict: 'canonical-adopted' })
+  await expect(page.getByRole('checkbox', { name: /Select Dead-letter recovery/i })).not.toBeChecked()
+  await expect(page.getByRole('radio', { name: /Adopt the new canonical wording/i })).toBeChecked()
+})
+
+test('essential selected-app flows are operable from the keyboard', async ({ page, diagnostics }) => {
+  void diagnostics
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await open(page, '/app/onboarding')
+  const interviewPath = page.getByRole('button', { name: /Interview Prep/i })
+  await interviewPath.focus()
+  await page.keyboard.press('Space')
+  await expect(interviewPath).toHaveAttribute('aria-pressed', 'true')
+  const target = page.getByRole('combobox', { name: /Target level/i })
+  await target.focus()
+  await target.press('s')
+  await expect(target).toHaveValue('Staff')
+  const preview = page.getByRole('button', { name: /Preview full roadmap/i })
+  await preview.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: /Approve the whole roadmap/i })).toBeVisible()
+
+  await open(page, '/app/learn-roadmap')
+  const customize = page.getByRole('button', { name: /^Customize$/i }).first()
+  await customize.focus()
+  await page.keyboard.press('Enter')
+  await expect(customize).toHaveAttribute('aria-expanded', 'true')
+
+  await open(page, '/app/practice')
+  const hint = page.getByRole('button', { name: /Request hint/i })
+  await hint.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(/Name the failure window first/i)).toBeVisible()
+
+  await open(page, '/app/topic-studio')
+  await expect(page.getByRole('button', { name: /Lesson tools/i })).toBeVisible()
+  const notesTab = page.getByRole('tab', { name: /Notes/i })
+  await notesTab.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: /Resources/i })).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: /Help/i })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText(/Topic help is unavailable/i)).toBeVisible()
+
+  const courseContent = page.getByRole('button', { name: /Course content/i })
+  await courseContent.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('dialog', { name: /Course content/i })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: /Course content/i })).toHaveCount(0)
+  await expect(courseContent).toBeFocused()
+})
+
+test('unsupported and retired routes render the not-found view', async ({ page, diagnostics }) => {
+  void diagnostics
+  for (const route of [
+    '/app/home',
+    '/app/report',
+    '/app/not-a-real-view',
+    '/concept-a/home',
+    '/concept-b/home',
+    '/concept-c/home',
+    '/concept-anything/home',
+  ]) {
+    await page.goto(route)
+    await expect(page.getByRole('heading', { name: /That learning view does not exist/i })).toBeVisible()
+    await expect(page.locator('[data-app="lattice-learning"]')).toHaveCount(0)
+  }
+})
+
+test('navigation drawer and destructive dialog restore focus to their triggers', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/')
+  const tools = page.getByRole('button', { name: /^Tools$/i })
+  await tools.click()
+  const drawer = page.getByRole('dialog', { name: /Workspace navigation/i })
+  await expect(drawer).toBeVisible()
+  await drawer.getByRole('button', { name: /Close navigation/i }).click()
+  await expect(tools).toBeFocused()
+
+  await open(page, '/app/settings')
+  const deleteImports = page.getByRole('button', { name: /Delete imports/i }).first()
+  await deleteImports.click()
+  const dialog = page.getByRole('alertdialog', { name: /Delete all imported material/i })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: /Cancel/i }).click()
+  await expect(deleteImports).toBeFocused()
+})
+
+test('reduced-motion preference suppresses non-essential motion', async ({ page, diagnostics }) => {
+  void diagnostics
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await open(page, '/app/jobs')
+  const longestMotionMs = await page.evaluate(() => {
+    const times = (value: string) => value.split(',').map(token => token.trim().endsWith('ms') ? parseFloat(token) : parseFloat(token) * 1000)
+    return Math.max(0, ...Array.from(document.querySelectorAll('[data-app="lattice-learning"] *')).flatMap(element => {
+      const style = getComputedStyle(element)
+      return [...times(style.animationDuration), ...times(style.transitionDuration)]
+    }))
+  })
+  expect(longestMotionMs).toBeLessThanOrEqual(0.01)
+})

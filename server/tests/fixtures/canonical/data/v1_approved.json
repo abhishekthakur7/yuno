@@ -1,0 +1,94 @@
+{
+  "description": "MVP mechanism fixture v1: standalone, independently publishable, fully valid manifest exercising every canonical table this ticket owns (topics, relations, one content revision) plus an approval-metadata block. All ids/titles are synthetic -- see non_production_label.",
+  "version_label": "fixture-canonical-v1",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-alpha",
+      "stable_slug": "fixture-topic-alpha",
+      "title": "[SYNTHETIC] Fixture Topic Alpha",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "understand",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-beta",
+      "stable_slug": "fixture-topic-beta",
+      "title": "[SYNTHETIC] Fixture Topic Beta",
+      "subject": "aws",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "implement",
+      "recommended_layer": "Implementation",
+      "checkpoint_start": 1,
+      "checkpoint_end": 2
+    },
+    {
+      "stable_id": "fixture-topic-gamma",
+      "stable_slug": "fixture-topic-gamma",
+      "title": "[SYNTHETIC] Fixture Topic Gamma",
+      "subject": "system_design",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-2",
+      "target_capability": "choose",
+      "recommended_layer": "Alternatives",
+      "checkpoint_start": 2,
+      "checkpoint_end": 3
+    },
+    {
+      "stable_id": "fixture-topic-dsa-one",
+      "stable_slug": "fixture-topic-dsa-one",
+      "title": "[SYNTHETIC] Fixture Topic DSA One",
+      "subject": "dsa",
+      "scope_tags": ["fixture-tag-dsa"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "understand",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 1,
+      "checkpoint_end": 2
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-v1-alpha-beta",
+      "from_stable_id": "fixture-topic-alpha",
+      "to_stable_id": "fixture-topic-beta",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture ordering: alpha before beta."
+    },
+    {
+      "id": "fixture-relation-v1-beta-gamma",
+      "from_stable_id": "fixture-topic-beta",
+      "to_stable_id": "fixture-topic-gamma",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture ordering: beta before gamma."
+    },
+    {
+      "id": "fixture-relation-v1-dsa-one-gamma",
+      "from_stable_id": "fixture-topic-dsa-one",
+      "to_stable_id": "fixture-topic-gamma",
+      "relation_type": "scenario",
+      "rationale": "CUR-02 fixture: DSA topic bound to a scenario-carrying topic."
+    }
+  ],
+  "content_revisions": [
+    {
+      "id": "fixture-content-v1-alpha-essential",
+      "topic_stable_id": "fixture-topic-alpha",
+      "layer": "Essential",
+      "kind": "fixture-kind-explanation",
+      "status": "published",
+      "markdown_ref": "fixture://canonical/v1/fixture-topic-alpha/essential.md",
+      "markdown_hash": "fixture-markdown-hash-v1-alpha-essential",
+      "prompt_template_version": null
+    }
+  ],
+  "approval": {
+    "approver_role": "designated_editorial_approver",
+    "basis_ref": "fixture-approval-basis-v1"
+  }
+}

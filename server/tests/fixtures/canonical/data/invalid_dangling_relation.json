@@ -1,0 +1,29 @@
+{
+  "description": "Invalid: a relation references a stable_id no topic in this manifest carries. Engineered to trigger exactly ViolationCode.DANGLING_RELATION_REFERENCE and nothing else.",
+  "version_label": "fixture-canonical-invalid-dangling-relation",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-alpha",
+      "stable_slug": "fixture-topic-alpha",
+      "title": "[SYNTHETIC] Fixture Topic Alpha",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-dangling",
+      "from_stable_id": "fixture-topic-alpha",
+      "to_stable_id": "fixture-topic-ghost-does-not-exist",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture: deliberately references an unknown topic."
+    }
+  ],
+  "content_revisions": []
+}

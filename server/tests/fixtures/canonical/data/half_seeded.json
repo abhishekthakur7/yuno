@@ -1,0 +1,42 @@
+{
+  "description": "A structurally valid manifest deliberately carrying NO approval block: exercises spec §6.1 step 6 -- material present, no EditorialApproval row, must be invisible through every approval-gated read path. `intentionally_no_approval` is a documentation flag only (the loader's real signal is the absence of the `approval` key).",
+  "intentionally_no_approval": true,
+  "version_label": "fixture-canonical-half-seeded",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-half-a",
+      "stable_slug": "fixture-topic-half-a",
+      "title": "[SYNTHETIC] Fixture Topic Half A",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-half-b",
+      "stable_slug": "fixture-topic-half-b",
+      "title": "[SYNTHETIC] Fixture Topic Half B",
+      "subject": "aws",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 1,
+      "checkpoint_end": 2
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-half-a-b",
+      "from_stable_id": "fixture-topic-half-a",
+      "to_stable_id": "fixture-topic-half-b",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture ordering: half-a before half-b."
+    }
+  ],
+  "content_revisions": []
+}

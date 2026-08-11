@@ -1,0 +1,41 @@
+{
+  "description": "Invalid: a subject=dsa topic with a prerequisite relation but no scenario relation touching it (CUR-02). Engineered to trigger exactly ViolationCode.DSA_TOPIC_MISSING_SCENARIO_RELATION and nothing else.",
+  "version_label": "fixture-canonical-invalid-dsa-missing-scenario",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-dsa-unbound",
+      "stable_slug": "fixture-topic-dsa-unbound",
+      "title": "[SYNTHETIC] Fixture Topic DSA Unbound",
+      "subject": "dsa",
+      "scope_tags": ["fixture-tag-dsa"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-alpha",
+      "stable_slug": "fixture-topic-alpha",
+      "title": "[SYNTHETIC] Fixture Topic Alpha",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-dsa-unbound-alpha",
+      "from_stable_id": "fixture-topic-dsa-unbound",
+      "to_stable_id": "fixture-topic-alpha",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture: an ordering relation that is NOT a scenario relation."
+    }
+  ],
+  "content_revisions": []
+}

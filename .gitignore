@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.local
+
+# Python/uv artefacts (server/openapi.json is generated but committed --
+# it must stay tracked so the drift check has something to compare against)
+server/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.import_linter_cache/
+server/*.db
+server/*.db-wal
+server/*.db-shm

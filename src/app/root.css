@@ -1,0 +1,19 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light; }
+html, body, #root { min-width: 320px; min-height: 100%; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+img, video, canvas { max-width: 100%; }
+.root-not-found {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  color: #172033;
+  background: #f5f7fb;
+  font: 500 1rem/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.root-not-found div { max-width: 34rem; }
+.root-not-found h1 { font-size: 1.5rem; }
+.root-not-found a { color: #2356c4; text-underline-offset: .2em; }

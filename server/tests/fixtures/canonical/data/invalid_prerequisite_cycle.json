@@ -1,0 +1,67 @@
+{
+  "description": "Invalid: a 3-node prerequisite cycle (alpha -> beta -> gamma -> alpha). Engineered to trigger exactly ViolationCode.PREREQUISITE_CYCLE and nothing else.",
+  "version_label": "fixture-canonical-invalid-cycle",
+  "manifest_version": "1",
+  "topics": [
+    {
+      "stable_id": "fixture-topic-alpha",
+      "stable_slug": "fixture-topic-alpha",
+      "title": "[SYNTHETIC] Fixture Topic Alpha",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-beta",
+      "stable_slug": "fixture-topic-beta",
+      "title": "[SYNTHETIC] Fixture Topic Beta",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    },
+    {
+      "stable_id": "fixture-topic-gamma",
+      "stable_slug": "fixture-topic-gamma",
+      "title": "[SYNTHETIC] Fixture Topic Gamma",
+      "subject": "java",
+      "scope_tags": ["fixture-tag-core"],
+      "level_tag": "fixture-level-1",
+      "target_capability": "know",
+      "recommended_layer": "Essential",
+      "checkpoint_start": 0,
+      "checkpoint_end": 1
+    }
+  ],
+  "relations": [
+    {
+      "id": "fixture-relation-cycle-alpha-beta",
+      "from_stable_id": "fixture-topic-alpha",
+      "to_stable_id": "fixture-topic-beta",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture cycle edge 1."
+    },
+    {
+      "id": "fixture-relation-cycle-beta-gamma",
+      "from_stable_id": "fixture-topic-beta",
+      "to_stable_id": "fixture-topic-gamma",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture cycle edge 2."
+    },
+    {
+      "id": "fixture-relation-cycle-gamma-alpha",
+      "from_stable_id": "fixture-topic-gamma",
+      "to_stable_id": "fixture-topic-alpha",
+      "relation_type": "prerequisite",
+      "rationale": "Fixture cycle edge 3 -- closes the cycle."
+    }
+  ],
+  "content_revisions": []
+}
