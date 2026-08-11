@@ -62,9 +62,11 @@ def idempotency_key(
     declares this dependency rejects a request with a missing header as
     `400` before any handler code runs.
     """
-    if not idempotency_key:
-        raise MalformedRequestError("The 'Idempotency-Key' header is required for this operation.")
-    return idempotency_key
+    if not idempotency_key or not idempotency_key.strip():
+        raise MalformedRequestError(
+            "The 'Idempotency-Key' header is required for this operation."
+        )
+    return idempotency_key.strip()
 
 
 def if_match(
@@ -77,5 +79,20 @@ def if_match(
     same `PreconditionFailedError` on a mismatch.
     """
     if not if_match:
-        raise PreconditionFailedError("The 'If-Match' header is required for this operation.")
+        raise PreconditionFailedError(
+            "The 'If-Match' header is required for this operation."
+        )
     return if_match
+
+
+def parse_if_match(raw: str) -> int:
+    """Parse a validated If-Match header as the resource row version."""
+    try:
+        value = int(raw.strip().strip('"'))
+    except ValueError as exc:
+        raise MalformedRequestError(
+            "If-Match must contain an integer row version."
+        ) from exc
+    if value < 1:
+        raise MalformedRequestError("If-Match must contain a positive row version.")
+    return value

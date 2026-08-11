@@ -46,6 +46,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Diagnostic */
+        post: operations["post_diagnostic_api_v1_diagnostics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Diagnostic Session */
+        get: operations["get_diagnostic_session_api_v1_diagnostics__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Diagnostic Session */
+        patch: operations["update_diagnostic_session_api_v1_diagnostics__session_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{session_id}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Diagnostic Answer */
+        post: operations["post_diagnostic_answer_api_v1_diagnostics__session_id__answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/{session_id}/roadmap-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Roadmap Preview */
+        get: operations["get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals": {
         parameters: {
             query?: never;
@@ -233,6 +302,153 @@ export interface components {
             version_label: string;
         };
         /**
+         * DiagnosticAction
+         * @enum {string}
+         */
+        DiagnosticAction: "pause" | "resume" | "skip_diagnostic" | "skip_notes" | "open_roadmap_preview" | "retry";
+        /** DiagnosticAnswerRequest */
+        DiagnosticAnswerRequest: {
+            /** Answer */
+            answer: string;
+            confidence: components["schemas"]["DiagnosticConfidence"];
+            /** Question Ref */
+            question_ref: string;
+        };
+        /** DiagnosticAnswerResponse */
+        DiagnosticAnswerResponse: {
+            /** Adaptive Context Version */
+            adaptive_context_version: string;
+            /** Answer */
+            answer: string;
+            /** Answered At */
+            answered_at: string;
+            confidence: components["schemas"]["DiagnosticConfidence"];
+            /** Id */
+            id: string;
+            /** Question Ref */
+            question_ref: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
+         * DiagnosticConfidence
+         * @enum {string}
+         */
+        DiagnosticConfidence: "low" | "medium" | "high";
+        /** DiagnosticCreateRequest */
+        DiagnosticCreateRequest: {
+            /** Graph Version Id */
+            graph_version_id: string;
+            path: components["schemas"]["DiagnosticPath"];
+            /** Role */
+            role?: string | null;
+            /** Setup Inputs */
+            setup_inputs?: {
+                [key: string]: unknown;
+            };
+            /** Subject */
+            subject?: string | null;
+            target_capability: components["schemas"]["DiagnosticTargetCapability"];
+            target_level: components["schemas"]["DiagnosticTargetLevel"];
+        };
+        /** DiagnosticPatchRequest */
+        DiagnosticPatchRequest: {
+            action?: components["schemas"]["DiagnosticAction"] | null;
+            /** Untrusted Seed Text */
+            untrusted_seed_text?: string | null;
+        };
+        /**
+         * DiagnosticPath
+         * @enum {string}
+         */
+        DiagnosticPath: "learn" | "interview_prep";
+        /** DiagnosticQuestionResponse */
+        DiagnosticQuestionResponse: {
+            /** Adaptive Context Version */
+            adaptive_context_version: string;
+            /** Prompt */
+            prompt: string;
+            /** Ref */
+            ref: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /** DiagnosticResponse */
+        DiagnosticResponse: {
+            /** Answers */
+            answers: components["schemas"]["DiagnosticAnswerResponse"][];
+            /** Captured Graph Version Id */
+            captured_graph_version_id: string;
+            /** Confirmed Goal Id */
+            confirmed_goal_id: string | null;
+            /** Created At */
+            created_at: string;
+            /** Diagnostic Skipped */
+            diagnostic_skipped: boolean;
+            /** Expires At */
+            expires_at: string | null;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Id */
+            id: string;
+            next_question: components["schemas"]["DiagnosticQuestionResponse"] | null;
+            /** Paused At */
+            paused_at: string | null;
+            /** Question Set Version */
+            question_set_version: string;
+            /** Row Version */
+            row_version: number;
+            /** Seed Skipped */
+            seed_skipped: boolean;
+            /** Setup Inputs */
+            setup_inputs: {
+                [key: string]: unknown;
+            };
+            /** Started At */
+            started_at: string | null;
+            state: components["schemas"]["DiagnosticState"];
+            untrusted_seed_kind: components["schemas"]["UntrustedSeedKind"] | null;
+            /** Untrusted Seed Text */
+            untrusted_seed_text: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** DiagnosticRoadmapPreviewResponse */
+        DiagnosticRoadmapPreviewResponse: {
+            /** Answer Count */
+            answer_count: number;
+            /** Captured Graph Version Id */
+            captured_graph_version_id: string;
+            /** Diagnostic Skipped */
+            diagnostic_skipped: boolean;
+            /** Projection Version */
+            projection_version: string;
+            /** Session Id */
+            session_id: string;
+            state: components["schemas"]["DiagnosticState"];
+            /** Topic Recommendations */
+            topic_recommendations: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * DiagnosticState
+         * @enum {string}
+         */
+        DiagnosticState: "not-started" | "in-progress" | "paused" | "skipped" | "resumed" | "roadmap-preview" | "confirmed" | "failed";
+        /**
+         * DiagnosticTargetCapability
+         * @enum {string}
+         */
+        DiagnosticTargetCapability: "know" | "understand" | "choose" | "implement" | "diagnose" | "defend";
+        /**
+         * DiagnosticTargetLevel
+         * @enum {string}
+         */
+        DiagnosticTargetLevel: "Mid-level" | "Senior" | "Staff";
+        /**
          * ErrorResponse
          * @description The spec §5.1 error envelope: every `YunoError`, request validation
          *     failure, and unhandled exception renders through this shape (see
@@ -391,6 +607,11 @@ export interface components {
          * @enum {string}
          */
         TargetLevel: "Mid-level" | "Senior" | "Staff";
+        /**
+         * UntrustedSeedKind
+         * @enum {string}
+         */
+        UntrustedSeedKind: "notes" | "questions";
     };
     responses: never;
     parameters: never;
@@ -447,6 +668,177 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CanonicalVersionDetailResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_diagnostic_api_v1_diagnostics_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_diagnostic_session_api_v1_diagnostics__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_diagnostic_session_api_v1_diagnostics__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_diagnostic_answer_api_v1_diagnostics__session_id__answers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticAnswerResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticRoadmapPreviewResponse"];
                 };
             };
             /** @description Default Response */

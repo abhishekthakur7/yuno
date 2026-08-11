@@ -30,6 +30,8 @@ from yuno.modules.audit.ports import AuditRepository
 from yuno.modules.audit.repository import SqlAlchemyAuditRepository
 from yuno.modules.canonical.ports import CanonicalGraphRepository
 from yuno.modules.canonical.repository import SqlAlchemyCanonicalRepository
+from yuno.modules.diagnostics.ports import DiagnosticsRepository
+from yuno.modules.diagnostics.repository import SqlAlchemyDiagnosticsRepository
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
 from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
@@ -70,6 +72,7 @@ class SqlAlchemyUnitOfWork:
     owners: OwnerRepository
     audit: AuditRepository
     canonical: CanonicalGraphRepository
+    diagnostics: DiagnosticsRepository
     profiles_goals: ProfilesGoalsRepository
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
@@ -87,6 +90,7 @@ class SqlAlchemyUnitOfWork:
         self.owners = SqlAlchemyOwnerRepository(self._session)
         self.audit = SqlAlchemyAuditRepository(self._session)
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
+        self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         return self
 

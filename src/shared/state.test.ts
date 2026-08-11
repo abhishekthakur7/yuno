@@ -111,11 +111,4 @@ describe('shared learner behavior', () => {
     expect(state.roadmap['idempotency-retry']?.skipped).toBe(false)
   })
 
-  it('preserves onboarding source material without treating it as imported truth', () => {
-    let state = createInitialState()
-    state = learningReducer(state, { type: 'SET_ONBOARDING_SOURCE', value: '# Questions\n- What is the retry horizon?' })
-    state = learningReducer(state, { type: 'APPROVE_ROADMAP' })
-    expect(state.onboarding.sourceMaterial).toBe('# Questions\n- What is the retry horizon?')
-    expect(state.evidence).toHaveLength(0)
-  })
 })

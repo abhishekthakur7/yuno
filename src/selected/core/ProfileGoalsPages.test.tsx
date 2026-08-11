@@ -6,9 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LearningStateProvider } from '../../shared/state'
 import type { GoalWorkspace } from '../../shared/api/profile-goals'
 import { Home, Onboarding } from './CorePages'
+import type { DiagnosticSession } from '../../shared/api/diagnostics'
 
 const profile = { experience: null, strengths: null, weaknesses: null, current_goal_id: null, profile_revision: 1, updated_at: '2026-08-12T00:00:00Z' }
 const goal = (id: string, name: string): GoalWorkspace => ({ id, name, path: 'learn', subject: 'Distributed systems', role: null, target_level: 'Senior', target_capability: 'implement', graph_version_id: 'graph-1', status: 'active', resume_position: `Checkpoint ${id}`, resume_destination: '/app/topic-studio', dismissed_recommendation_keys: [], last_accessed_at: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' })
+const diagnosticSession = (patch: Partial<DiagnosticSession> = {}): DiagnosticSession => ({
+  id: 'diagnostic-1', captured_graph_version_id: 'graph-1', question_set_version: 'diagnostic-fixture-v1', setup_inputs: { path: 'learn', subject: 'Distributed systems', role: null, target_level: 'Senior', target_capability: 'implement', goal_name: 'Reliable consumers' }, state: 'in-progress', untrusted_seed_kind: null, untrusted_seed_text: null, seed_skipped: false, diagnostic_skipped: false, answers: [], next_question: { ref: 'delivery-contract', prompt: 'What can standard queue delivery guarantee?', sequence: 1, adaptive_context_version: 'diagnostic-fixture-v1' }, started_at: '2026-08-12T00:00:00Z', paused_at: null, expires_at: null, failure_code: null, failure_reference: null, confirmed_goal_id: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z', ...patch,
+})
 
 function json(value: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -103,6 +107,79 @@ describe('profile-backed goal pages', () => {
     const level = await screen.findByRole('combobox', { name: /Target level/i })
     expect(Array.from((level as HTMLSelectElement).options, (option) => option.text)).toEqual(['Mid-level', 'Senior', 'Staff'])
     expect(screen.getByText(/for experienced backend engineers and does not include a beginner track/i)).toBeInTheDocument()
+  })
+
+  it('skips every optional setup step and opens the persisted roadmap preview', async () => {
+    const actions: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/canonical/versions')) return json([{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }])
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([])
+      if (request.url.endsWith('/diagnostics') && request.method === 'POST') return json(diagnosticSession(), 201)
+      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'PATCH') {
+        const body = await request.json() as { action?: string }
+        if (body.action) actions.push(body.action)
+        if (body.action === 'skip_notes') return json(diagnosticSession({ seed_skipped: true, row_version: 2 }))
+        if (body.action === 'skip_diagnostic') return json(diagnosticSession({ state: 'skipped', seed_skipped: true, diagnostic_skipped: true, next_question: null, row_version: 3 }))
+        return json(diagnosticSession({ state: 'roadmap-preview', seed_skipped: true, diagnostic_skipped: true, next_question: null, row_version: 4 }))
+      }
+      if (request.url.endsWith('/diagnostics/diagnostic-1/roadmap-preview')) return json({ session_id: 'diagnostic-1', captured_graph_version_id: 'graph-1', state: 'roadmap-preview', answer_count: 0, diagnostic_skipped: true, projection_version: 'diagnostic-preview-placeholder-v1', topic_recommendations: [] })
+      return json({}, 404)
+    }))
+    renderPage(<Onboarding navigate={vi.fn()} />)
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Subject' }), 'Distributed systems')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Goal name' }), 'Reliable consumers')
+    await userEvent.click(screen.getByRole('button', { name: /Skip to roadmap preview/i }))
+    expect(await screen.findByRole('heading', { name: 'Create a goal from this roadmap' })).toBeInTheDocument()
+    expect(actions).toEqual(['skip_notes', 'skip_diagnostic', 'open_roadmap_preview'])
+  })
+
+  it('resumes a paused server session with every prior answer visible', async () => {
+    window.localStorage.setItem('yuno.diagnostics.active-session', 'diagnostic-1')
+    const savedAnswer = { id: 'answer-1', sequence: 1, question_ref: 'delivery-contract', answer: 'At-least-once delivery permits duplicates.', confidence: 'high' as const, adaptive_context_version: 'diagnostic-fixture-v1', answered_at: '2026-08-12T00:01:00Z' }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/canonical/versions')) return json([])
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([])
+      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'GET') return json(diagnosticSession({ state: 'paused', seed_skipped: true, answers: [savedAnswer], next_question: null, paused_at: '2026-08-12T00:02:00Z' }))
+      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'PATCH') return json(diagnosticSession({ state: 'resumed', seed_skipped: true, answers: [savedAnswer], next_question: { ref: 'atomic-boundary', prompt: 'Where should the duplicate decision live?', sequence: 2, adaptive_context_version: 'diagnostic-fixture-v1' }, row_version: 2 }))
+      return json({}, 404)
+    }))
+    renderPage(<Onboarding navigate={vi.fn()} />)
+    expect(await screen.findByText('1 answer saved on this device’s server')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Resume diagnostic/i }))
+    expect(await screen.findByRole('heading', { name: 'Where should the duplicate decision live?' })).toBeInTheDocument()
+    expect(screen.getByText('1 answer saved on this device’s server')).toBeInTheDocument()
+  })
+
+  it('stores optional Learn notes verbatim and marks them untrusted', async () => {
+    const exactSeed = '# Retry notes\n\n- Preserve  two spaces.'
+    let receivedSeed = ''
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/canonical/versions')) return json([{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }])
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([])
+      if (request.url.endsWith('/diagnostics') && request.method === 'POST') return json(diagnosticSession(), 201)
+      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'GET') return json(diagnosticSession({ untrusted_seed_kind: receivedSeed ? 'notes' : null, untrusted_seed_text: receivedSeed || null, row_version: receivedSeed ? 2 : 1 }))
+      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'PATCH') {
+        const body = await request.json() as { untrusted_seed_text?: string }
+        receivedSeed = body.untrusted_seed_text ?? ''
+        return json(diagnosticSession({ untrusted_seed_kind: 'notes', untrusted_seed_text: receivedSeed, row_version: 2 }))
+      }
+      return json({}, 404)
+    }))
+    renderPage(<Onboarding navigate={vi.fn()} />)
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Subject' }), 'Distributed systems')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Goal name' }), 'Reliable consumers')
+    await userEvent.click(screen.getByRole('radio', { name: /Take a short diagnostic/i }))
+    await userEvent.type(screen.getByRole('textbox', { name: /Optional notes/i }), exactSeed)
+    await userEvent.click(screen.getByRole('button', { name: /Start diagnostic/i }))
+    expect(await screen.findByText('Untrusted seed · review later in Imports')).toBeInTheDocument()
+    expect(receivedSeed).toBe(exactSeed)
+    expect(document.querySelector('.sb-untrusted-seed pre')?.textContent).toBe(exactSeed)
   })
 
 })

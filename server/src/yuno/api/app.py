@@ -16,6 +16,7 @@ from yuno.api.contracts import ErrorResponse
 from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
 from yuno.api.routes.canonical import router as canonical_router
+from yuno.api.routes.diagnostics import router as diagnostics_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(system_router)
     api_router.include_router(canonical_router)
     api_router.include_router(profiles_goals_router)
+    api_router.include_router(diagnostics_router)
     app.include_router(api_router)
 
     register_exception_handlers(app)

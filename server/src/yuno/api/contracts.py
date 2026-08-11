@@ -10,8 +10,17 @@ dataclasses (`YunoError`, `JobRef`) into them happens only here and in
 from __future__ import annotations
 
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from yuno.modules.diagnostics.domain import (
+    DiagnosticAction,
+    DiagnosticConfidence,
+    DiagnosticPath,
+    DiagnosticState,
+    DiagnosticTargetCapability,
+    DiagnosticTargetLevel,
+    UntrustedSeedKind,
+)
 from yuno.modules.profiles_goals.domain import (
     GoalPath,
     GoalStatus,
@@ -125,6 +134,80 @@ class GoalResponse(BaseModel):
     row_version: int
     created_at: str
     updated_at: str
+
+
+class DiagnosticCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: DiagnosticPath
+    subject: str | None = None
+    role: str | None = None
+    target_level: DiagnosticTargetLevel
+    target_capability: DiagnosticTargetCapability
+    graph_version_id: str
+    setup_inputs: dict[str, object] = Field(default_factory=dict)
+
+
+class DiagnosticPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: DiagnosticAction | None = None
+    untrusted_seed_text: str | None = None
+
+
+class DiagnosticAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_ref: str
+    answer: str
+    confidence: DiagnosticConfidence
+
+
+class DiagnosticQuestionResponse(BaseModel):
+    ref: str
+    prompt: str
+    sequence: int
+    adaptive_context_version: str
+
+
+class DiagnosticAnswerResponse(BaseModel):
+    id: str
+    sequence: int
+    question_ref: str
+    answer: str
+    confidence: DiagnosticConfidence
+    adaptive_context_version: str
+    answered_at: str
+
+
+class DiagnosticResponse(BaseModel):
+    id: str
+    captured_graph_version_id: str
+    question_set_version: str
+    setup_inputs: dict[str, object]
+    state: DiagnosticState
+    untrusted_seed_kind: UntrustedSeedKind | None
+    untrusted_seed_text: str | None
+    seed_skipped: bool
+    diagnostic_skipped: bool
+    answers: list[DiagnosticAnswerResponse]
+    next_question: DiagnosticQuestionResponse | None
+    started_at: str | None
+    paused_at: str | None
+    expires_at: str | None
+    failure_code: str | None
+    failure_reference: str | None
+    confirmed_goal_id: str | None
+    row_version: int
+    created_at: str
+    updated_at: str
+
+
+class DiagnosticRoadmapPreviewResponse(BaseModel):
+    session_id: str
+    captured_graph_version_id: str
+    state: DiagnosticState
+    answer_count: int
+    diagnostic_skipped: bool
+    projection_version: str
+    topic_recommendations: list[dict[str, object]]
 
 
 class CanonicalVersionSummaryResponse(BaseModel):

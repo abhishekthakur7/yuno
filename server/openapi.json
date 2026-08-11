@@ -221,6 +221,462 @@
         "title": "CanonicalVersionSummaryResponse",
         "type": "object"
       },
+      "DiagnosticAction": {
+        "enum": [
+          "pause",
+          "resume",
+          "skip_diagnostic",
+          "skip_notes",
+          "open_roadmap_preview",
+          "retry"
+        ],
+        "title": "DiagnosticAction",
+        "type": "string"
+      },
+      "DiagnosticAnswerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/DiagnosticConfidence"
+          },
+          "question_ref": {
+            "title": "Question Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_ref",
+          "answer",
+          "confidence"
+        ],
+        "title": "DiagnosticAnswerRequest",
+        "type": "object"
+      },
+      "DiagnosticAnswerResponse": {
+        "properties": {
+          "adaptive_context_version": {
+            "title": "Adaptive Context Version",
+            "type": "string"
+          },
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answered_at": {
+            "title": "Answered At",
+            "type": "string"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/DiagnosticConfidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "question_ref": {
+            "title": "Question Ref",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "question_ref",
+          "answer",
+          "confidence",
+          "adaptive_context_version",
+          "answered_at"
+        ],
+        "title": "DiagnosticAnswerResponse",
+        "type": "object"
+      },
+      "DiagnosticConfidence": {
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "title": "DiagnosticConfidence",
+        "type": "string"
+      },
+      "DiagnosticCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "path": {
+            "$ref": "#/components/schemas/DiagnosticPath"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "setup_inputs": {
+            "additionalProperties": true,
+            "title": "Setup Inputs",
+            "type": "object"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_capability": {
+            "$ref": "#/components/schemas/DiagnosticTargetCapability"
+          },
+          "target_level": {
+            "$ref": "#/components/schemas/DiagnosticTargetLevel"
+          }
+        },
+        "required": [
+          "path",
+          "target_level",
+          "target_capability",
+          "graph_version_id"
+        ],
+        "title": "DiagnosticCreateRequest",
+        "type": "object"
+      },
+      "DiagnosticPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "untrusted_seed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Untrusted Seed Text"
+          }
+        },
+        "title": "DiagnosticPatchRequest",
+        "type": "object"
+      },
+      "DiagnosticPath": {
+        "enum": [
+          "learn",
+          "interview_prep"
+        ],
+        "title": "DiagnosticPath",
+        "type": "string"
+      },
+      "DiagnosticQuestionResponse": {
+        "properties": {
+          "adaptive_context_version": {
+            "title": "Adaptive Context Version",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ref",
+          "prompt",
+          "sequence",
+          "adaptive_context_version"
+        ],
+        "title": "DiagnosticQuestionResponse",
+        "type": "object"
+      },
+      "DiagnosticResponse": {
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticAnswerResponse"
+            },
+            "title": "Answers",
+            "type": "array"
+          },
+          "captured_graph_version_id": {
+            "title": "Captured Graph Version Id",
+            "type": "string"
+          },
+          "confirmed_goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Goal Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "diagnostic_skipped": {
+            "title": "Diagnostic Skipped",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next_question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticQuestionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "paused_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused At"
+          },
+          "question_set_version": {
+            "title": "Question Set Version",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "seed_skipped": {
+            "title": "Seed Skipped",
+            "type": "boolean"
+          },
+          "setup_inputs": {
+            "additionalProperties": true,
+            "title": "Setup Inputs",
+            "type": "object"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DiagnosticState"
+          },
+          "untrusted_seed_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UntrustedSeedKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "untrusted_seed_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Untrusted Seed Text"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "captured_graph_version_id",
+          "question_set_version",
+          "setup_inputs",
+          "state",
+          "untrusted_seed_kind",
+          "untrusted_seed_text",
+          "seed_skipped",
+          "diagnostic_skipped",
+          "answers",
+          "next_question",
+          "started_at",
+          "paused_at",
+          "expires_at",
+          "failure_code",
+          "failure_reference",
+          "confirmed_goal_id",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DiagnosticResponse",
+        "type": "object"
+      },
+      "DiagnosticRoadmapPreviewResponse": {
+        "properties": {
+          "answer_count": {
+            "title": "Answer Count",
+            "type": "integer"
+          },
+          "captured_graph_version_id": {
+            "title": "Captured Graph Version Id",
+            "type": "string"
+          },
+          "diagnostic_skipped": {
+            "title": "Diagnostic Skipped",
+            "type": "boolean"
+          },
+          "projection_version": {
+            "title": "Projection Version",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DiagnosticState"
+          },
+          "topic_recommendations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Topic Recommendations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "captured_graph_version_id",
+          "state",
+          "answer_count",
+          "diagnostic_skipped",
+          "projection_version",
+          "topic_recommendations"
+        ],
+        "title": "DiagnosticRoadmapPreviewResponse",
+        "type": "object"
+      },
+      "DiagnosticState": {
+        "enum": [
+          "not-started",
+          "in-progress",
+          "paused",
+          "skipped",
+          "resumed",
+          "roadmap-preview",
+          "confirmed",
+          "failed"
+        ],
+        "title": "DiagnosticState",
+        "type": "string"
+      },
+      "DiagnosticTargetCapability": {
+        "enum": [
+          "know",
+          "understand",
+          "choose",
+          "implement",
+          "diagnose",
+          "defend"
+        ],
+        "title": "DiagnosticTargetCapability",
+        "type": "string"
+      },
+      "DiagnosticTargetLevel": {
+        "enum": [
+          "Mid-level",
+          "Senior",
+          "Staff"
+        ],
+        "title": "DiagnosticTargetLevel",
+        "type": "string"
+      },
       "ErrorResponse": {
         "description": "The spec \u00a75.1 error envelope: every `YunoError`, request validation\nfailure, and unhandled exception renders through this shape (see\n`yuno.api.errors.register_exception_handlers`).",
         "properties": {
@@ -770,6 +1226,14 @@
         ],
         "title": "TargetLevel",
         "type": "string"
+      },
+      "UntrustedSeedKind": {
+        "enum": [
+          "notes",
+          "questions"
+        ],
+        "title": "UntrustedSeedKind",
+        "type": "string"
       }
     }
   },
@@ -855,6 +1319,283 @@
         "summary": "Get Canonical Version",
         "tags": [
           "canonical"
+        ]
+      }
+    },
+    "/api/v1/diagnostics": {
+      "post": {
+        "operationId": "post_diagnostic_api_v1_diagnostics_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Diagnostic",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/{session_id}": {
+      "get": {
+        "operationId": "get_diagnostic_session_api_v1_diagnostics__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Diagnostic Session",
+        "tags": [
+          "diagnostics"
+        ]
+      },
+      "patch": {
+        "operationId": "update_diagnostic_session_api_v1_diagnostics__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Update Diagnostic Session",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/{session_id}/answers": {
+      "post": {
+        "operationId": "post_diagnostic_answer_api_v1_diagnostics__session_id__answers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticAnswerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Diagnostic Answer",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/{session_id}/roadmap-preview": {
+      "get": {
+        "operationId": "get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticRoadmapPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Roadmap Preview",
+        "tags": [
+          "diagnostics"
         ]
       }
     },

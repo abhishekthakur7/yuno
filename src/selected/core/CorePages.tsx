@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -17,6 +17,7 @@ import { activeRoadmapLessonIds, currentPracticeQuestion, learningStorageKey, us
 import { ApiError, canonicalVersionsQueryOptions } from '../../shared/api/queries'
 import { goalDestination, resumePage, useProfileGoals } from '../../shared/use-profile-goals'
 import type { GoalCreate, GoalWorkspace } from '../../shared/api/profile-goals'
+import { useDiagnostic, type DiagnosticConfidence, type DiagnosticSetup } from '../../shared/use-diagnostic'
 import type { InterviewMode } from '../app-model'
 import './core.css'
 
@@ -169,43 +170,165 @@ export function Onboarding({ navigate }: PageProps) {
   const { state, dispatch } = useLearningState()
   const workspace = useProfileGoals()
   const canonicalVersions = useQuery(canonicalVersionsQueryOptions())
-  const [preview, setPreview] = useState(false)
+  const diagnostic = useDiagnostic()
+  const [path, setPath] = useState<'Learn' | 'Interview Prep'>('Learn')
+  const [targetLevel, setTargetLevel] = useState<GoalCreate['target_level']>('Senior')
+  const [goalName, setGoalName] = useState('')
   const [subjectOrRole, setSubjectOrRole] = useState('')
   const [targetCapability, setTargetCapability] = useState<GoalCreate['target_capability']>('implement')
+  const [diagnosticChoice, setDiagnosticChoice] = useState<'skip' | 'take'>('skip')
+  const [seed, setSeed] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [confidence, setConfidence] = useState<DiagnosticConfidence>('medium')
   const idempotencyKey = useRef(crypto.randomUUID())
+  const answerIdempotencyKey = useRef(crypto.randomUUID())
   const graphVersion = canonicalVersions.data?.[0]
-  const createWorkspace = () => {
+  const session = diagnostic.session.data
+  const preview = session?.state === 'roadmap-preview'
+  const seedResolved = Boolean(session?.seed_skipped || session?.untrusted_seed_text)
+  const activeQuestionRef = session?.next_question?.ref
+  const persistedPreviewPath = session?.setup_inputs.path === 'interview_prep' ? 'Interview Prep' : 'Learn'
+  const persistedPreviewLevel = typeof session?.setup_inputs.target_level === 'string' ? session.setup_inputs.target_level : targetLevel
+
+  useEffect(() => setAnswer(''), [activeQuestionRef])
+
+  const openPreview = async (current: NonNullable<typeof session>) => {
+    const previewSession = current.state === 'roadmap-preview'
+      ? current
+      : await diagnostic.patch.mutateAsync({ session: current, patch: { action: 'open_roadmap_preview' } })
+    await diagnostic.preview.mutateAsync(previewSession.id)
+  }
+  const beginDiagnostic = async () => {
     if (!graphVersion) return
-    workspace.create.mutate({ input: {
-      name: state.onboarding.goalName.trim(),
-      path: state.onboarding.path === 'Learn' ? 'learn' : 'interview_prep',
-      target_level: state.onboarding.target,
+    const input: DiagnosticSetup = {
+      path: path === 'Learn' ? 'learn' : 'interview_prep',
+      target_level: targetLevel,
       target_capability: targetCapability,
       graph_version_id: graphVersion.id,
-      ...(state.onboarding.path === 'Learn' ? { subject: subjectOrRole.trim() || null } : { role: subjectOrRole.trim() || null }),
+      ...(path === 'Learn' ? { subject: subjectOrRole.trim() } : { role: subjectOrRole.trim() }),
+      setup_inputs: { goal_name: goalName.trim() },
+    }
+    let current = await diagnostic.create.mutateAsync(input)
+    current = await diagnostic.patch.mutateAsync({
+      session: current,
+      patch: seed ? { untrusted_seed_text: seed } : { action: 'skip_notes' },
+    })
+    if (diagnosticChoice === 'skip') {
+      current = await diagnostic.patch.mutateAsync({ session: current, patch: { action: 'skip_diagnostic' } })
+      await openPreview(current)
+    }
+  }
+  const patchSession = async (action: 'resume' | 'skip_diagnostic' | 'retry') => {
+    if (!session) return
+    const updated = await diagnostic.patch.mutateAsync({ session, patch: { action } })
+    if (action === 'skip_diagnostic') await openPreview(updated)
+  }
+  const pauseAndExit = async () => {
+    if (!session) return
+    await diagnostic.patch.mutateAsync({ session, patch: { action: 'pause' } })
+    navigate('home')
+  }
+  const resolveSeed = async (skip: boolean) => {
+    if (!session) return
+    await diagnostic.patch.mutateAsync({
+      session,
+      patch: skip ? { action: 'skip_notes' } : { untrusted_seed_text: seed },
+    })
+  }
+  const submitAnswer = async () => {
+    if (!session || !answer.trim()) return
+    const updated = await diagnostic.answer.mutateAsync({ session, answer, confidence, idempotencyKey: answerIdempotencyKey.current })
+    answerIdempotencyKey.current = crypto.randomUUID()
+    if (!updated.next_question) await openPreview(updated)
+  }
+  const createWorkspace = () => {
+    if (!graphVersion && !session) return
+    const setupGoalName = typeof session?.setup_inputs.goal_name === 'string' ? session.setup_inputs.goal_name : goalName.trim()
+    const persistedPath = session?.setup_inputs.path
+    const setupPath = persistedPath === 'learn' || persistedPath === 'interview_prep' ? persistedPath : (path === 'Learn' ? 'learn' : 'interview_prep')
+    const persistedSubjectOrRole = setupPath === 'learn' ? session?.setup_inputs.subject : session?.setup_inputs.role
+    const setupSubjectOrRole = typeof persistedSubjectOrRole === 'string' ? persistedSubjectOrRole : subjectOrRole.trim()
+    const persistedLevel = session?.setup_inputs.target_level
+    const setupLevel = persistedLevel === 'Mid-level' || persistedLevel === 'Senior' || persistedLevel === 'Staff' ? persistedLevel : targetLevel
+    const persistedCapability = session?.setup_inputs.target_capability
+    const setupCapability = persistedCapability === 'know' || persistedCapability === 'understand' || persistedCapability === 'choose' || persistedCapability === 'implement' || persistedCapability === 'diagnose' || persistedCapability === 'defend' ? persistedCapability : targetCapability
+    workspace.create.mutate({ input: {
+      name: setupGoalName,
+      path: setupPath,
+      target_level: setupLevel,
+      target_capability: setupCapability,
+      graph_version_id: session?.captured_graph_version_id ?? graphVersion!.id,
+      ...(setupPath === 'learn' ? { subject: setupSubjectOrRole || null } : { role: setupSubjectOrRole || null }),
     }, idempotencyKey: idempotencyKey.current }, { onSuccess: async (goal) => {
-      window.localStorage.setItem(learningStorageKey(goal.id), JSON.stringify(state))
+      const goalState = {
+        ...state,
+        onboarding: {
+          ...state.onboarding,
+          path: setupPath === 'learn' ? 'Learn' : 'Interview Prep',
+          target: setupLevel,
+          goalName: setupGoalName,
+        },
+      }
+      window.localStorage.setItem(learningStorageKey(goal.id), JSON.stringify(goalState))
       const refreshedProfile = await workspace.profile.refetch()
       if (refreshedProfile.data?.current_goal_id === goal.id) await workspace.goals.refetch()
       else await workspace.switchGoal.mutateAsync(goal)
+      diagnostic.clear()
       navigate(goalDestination(goal))
     } })
+  }
+  const diagnosticError = diagnostic.create.error ?? diagnostic.patch.error ?? diagnostic.answer.error ?? diagnostic.preview.error ?? diagnostic.session.error
+  const working = diagnostic.create.isPending || diagnostic.patch.isPending || diagnostic.answer.isPending || diagnostic.preview.isPending
+
+  if (diagnostic.sessionId && diagnostic.session.isPending) {
+    return <main className="sb-page sb-workspace-state" aria-live="polite"><RefreshCcw aria-hidden="true" /><h1>Resuming your setup</h1><p>Loading saved diagnostic answers.</p></main>
+  }
+
+  if (session && !preview) {
+    return <main className="sb-page sb-onboarding"><section className="sb-card">
+      <PageIntro eyebrow="Goal setup · diagnostic" title={session.state === 'paused' ? 'Your diagnostic is paused' : session.state === 'failed' ? 'Your answers are safe' : 'Short adaptive diagnostic'}>
+        {session.state === 'paused' ? 'Resume when you are ready, or skip this optional step.' : session.state === 'failed' ? 'Retry from the same saved answers. Nothing needs to be re-entered.' : 'Each saved response and confidence level selects the next question reproducibly.'}
+      </PageIntro>
+      <div className="sb-diagnostic">
+        <div className="sb-diagnostic-status" role="status"><strong>{session.answers.length} {session.answers.length === 1 ? 'answer' : 'answers'} saved on this device’s server</strong><span>State: {session.state}</span></div>
+        {!seedResolved && <section className="sb-diagnostic-question" aria-labelledby="sb-seed-recovery-title">
+          <span className="sb-kicker">Optional setup</span><h2 id="sb-seed-recovery-title">Save or skip your untrusted {session.setup_inputs.path === 'interview_prep' ? 'questions' : 'notes'}</h2>
+          <label>Untrusted seed<textarea value={seed} onChange={(event) => setSeed(event.target.value)} /></label>
+          <small>This text is stored verbatim for later review in Imports. It is never evidence, completion, or canonical truth.</small>
+          <div><Button tone="secondary" disabled={working} onClick={() => void resolveSeed(true)}>Skip this optional step</Button><Button disabled={working || !seed.trim()} onClick={() => void resolveSeed(false)}>Save untrusted seed</Button></div>
+        </section>}
+        {session.untrusted_seed_text && <aside className="sb-untrusted-seed"><strong>Untrusted seed · review later in Imports</strong><pre>{session.untrusted_seed_text}</pre><small>Stored verbatim. It is not evidence, completion, or canonical truth.</small></aside>}
+        {session.answers.length > 0 && <details className="sb-saved-answers"><summary>Review saved answers</summary><ol>{session.answers.map((saved) => <li key={saved.id}><strong>{saved.question_ref}</strong><p>{saved.answer}</p><small>Confidence: {saved.confidence}</small></li>)}</ol></details>}
+        {seedResolved && (session.state === 'in-progress' || session.state === 'resumed') && session.next_question && <div className="sb-diagnostic-question">
+          <span className="sb-kicker">Question {session.answers.length + 1}</span><h2>{session.next_question.prompt}</h2>
+          <label>Your answer<textarea value={answer} onChange={(event) => setAnswer(event.target.value)} /></label>
+          <label>Confidence<select value={confidence} onChange={(event) => setConfidence(event.target.value as DiagnosticConfidence)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+          <div><Button tone="secondary" disabled={working} onClick={() => void pauseAndExit()}><Pause size={16} /> Pause and exit</Button><Button disabled={working || !answer.trim()} onClick={() => void submitAnswer()}>Save answer <ArrowRight size={16} /></Button></div>
+        </div>}
+        {seedResolved && (session.state === 'in-progress' || session.state === 'resumed') && !session.next_question && <Button disabled={working} onClick={() => void openPreview(session)}>Continue to roadmap preview <ArrowRight size={16} /></Button>}
+        {seedResolved && session.state === 'paused' && <div className="sb-diagnostic-actions"><Button disabled={working} onClick={() => void patchSession('resume')}><Play size={16} /> Resume diagnostic</Button><Button tone="secondary" disabled={working} onClick={() => void patchSession('skip_diagnostic')}>Skip diagnostic</Button><Button tone="quiet" onClick={() => navigate('home')}>Keep paused and exit</Button></div>}
+        {seedResolved && session.state === 'failed' && <div className="sb-diagnostic-actions"><p>{session.failure_reference ?? session.failure_code ?? 'The diagnostic service failed after saving your previous answers.'}</p><Button disabled={working} onClick={() => void patchSession('retry')}><RefreshCcw size={16} /> Retry with saved answers</Button><Button tone="secondary" disabled={working} onClick={() => void patchSession('skip_diagnostic')}>Skip diagnostic</Button></div>}
+        {seedResolved && session.state === 'skipped' && <Button disabled={working} onClick={() => void openPreview(session)}>Continue to roadmap preview <ArrowRight size={16} /></Button>}
+        {seedResolved && (session.state === 'in-progress' || session.state === 'resumed') && <Button className="sb-skip-diagnostic" tone="quiet" disabled={working} onClick={() => void patchSession('skip_diagnostic')}>Skip the rest of this diagnostic</Button>}
+        {diagnosticError && <div className="sb-action-error" role="alert"><span>Your saved answers are unchanged. Try the action again.</span></div>}
+      </div>
+    </section></main>
   }
   return <main className="sb-page sb-onboarding">
     {!preview ? <section className="sb-card">
       <PageIntro eyebrow="Goal setup · 1 of 2" title="Shape your classroom"><span>For experienced backend engineers. Set the target; every inferred state remains editable.</span></PageIntro>
       <div className="sb-form-grid">
-        <fieldset><legend>Primary path</legend><div className="sb-segments">{(['Learn', 'Interview Prep'] as const).map(value => <button type="button" key={value} className={state.onboarding.path === value ? 'is-selected' : ''} aria-pressed={state.onboarding.path === value} onClick={() => dispatch({ type: 'SET_ONBOARDING', field: 'path', value })}>{value === 'Learn' ? <BookOpen size={18} /> : <MessageSquareText size={18} />}{value}</button>)}</div></fieldset>
-        <label>Target level<select value={state.onboarding.target} onChange={e => dispatch({ type: 'SET_ONBOARDING', field: 'target', value: e.target.value })}><option>Mid-level</option><option>Senior</option><option>Staff</option></select><small>Yuno’s MVP curriculum is for experienced backend engineers and does not include a beginner track.</small></label>
-        <label>{state.onboarding.path === 'Learn' ? 'Subject' : 'Role'}<input value={subjectOrRole} onChange={(event) => setSubjectOrRole(event.target.value)} /></label>
+        <fieldset><legend>Primary path</legend><div className="sb-segments">{(['Learn', 'Interview Prep'] as const).map(value => <button type="button" key={value} className={path === value ? 'is-selected' : ''} aria-pressed={path === value} onClick={() => setPath(value)}>{value === 'Learn' ? <BookOpen size={18} /> : <MessageSquareText size={18} />}{value}</button>)}</div></fieldset>
+        <label>Target level<select value={targetLevel} onChange={e => setTargetLevel(e.target.value as typeof targetLevel)}><option>Mid-level</option><option>Senior</option><option>Staff</option></select><small>Yuno’s MVP curriculum is for experienced backend engineers and does not include a beginner track.</small></label>
+        <label>{path === 'Learn' ? 'Subject' : 'Role'}<input value={subjectOrRole} onChange={(event) => setSubjectOrRole(event.target.value)} /></label>
         <label>Target capability<select value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as GoalCreate['target_capability'])}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
-        <label className="sb-wide">Goal name<input value={state.onboarding.goalName} onChange={e => dispatch({ type: 'SET_ONBOARDING', field: 'goalName', value: e.target.value })} /></label>
-        <fieldset className="sb-wide"><legend>Starting evidence</legend><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={state.onboarding.diagnostic === 'take'} onChange={() => dispatch({ type: 'SET_ONBOARDING', field: 'diagnostic', value: 'take' })} /><span><strong>Take a short diagnostic</strong><small>Estimate what should be verified; this does not mark completion.</small></span></label><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={state.onboarding.diagnostic === 'skip'} onChange={() => dispatch({ type: 'SET_ONBOARDING', field: 'diagnostic', value: 'skip' })} /><span><strong>Skip for now</strong><small>Begin with conservative self-reported states.</small></span></label></fieldset>
-        <label className="sb-wide">Optional notes or questions<textarea value={state.onboarding.sourceMaterial} onChange={e => dispatch({ type: 'SET_ONBOARDING_SOURCE', value: e.target.value })} placeholder={state.onboarding.path === 'Learn' ? 'Paste plain text or Markdown notes for later review.' : 'Paste questions you want to review later.'} /><small>Saved in this browser as untrusted source material. It is not parsed, imported, or treated as truth; Imports offers the explicit review handoff.</small></label>
-      </div><footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => setPreview(true)} disabled={!state.onboarding.goalName.trim() || !subjectOrRole.trim()}>Preview full roadmap <ArrowRight size={16} /></Button></footer>
+        <label className="sb-wide">Goal name<input value={goalName} onChange={e => setGoalName(e.target.value)} /></label>
+        <fieldset className="sb-wide"><legend>Starting evidence · optional</legend><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'take'} onChange={() => setDiagnosticChoice('take')} /><span><strong>Take a short diagnostic</strong><small>Questions adapt to your saved responses and confidence. This does not mark completion.</small></span></label><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'skip'} onChange={() => setDiagnosticChoice('skip')} /><span><strong>Skip diagnostic</strong><small>Go directly to a conservative roadmap preview without a later forced retake.</small></span></label></fieldset>
+        <label className="sb-wide">Optional {path === 'Learn' ? 'notes' : 'questions'} · untrusted seed<textarea value={seed} onChange={e => setSeed(e.target.value)} placeholder={path === 'Learn' ? 'Paste plain text or Markdown notes for later review.' : 'Paste questions you want to review later.'} /><small>Captured verbatim on the local server and visibly marked untrusted until you review it later in Imports. It is never treated as truth or evidence.</small><Button type="button" tone="quiet" onClick={() => setSeed('')}>Skip {path === 'Learn' ? 'notes' : 'questions'}</Button></label>
+      </div>{diagnosticError && <div className="sb-action-error" role="alert"><span>Setup was not saved. You can retry without re-entering answers.</span></div>}<footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => void beginDiagnostic()} disabled={working || !graphVersion || !goalName.trim() || !subjectOrRole.trim()}>{working ? 'Saving setup…' : diagnosticChoice === 'take' ? 'Start diagnostic' : 'Skip to roadmap preview'} <ArrowRight size={16} /></Button></footer>
     </section> : <section className="sb-card">
-      <PageIntro eyebrow="Goal setup · 2 of 2" title="Create a goal from this roadmap" action={<Button tone="quiet" onClick={() => setPreview(false)}><Settings2 size={16} /> Edit setup</Button>}>
-        {state.onboarding.path} · {state.onboarding.target} · inferred states are not completion.
+      <PageIntro eyebrow="Goal setup · 2 of 2" title="Create a goal from this roadmap" action={<Button tone="quiet" onClick={() => navigate('home')}><Pause size={16} /> Save and exit</Button>}>
+        {persistedPreviewPath} · {persistedPreviewLevel} · inferred states are not completion.
       </PageIntro>
       <div className="sb-preview">{CURRICULUM_MODULES.map((module, i) => {
         const moduleLessons = orderedModuleLessons(module, state.roadmapOrder)
@@ -214,7 +337,7 @@ export function Onboarding({ navigate }: PageProps) {
           return <li key={lesson.id} className={choice?.skipped ? 'is-skipped' : ''}><span>{lesson.title}</span><div className="sb-preview-controls"><label><span>Knowledge</span><select value={choice?.learnerState} onChange={e => dispatch({ type: 'SET_LEARNER_STATE', lessonId: lesson.id, learnerState: e.target.value as KnowledgeState })}>{STATES.map(value => <option key={value}>{value}</option>)}</select></label><label><span>Depth</span><select value={choice?.depth} onChange={e => dispatch({ type: 'SET_DEPTH', lessonId: lesson.id, depth: e.target.value as Depth })}>{DEPTHS.map(value => <option key={value}>{value}</option>)}</select></label><Button tone="quiet" onClick={() => dispatch({ type: 'TOGGLE_SKIP', lessonId: lesson.id })}>{choice?.skipped ? 'Restore' : 'Skip'}</Button><div className="sb-order"><button disabled={lessonIndex === 0} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: -1 })} aria-label={`Move ${lesson.title} earlier`}><ArrowUp size={16} /></button><button disabled={lessonIndex === moduleLessons.length - 1} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: 1 })} aria-label={`Move ${lesson.title} later`}><ArrowDown size={16} /></button></div></div></li>
         })}</ol></section>
       })}</div>
-      <footer className="sb-card-footer sb-approval"><span><ShieldCheck size={18} /> {workspace.create.isError ? 'Goal creation failed.' : canonicalVersions.isError ? 'Approved curriculum could not be loaded.' : canonicalVersions.isPending ? 'Loading approved curriculum…' : graphVersion ? 'Ready to create this goal.' : 'No approved curriculum is available.'}</span><span>{canonicalVersions.isError && <Button tone="secondary" onClick={() => void canonicalVersions.refetch()}>Retry</Button>}<Button disabled={!graphVersion || workspace.create.isPending} onClick={createWorkspace}><Check size={17} /> {workspace.create.isPending ? 'Creating goal…' : 'Create goal from roadmap'}</Button></span></footer>
+      <footer className="sb-card-footer sb-approval"><span><ShieldCheck size={18} /> {workspace.create.isError ? 'Goal creation failed.' : session ? 'Ready with the curriculum captured when setup began.' : canonicalVersions.isError ? 'Approved curriculum could not be loaded.' : canonicalVersions.isPending ? 'Loading approved curriculum…' : graphVersion ? 'Ready to create this goal.' : 'No approved curriculum is available.'}</span><span>{canonicalVersions.isError && !session && <Button tone="secondary" onClick={() => void canonicalVersions.refetch()}>Retry</Button>}<Button disabled={(!graphVersion && !session) || workspace.create.isPending} onClick={createWorkspace}><Check size={17} /> {workspace.create.isPending ? 'Creating goal…' : 'Create goal from roadmap'}</Button></span></footer>
     </section>}
   </main>
 }

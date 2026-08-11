@@ -18,6 +18,7 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
     if_match,
+    parse_if_match,
 )
 from yuno.modules.profiles_goals.domain import (
     GoalWorkspace,
@@ -34,7 +35,6 @@ from yuno.modules.profiles_goals.service import (
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import (
     IdempotencyConflictError,
-    MalformedRequestError,
     NotFoundError,
     UnavailableError,
 )
@@ -60,7 +60,7 @@ def update_profile(
     match: Annotated[str, Depends(if_match)],
 ) -> LearnerProfileResponse:
     profile = patch_profile(
-        uow, owner_id, _version(match), body.model_dump(exclude_unset=True)
+        uow, owner_id, parse_if_match(match), body.model_dump(exclude_unset=True)
     )
     uow.commit()
     return _profile_response(profile)
@@ -153,7 +153,7 @@ def update_goal(
         uow,
         owner_id,
         goal_id,
-        _version(match),
+        parse_if_match(match),
         changes,
         set_current=body.set_current is True,
         resume_destination=body.resume_destination,
@@ -180,7 +180,7 @@ def post_archive_goal(
 ) -> GoalResponse:
     _profile_or_unavailable(uow, owner_id)
     uow.profiles_goals.lock_idempotency_commands(owner_id)
-    expected_version = _version(match)
+    expected_version = parse_if_match(match)
     operation = f"archive_goal:{goal_id}"
     request_hash = hash_payload(
         {"goal_id": goal_id, "expected_version": expected_version}
@@ -208,18 +208,6 @@ def post_archive_goal(
     )
     uow.commit()
     return response
-
-
-def _version(raw: str) -> int:
-    try:
-        value = int(raw.strip().strip('"'))
-    except ValueError as exc:
-        raise MalformedRequestError(
-            "If-Match must contain an integer row version."
-        ) from exc
-    if value < 1:
-        raise MalformedRequestError("If-Match must contain a positive row version.")
-    return value
 
 
 def _profile_response(profile: LearnerProfile) -> LearnerProfileResponse:

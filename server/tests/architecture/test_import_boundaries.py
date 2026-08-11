@@ -50,6 +50,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.audit",
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
+    "yuno.modules.diagnostics",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {"fastapi", "starlette", "sqlalchemy", "alembic", "pydantic", "subprocess"}
@@ -67,12 +68,16 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.profiles_goals.domain",
     "yuno.modules.profiles_goals.ports",
     "yuno.modules.profiles_goals.service",
+    "yuno.modules.diagnostics.domain",
+    "yuno.modules.diagnostics.ports",
+    "yuno.modules.diagnostics.service",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
     "yuno.modules.audit",
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
+    "yuno.modules.diagnostics",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
@@ -142,6 +147,8 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
         "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
         "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
+        "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
+        "yuno.modules.diagnostics.service -> yuno.modules.audit.**",
     }
 
 

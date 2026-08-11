@@ -58,9 +58,7 @@ export interface LearningState {
     path: 'Learn' | 'Interview Prep'
     target: 'Mid-level' | 'Senior' | 'Staff'
     goalName: string
-    diagnostic: 'skip' | 'take'
     approved: boolean
-    sourceMaterial: string
   }
   currentLessonId: string
   roadmapOrder: readonly string[]
@@ -85,11 +83,10 @@ export interface LearningState {
   }
 }
 
-type OnboardingField = 'path' | 'target' | 'goalName' | 'diagnostic'
+type OnboardingField = 'path' | 'target' | 'goalName'
 
 export type LearningAction =
   | { type: 'SET_ONBOARDING'; field: OnboardingField; value: string }
-  | { type: 'SET_ONBOARDING_SOURCE'; value: string }
   | { type: 'APPROVE_ROADMAP' }
   | { type: 'SELECT_LESSON'; lessonId: string }
   | { type: 'SET_DEPTH'; lessonId: string; depth: Depth }
@@ -128,9 +125,7 @@ export function createInitialState(): LearningState {
       path: 'Learn',
       target: 'Senior',
       goalName: '',
-      diagnostic: 'skip',
       approved: false,
-      sourceMaterial: '',
     },
     currentLessonId: CURRENT_LESSON_ID,
     roadmapOrder: ALL_LESSONS.map((lesson) => lesson.id),
@@ -223,12 +218,9 @@ export function learningReducer(state: LearningState, action: LearningAction): L
     case 'SET_ONBOARDING': {
       if (action.field === 'path' && (action.value === 'Learn' || action.value === 'Interview Prep')) return { ...state, onboarding: { ...state.onboarding, path: action.value, approved: false } }
       if (action.field === 'target' && (action.value === 'Mid-level' || action.value === 'Senior' || action.value === 'Staff')) return { ...state, onboarding: { ...state.onboarding, target: action.value, approved: false } }
-      if (action.field === 'diagnostic' && (action.value === 'skip' || action.value === 'take')) return { ...state, onboarding: { ...state.onboarding, diagnostic: action.value, approved: false } }
       if (action.field === 'goalName') return { ...state, onboarding: { ...state.onboarding, goalName: action.value, approved: false } }
       return state
     }
-    case 'SET_ONBOARDING_SOURCE':
-      return { ...state, onboarding: { ...state.onboarding, sourceMaterial: action.value, approved: false } }
     case 'APPROVE_ROADMAP':
       return { ...state, onboarding: { ...state.onboarding, approved: true } }
     case 'SELECT_LESSON': {
@@ -419,9 +411,7 @@ function hydrateLearningState(value: unknown, initial = createInitialState()): L
       path: onboarding.path === 'Learn' || onboarding.path === 'Interview Prep' ? onboarding.path : initial.onboarding.path,
       target: onboarding.target === 'Mid-level' || onboarding.target === 'Senior' || onboarding.target === 'Staff' ? onboarding.target : initial.onboarding.target,
       goalName: typeof onboarding.goalName === 'string' ? onboarding.goalName : initial.onboarding.goalName,
-      diagnostic: onboarding.diagnostic === 'skip' || onboarding.diagnostic === 'take' ? onboarding.diagnostic : initial.onboarding.diagnostic,
       approved: typeof onboarding.approved === 'boolean' ? onboarding.approved : initial.onboarding.approved,
-      sourceMaterial: typeof onboarding.sourceMaterial === 'string' ? onboarding.sourceMaterial : initial.onboarding.sourceMaterial,
     },
     currentLessonId: typeof value.currentLessonId === 'string' && hydratedRoadmap[value.currentLessonId] ? value.currentLessonId : initial.currentLessonId,
     roadmapOrder,
