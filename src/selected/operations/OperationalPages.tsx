@@ -53,8 +53,7 @@ interface OperationsState {
   disputedEvidenceId: string | null
 }
 
-const STORAGE_KEY = 'lattice.operations.state.v1'
-const LEGACY_STORAGE_KEY = 'lattice.selected.operations.v1'
+const STORAGE_KEY = 'yuno.operations.state.v1'
 
 const DEFAULT_STATE: OperationsState = {
   version: 1,
@@ -135,15 +134,7 @@ function loadState(): OperationsState {
   }
   const current = hydrateOperationsState(parse(window.localStorage.getItem(STORAGE_KEY)))
   if (current) return current
-  const legacy = hydrateOperationsState(parse(window.localStorage.getItem(LEGACY_STORAGE_KEY)))
-  if (!legacy) return DEFAULT_STATE
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy))
-    window.localStorage.removeItem(LEGACY_STORAGE_KEY)
-  } catch {
-    return legacy
-  }
-  return legacy
+  return DEFAULT_STATE
 }
 
 function useOperationsState() {
@@ -265,7 +256,7 @@ function ConfirmDialog({ trigger, title, description, confirm, onConfirm, reduce
 function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), scope: 'application prototype local operations state', ...state }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'lattice-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
   }
   return <>
     <PageHead eyebrow="Local preferences and data" title="Settings" description="These controls affect this browser prototype only. There is one local owner and no account, authentication, cloud sync, or hosted security boundary." />

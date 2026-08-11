@@ -341,8 +341,7 @@ interface LearningContextValue {
 
 const LearningContext = createContext<LearningContextValue | null>(null)
 
-export const LEARNING_STORAGE_KEY = 'lattice.learning.state.v1'
-const LEGACY_LEARNING_STORAGE_KEY = 'lattice.concept-b.learner-state.v1'
+export const LEARNING_STORAGE_KEY = 'yuno.learning.state.v1'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -467,26 +466,7 @@ function loadState(): LearningState {
   const current = hydrateLearningState(parse(window.localStorage.getItem(LEARNING_STORAGE_KEY)), initial)
   if (current) return keepCurrentLessonActive(current)
 
-  const legacy = parse(window.localStorage.getItem(LEGACY_LEARNING_STORAGE_KEY))
-  if (!isRecord(legacy) || legacy.conceptId !== 'concept-b') return initial
-  const loaded = hydrateLearningState(legacy, initial)
-  if (!loaded) return initial
-  const legacyMock = isRecord(legacy.mock) ? legacy.mock : null
-  const legacySeededMock = !Object.prototype.hasOwnProperty.call(legacy, 'currentLessonId')
-    && legacyMock?.status === 'active'
-    && legacyMock.draft === MOCK_FIXTURE_DRAFT
-    && Array.isArray(legacyMock.completedTurns)
-    && legacyMock.completedTurns.length === 0
-    && legacyMock.reportKind === null
-  if (legacySeededMock) loaded.mock = { ...loaded.mock, draft: '' }
-  const normalized = keepCurrentLessonActive(loaded)
-  try {
-    window.localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(normalized))
-    window.localStorage.removeItem(LEGACY_LEARNING_STORAGE_KEY)
-  } catch {
-    return normalized
-  }
-  return normalized
+  return initial
 }
 
 export function LearningStateProvider({ children }: { children: ReactNode }) {

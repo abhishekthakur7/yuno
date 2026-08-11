@@ -41,7 +41,9 @@ export function appHref(page: AppPage): string {
   return page === 'home' ? '/' : `/app/${page}`
 }
 
-export function navigateApp(page: AppPage): void {
-  window.history.pushState({}, '', appHref(page))
-  window.dispatchEvent(new PopStateEvent('popstate'))
+export const INTERVIEW_MODES = ['refresher', 'questions'] as const
+export type InterviewMode = (typeof INTERVIEW_MODES)[number]
+
+export function isInterviewMode(value: unknown): value is InterviewMode {
+  return typeof value === 'string' && (INTERVIEW_MODES as readonly string[]).includes(value)
 }

@@ -1,5 +1,5 @@
 {
-  "name": "lattice-learning",
+  "name": "yuno-learning",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -24,6 +24,7 @@
     "@radix-ui/react-alert-dialog": "1.1.15",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-tabs": "1.1.13",
+    "@tanstack/react-query": "5.101.4",
     "@tanstack/react-router": "1.170.24",
     "lucide-react": "0.468.0",
     "openapi-fetch": "0.17.0",

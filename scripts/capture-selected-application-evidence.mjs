@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { chromium } from '@playwright/test'
 
-const baseUrl = process.env.LATTICE_CAPTURE_URL || 'http://127.0.0.1:5173'
+const baseUrl = process.env.YUNO_CAPTURE_URL || 'http://127.0.0.1:5173'
 const outputRoot = path.join(process.cwd(), 'screenshots', 'selected-application')
 const viewports = [
   { width: 1440, height: 1000 },
@@ -54,9 +54,9 @@ try {
       if (!isLocal(request.url())) failures.push(`${size} external request: ${request.method()} ${request.url()}`)
     })
     await page.addInitScript(() => {
-      if (sessionStorage.getItem('lattice.capture.initialized')) return
-      for (const key of Object.keys(localStorage)) if (key.startsWith('lattice.')) localStorage.removeItem(key)
-      sessionStorage.setItem('lattice.capture.initialized', 'true')
+      if (sessionStorage.getItem('yuno.capture.initialized')) return
+      for (const key of Object.keys(localStorage)) if (key.startsWith('yuno.')) localStorage.removeItem(key)
+      sessionStorage.setItem('yuno.capture.initialized', 'true')
     })
 
     const capture = async (name) => {
@@ -65,7 +65,7 @@ try {
     }
     const open = async (route) => {
       await page.goto(`${baseUrl}${route}`)
-      await page.locator('[data-app="lattice-learning"]').waitFor()
+      await page.locator('[data-app="yuno-learning"]').waitFor()
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
       if (overflow) failures.push(`${size} ${route}: horizontal overflow`)
     }

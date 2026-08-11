@@ -13,11 +13,12 @@ import {
   type Depth, type KnowledgeState, type Lesson,
 } from '../../shared/model'
 import { activeRoadmapLessonIds, currentPracticeQuestion, useLearningState } from '../../shared/state'
+import type { InterviewMode } from '../app-model'
 import './core.css'
 
 export type CorePage = 'home' | 'onboarding' | 'learn-roadmap' | 'topic-studio' | 'interview-hub' | 'practice' | 'mock' | 'reports'
 
-type Navigate = (page: CorePage | string) => void
+type Navigate = (page: CorePage | string, mode?: InterviewMode) => void
 type PageProps = { navigate: Navigate }
 const DEPTHS: readonly Depth[] = ['Essential', 'Implementation', 'Production', 'Interview']
 const STATES: readonly KnowledgeState[] = ['likely known', 'partial', 'unverified', 'new']
@@ -185,15 +186,33 @@ function TopicTools() {
   return <Tabs.Root id="sb-lesson-tools" defaultValue="notes" className="sb-tools"><Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List><Tabs.Content value="notes"><label htmlFor="sb-notes">Goal notebook · user entry</label><textarea id="sb-notes" value={state.codeNotes} onChange={e => dispatch({ type: 'SET_NOTES', value: e.target.value })} /></Tabs.Content><Tabs.Content value="resources"><a href={TOPIC_BRIEF.sourceUrl} target="_blank" rel="noreferrer"><FileText size={18} /><span><strong>{TOPIC_BRIEF.source}</strong><small>Official source · opens a new tab</small></span><ArrowRight size={16} /></a></Tabs.Content><Tabs.Content value="help"><div className="sb-empty"><MessageSquareText /><strong>Topic help is unavailable in this static presentation</strong><span>No provider or network request is configured.</span></div></Tabs.Content></Tabs.Root>
 }
 
-function InterviewHub({ navigate }: PageProps) {
+function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) {
   const { state, dispatch } = useLearningState()
   const choices = [
-    { title: 'Refresher', text: 'Review the message delivery contract and evidence gaps.', meta: 'Focused reading', Icon: BookOpen, target: 'topic-studio', lessonId: 'delivery-contract' },
-    { title: 'Question bank', text: 'Choose a scenario without completing the Learn path.', meta: '2 fixture questions', Icon: HelpCircle, target: 'practice' },
+    { title: 'Refresher', text: 'Review the message delivery contract and evidence gaps.', meta: 'Focused reading', Icon: BookOpen, target: 'topic-studio', lessonId: 'delivery-contract', hubMode: 'refresher' as InterviewMode },
+    { title: 'Question bank', text: 'Choose a scenario without completing the Learn path.', meta: '2 fixture questions', Icon: HelpCircle, target: 'practice', hubMode: 'questions' as InterviewMode },
     { title: 'Guided practice', text: 'Request a hint, submit, inspect feedback, and repair.', meta: 'Hints on request', Icon: Code2, target: 'practice' },
     { title: 'Mock interview', text: state.mock.status === 'paused' ? 'Resume the exact locally saved draft.' : 'Answer without hints, rubrics, or evaluation until completion.', meta: state.mock.status === 'paused' ? 'Paused' : 'Neutral while active', Icon: MessageSquareText, target: 'mock' },
   ]
-  return <main className="sb-page sb-interview"><PageIntro eyebrow="Interview prep · Senior backend" title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro><section className="sb-mode-list">{choices.map(({ title, text, meta, Icon, target, lessonId }, i) => <article key={title}><span>0{i + 1}</span><Icon /><div><h2>{title}</h2><p>{text}</p><small>{meta}</small></div><button aria-label={`Open ${title}`} onClick={() => { if (lessonId) dispatch({ type: 'SELECT_LESSON', lessonId }); if (title === 'Mock interview' && state.mock.status === 'paused') dispatch({ type: 'RESUME_MOCK' }); navigate(target) }}><ArrowRight /></button></article>)}</section><aside className="sb-neutral"><ShieldCheck /><div><strong>Mock stays evaluation-free while active</strong><p>Only one question and the response field are shown. Consolidated evidence appears after an explicit terminal completion.</p></div></aside></main>
+  const activeChoice = mode ? choices.find((choice) => choice.hubMode === mode) : undefined
+  const openChoice = (choice: (typeof choices)[number], asMode?: InterviewMode) => {
+    if (choice.lessonId) dispatch({ type: 'SELECT_LESSON', lessonId: choice.lessonId })
+    if (asMode) { navigate('interview-hub', asMode); return }
+    if (choice.title === 'Mock interview' && state.mock.status === 'paused') dispatch({ type: 'RESUME_MOCK' })
+    navigate(choice.target)
+  }
+  return <main className="sb-page sb-interview"><PageIntro eyebrow="Interview prep · Senior backend" title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro>
+    {activeChoice && <section className="sb-mode-detail" data-testid="interview-mode-detail" data-mode={mode}>
+      <span>{activeChoice.meta}</span>
+      <activeChoice.Icon />
+      <h2>{activeChoice.title}</h2>
+      <p>{activeChoice.text}</p>
+      <div>
+        <Button onClick={() => openChoice(activeChoice)}>Open {activeChoice.title} <ArrowRight size={16} /></Button>
+        <Button tone="quiet" onClick={() => navigate('interview-hub')}><ArrowLeft size={16} /> Back to Interview prep</Button>
+      </div>
+    </section>}
+    <section className="sb-mode-list">{choices.map((choice, i) => <article key={choice.title} aria-current={choice.hubMode && choice.hubMode === mode ? 'true' : undefined}><span>0{i + 1}</span><choice.Icon /><div><h2>{choice.title}</h2><p>{choice.text}</p><small>{choice.meta}</small></div><button aria-label={`Open ${choice.title}`} onClick={() => openChoice(choice, choice.hubMode)}><ArrowRight /></button></article>)}</section><aside className="sb-neutral"><ShieldCheck /><div><strong>Mock stays evaluation-free while active</strong><p>Only one question and the response field are shown. Consolidated evidence appears after an explicit terminal completion.</p></div></aside></main>
 }
 
 function Practice({ navigate }: PageProps) {
@@ -242,14 +261,14 @@ function Reports({ navigate }: PageProps) {
   </main>
 }
 
-export function CorePageView({ page, navigate }: { page: CorePage; navigate: Navigate }) {
+export function CorePageView({ page, navigate, mode }: { page: CorePage; navigate: Navigate; mode?: InterviewMode }) {
   let content: ReactNode
   switch (page) {
     case 'home': content = <Home navigate={navigate} />; break
     case 'onboarding': content = <Onboarding navigate={navigate} />; break
     case 'learn-roadmap': content = <Roadmap navigate={navigate} />; break
     case 'topic-studio': content = <Topic navigate={navigate} />; break
-    case 'interview-hub': content = <InterviewHub navigate={navigate} />; break
+    case 'interview-hub': content = <InterviewHub navigate={navigate} {...(mode ? { mode } : {})} />; break
     case 'practice': content = <Practice navigate={navigate} />; break
     case 'mock': content = <Mock navigate={navigate} />; break
     case 'reports': content = <Reports navigate={navigate} />; break

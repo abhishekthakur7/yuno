@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
   BookOpen,
@@ -18,9 +19,11 @@ import {
 } from 'lucide-react'
 import { COURSE } from '../shared/model'
 import { activeRoadmapLessonIds, useLearningState } from '../shared/state'
+import RouteView from './shell/RouteView'
+import { useShellViewState } from './shell/useShellViewState'
 import CorePageView, { type CorePage } from './core/CorePages'
 import OperationalPageView, { type OperationalPage } from './operations/OperationalPages'
-import { isAppPageId, navigateApp, type AppPage } from './app-model'
+import { APP_PAGE_LABELS, isAppPageId, type AppPage, type InterviewMode } from './app-model'
 import './app-shell.css'
 
 const CORE_PAGES: readonly CorePage[] = ['home', 'onboarding', 'learn-roadmap', 'topic-studio', 'interview-hub', 'practice', 'mock', 'reports']
@@ -46,21 +49,27 @@ function primaryGroup(page: AppPage): 'home' | 'learn' | 'interview' | 'tools' {
   return 'tools'
 }
 
+function navigateTo(navigate: ReturnType<typeof useNavigate>, target: AppPage): void {
+  if (target === 'home') navigate({ to: '/' })
+  else navigate({ to: '/app/$pageId', params: { pageId: target }, search: {} })
+}
+
 function GlobalHeader({ page }: { page: AppPage }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
+  const navigate = useNavigate()
   const group = primaryGroup(page)
   const go = (target: AppPage) => {
     setMenuOpen(false)
-    navigateApp(target)
+    navigateTo(navigate, target)
   }
 
   return (
     <>
       <header className="app-header">
-        <button className="app-wordmark" onClick={() => go('home')} aria-label="Lattice home">
+        <button className="app-wordmark" onClick={() => go('home')} aria-label="Yuno home">
           <span className="app-mark" aria-hidden="true"><span /><span /><span /></span>
-          <span>Lattice</span>
+          <span>Yuno</span>
         </button>
         <nav className="app-primary-nav" aria-label="Primary navigation">
           <button className={group === 'home' ? 'is-active' : ''} aria-current={group === 'home' ? 'page' : undefined} onClick={() => go('home')}>My learning</button>
@@ -102,35 +111,43 @@ function GlobalHeader({ page }: { page: AppPage }) {
 
 function CourseBand({ page }: { page: AppPage }) {
   const { state } = useLearningState()
+  const navigate = useNavigate()
   const isInterview = page === 'interview-hub' || page === 'practice' || page === 'reports'
   const activeLessonIds = activeRoadmapLessonIds(state)
   const position = Math.max(0, activeLessonIds.indexOf(state.currentLessonId)) + 1
   return (
     <div className="app-course-band">
-      <button className="app-course-back" onClick={() => navigateApp(isInterview ? 'interview-hub' : 'home')}><ArrowLeft size={16} /> {isInterview ? 'Interview prep' : 'My learning'}</button>
+      <button className="app-course-back" onClick={() => navigateTo(navigate, isInterview ? 'interview-hub' : 'home')}><ArrowLeft size={16} /> {isInterview ? 'Interview prep' : 'My learning'}</button>
       <div className="app-course-name"><span>{isInterview ? 'Preparation workspace' : 'Current course'}</span><strong>{COURSE.shortTitle}</strong></div>
       <div className="app-band-progress"><span>Position {position} of {activeLessonIds.length} active · evidence separate</span><div><span style={{ width: `${activeLessonIds.length ? (position / activeLessonIds.length) * 100 : 0}%` }} /></div></div>
     </div>
   )
 }
 
-function renderPage(page: AppPage): ReactNode {
-  const navigate = (target: string) => {
-    if (target === 'home') navigateApp('home')
-    else if (isAppPageId(target)) navigateApp(target)
+function renderPage(page: AppPage, mode: InterviewMode | undefined, routerNavigate: ReturnType<typeof useNavigate>): ReactNode {
+  const navigate = (target: string, targetMode?: InterviewMode) => {
+    if (target === 'home') { routerNavigate({ to: '/' }); return }
+    if (!isAppPageId(target)) return
+    if (targetMode && target === 'interview-hub') routerNavigate({ to: '/app/$pageId', params: { pageId: target }, search: { mode: targetMode } })
+    else routerNavigate({ to: '/app/$pageId', params: { pageId: target }, search: {} })
   }
-  if (isCorePage(page)) return <CorePageView page={page} navigate={navigate} />
+  if (isCorePage(page)) return <CorePageView page={page} navigate={navigate} {...(mode ? { mode } : {})} />
   return <OperationalPageView page={page as OperationalPage} navigate={navigate} />
 }
 
-export default function LearningApp({ page }: { page: AppPage }) {
+export default function LearningApp({ page, mode }: { page: AppPage; mode?: InterviewMode }) {
   const focusedMock = page === 'mock'
   const showCourseBand = page === 'learn-roadmap' || page === 'topic-studio' || page === 'interview-hub' || page === 'practice' || page === 'reports'
+  const routerNavigate = useNavigate()
+  const shell = useShellViewState()
+  const label = page === 'home' ? 'My learning' : APP_PAGE_LABELS[page]
   return (
-    <div className={`learning-app app-page-${page}`} data-app="lattice-learning" data-page={page}>
+    <div className={`learning-app app-page-${page}`} data-app="yuno-learning" data-page={page} {...(mode ? { 'data-mode': mode } : {})}>
       {!focusedMock && <GlobalHeader page={page} />}
       {!focusedMock && showCourseBand && <CourseBand page={page} />}
-      {renderPage(page)}
+      <RouteView state={shell.state} label={label} onRetry={shell.retry}>
+        {renderPage(page, mode, routerNavigate)}
+      </RouteView>
     </div>
   )
 }

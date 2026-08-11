@@ -57,7 +57,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (sessionStorage.getItem('learning-app-test-initialized')) return
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('lattice.')) localStorage.removeItem(key)
+      if (key.startsWith('yuno.')) localStorage.removeItem(key)
     }
     sessionStorage.setItem('learning-app-test-initialized', 'true')
   })
@@ -65,164 +65,22 @@ test.beforeEach(async ({ page }) => {
 
 async function open(page: Page, route: string) {
   await page.goto(route)
-  await expect(page.locator('[data-app="lattice-learning"]')).toBeVisible()
+  await expect(page.locator('[data-app="yuno-learning"]')).toBeVisible()
 }
 
 async function learningState(page: Page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem('lattice.learning.state.v1') || 'null'))
+  return page.evaluate(() => JSON.parse(localStorage.getItem('yuno.learning.state.v1') || 'null'))
 }
 
 async function operationsState(page: Page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem('lattice.operations.state.v1') || 'null'))
+  return page.evaluate(() => JSON.parse(localStorage.getItem('yuno.operations.state.v1') || 'null'))
 }
-
-test('selected application storage migrates once to neutral keys without losing learner state', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/settings')
-  await expect.poll(async () => Boolean(await learningState(page))).toBe(true)
-  await expect.poll(async () => Boolean(await operationsState(page))).toBe(true)
-
-  await page.evaluate(() => {
-    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
-    const operations = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
-    localStorage.removeItem('lattice.learning.state.v1')
-    localStorage.removeItem('lattice.operations.state.v1')
-    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
-      ...learning,
-      conceptId: 'concept-b',
-      currentLessonId: 'observability',
-      codeNotes: 'Preserve this exact selected-application note.',
-    }))
-    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({ ...operations, progress: 'simple' }))
-  })
-
-  await page.reload()
-  await expect.poll(async () => (await learningState(page))?.currentLessonId).toBe('observability')
-  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Preserve this exact selected-application note.')
-  await expect.poll(async () => (await operationsState(page))?.progress).toBe('simple')
-  await expect.poll(() => page.evaluate(() => ({
-    learning: Boolean(localStorage.getItem('lattice.learning.state.v1')),
-    operations: Boolean(localStorage.getItem('lattice.operations.state.v1')),
-    legacyLearning: Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')),
-    legacyOperations: Boolean(localStorage.getItem('lattice.selected.operations.v1')),
-  }))).toEqual({ learning: true, operations: true, legacyLearning: false, legacyOperations: false })
-
-  const migratedLearning = await learningState(page)
-  const migratedOperations = await operationsState(page)
-  await page.reload()
-  await expect.poll(async () => await learningState(page)).toEqual(migratedLearning)
-  await expect.poll(async () => await operationsState(page)).toEqual(migratedOperations)
-})
-
-test('partial legacy storage is deeply hydrated and copied forward without concept identity', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/settings')
-  await page.evaluate(() => {
-    localStorage.removeItem('lattice.learning.state.v1')
-    localStorage.removeItem('lattice.operations.state.v1')
-    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
-      version: 1,
-      conceptId: 'concept-b',
-      onboarding: { goalName: 'Migrated partial goal' },
-      practice: { draft: 'Partial practice draft' },
-      mock: { status: 'paused' },
-      roadmap: { observability: { skipped: true } },
-    }))
-    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({
-      version: 1,
-      owner: { name: 'Migrated owner' },
-      review: { enabled: false },
-    }))
-  })
-  await page.reload()
-
-  await expect.poll(async () => {
-    const learning = await learningState(page)
-    return {
-      conceptId: learning?.conceptId,
-      goalName: learning?.onboarding.goalName,
-      path: learning?.onboarding.path,
-      approved: learning?.onboarding.approved,
-      practiceDraft: learning?.practice.draft,
-      practiceMode: learning?.practice.mode,
-      mockStatus: learning?.mock.status,
-      mockPriorTurns: learning?.mock.priorTurns.length,
-      observabilitySkipped: learning?.roadmap.observability.skipped,
-      observabilityDepth: learning?.roadmap.observability.depth,
-    }
-  }).toEqual({
-    conceptId: undefined,
-    goalName: 'Migrated partial goal',
-    path: 'Learn',
-    approved: false,
-    practiceDraft: 'Partial practice draft',
-    practiceMode: 'answering',
-    mockStatus: 'paused',
-    mockPriorTurns: 2,
-    observabilitySkipped: true,
-    observabilityDepth: 'Production',
-  })
-  await expect.poll(async () => {
-    const operations = await operationsState(page)
-    return {
-      owner: operations?.owner,
-      review: operations?.review,
-      imports: operations?.importStatements,
-    }
-  }).toEqual({
-    owner: { name: 'Migrated owner', role: 'Senior backend engineer' },
-    review: { enabled: false, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
-    imports: [],
-  })
-  await expect.poll(() => page.evaluate(() => ({
-    legacyLearning: localStorage.getItem('lattice.concept-b.learner-state.v1'),
-    legacyOperations: localStorage.getItem('lattice.selected.operations.v1'),
-  }))).toEqual({ legacyLearning: null, legacyOperations: null })
-})
-
-test('valid neutral storage wins and does not consume legacy storage', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/settings')
-  await page.evaluate(() => {
-    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
-    const operations = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
-    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({ ...learning, codeNotes: 'Neutral learning wins.' }))
-    localStorage.setItem('lattice.operations.state.v1', JSON.stringify({ ...operations, progress: 'detailed' }))
-    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({ ...learning, conceptId: 'concept-b', codeNotes: 'Legacy must lose.' }))
-    localStorage.setItem('lattice.selected.operations.v1', JSON.stringify({ ...operations, progress: 'simple' }))
-  })
-  await page.reload()
-
-  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Neutral learning wins.')
-  await expect.poll(async () => (await operationsState(page))?.progress).toBe('detailed')
-  await expect.poll(() => page.evaluate(() => ({
-    legacyLearning: Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')),
-    legacyOperations: Boolean(localStorage.getItem('lattice.selected.operations.v1')),
-  }))).toEqual({ legacyLearning: true, legacyOperations: true })
-})
-
-test('wrong legacy concept identity is ignored without deleting its payload', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/settings')
-  await page.evaluate(() => {
-    localStorage.removeItem('lattice.learning.state.v1')
-    localStorage.setItem('lattice.concept-b.learner-state.v1', JSON.stringify({
-      version: 1,
-      conceptId: 'concept-a',
-      codeNotes: 'This payload must never migrate.',
-    }))
-  })
-  await page.reload()
-
-  await expect.poll(async () => (await learningState(page))?.codeNotes).toBe('Assumption: the ledger and reservation write share one database boundary.')
-  await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('lattice.concept-b.learner-state.v1')))).toBe(true)
-})
 
 test('malformed nested storage falls back field by field without runtime errors or default loss', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/settings')
   await page.evaluate(() => {
-    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({
+    localStorage.setItem('yuno.learning.state.v1', JSON.stringify({
       version: 1,
       onboarding: null,
       roadmap: { observability: { depth: 42, learnerState: [], skipped: 'yes' } },
@@ -231,7 +89,7 @@ test('malformed nested storage falls back field by field without runtime errors 
       mock: { priorTurns: [null], completedTurns: [null], reportKind: 'invented' },
       evidence: [null],
     }))
-    localStorage.setItem('lattice.operations.state.v1', JSON.stringify({
+    localStorage.setItem('yuno.operations.state.v1', JSON.stringify({
       version: 1,
       owner: null,
       review: { duration: 'forever', retrieval: 'yes' },
@@ -275,8 +133,8 @@ test('persisted current lesson moves to an adjacent active lesson when that less
   void diagnostics
   await open(page, '/app/topic-studio')
   await page.evaluate(() => {
-    const learning = JSON.parse(localStorage.getItem('lattice.learning.state.v1') || '{}')
-    localStorage.setItem('lattice.learning.state.v1', JSON.stringify({
+    const learning = JSON.parse(localStorage.getItem('yuno.learning.state.v1') || '{}')
+    localStorage.setItem('yuno.learning.state.v1', JSON.stringify({
       ...learning,
       currentLessonId: 'observability',
       roadmap: {
@@ -572,9 +430,9 @@ test('canonical curriculum updates stay pending until an explicit acceptance act
   await expect(page.getByLabel(/Local goal pinned to 2026\.07/i)).toBeVisible()
   await expect(page.getByText(/nothing changes until you explicitly accept a selection/i)).toBeVisible()
   await page.evaluate(() => {
-    const value = JSON.parse(localStorage.getItem('lattice.operations.state.v1') || '{}')
+    const value = JSON.parse(localStorage.getItem('yuno.operations.state.v1') || '{}')
     delete value.goalVersion
-    localStorage.setItem('lattice.operations.state.v1', JSON.stringify(value))
+    localStorage.setItem('yuno.operations.state.v1', JSON.stringify(value))
   })
   await page.reload()
   await expect.poll(async () => (await operationsState(page))?.updateDecision).toBe('pending')
@@ -660,7 +518,7 @@ test('unsupported and retired routes render the not-found view', async ({ page, 
   ]) {
     await page.goto(route)
     await expect(page.getByRole('heading', { name: /That learning view does not exist/i })).toBeVisible()
-    await expect(page.locator('[data-app="lattice-learning"]')).toHaveCount(0)
+    await expect(page.locator('[data-app="yuno-learning"]')).toHaveCount(0)
   }
 })
 
@@ -689,10 +547,83 @@ test('reduced-motion preference suppresses non-essential motion', async ({ page,
   await open(page, '/app/jobs')
   const longestMotionMs = await page.evaluate(() => {
     const times = (value: string) => value.split(',').map(token => token.trim().endsWith('ms') ? parseFloat(token) : parseFloat(token) * 1000)
-    return Math.max(0, ...Array.from(document.querySelectorAll('[data-app="lattice-learning"] *')).flatMap(element => {
+    return Math.max(0, ...Array.from(document.querySelectorAll('[data-app="yuno-learning"] *')).flatMap(element => {
       const style = getComputedStyle(element)
       return [...times(style.animationDuration), ...times(style.transitionDuration)]
     }))
   })
   expect(longestMotionMs).toBeLessThanOrEqual(0.01)
+})
+
+test('interview-hub Refresher and Question bank are query-string modes of the one route, not new routes', async ({ page, diagnostics }) => {
+  void diagnostics
+  const modeDetail = page.getByTestId('interview-mode-detail')
+  const notFound = page.getByRole('heading', { name: /That learning view does not exist/i })
+
+  await open(page, '/app/interview-hub?mode=refresher')
+  expect(new URL(page.url()).pathname).toBe('/app/interview-hub')
+  await expect(page.locator('[data-app="yuno-learning"]')).toHaveAttribute('data-page', 'interview-hub')
+  await expect(page.locator('[data-app="yuno-learning"]')).toHaveAttribute('data-mode', 'refresher')
+  await expect(modeDetail).toBeVisible()
+  await expect(modeDetail).toHaveAttribute('data-mode', 'refresher')
+
+  await open(page, '/app/interview-hub?mode=questions')
+  expect(new URL(page.url()).pathname).toBe('/app/interview-hub')
+  await expect(page.locator('[data-app="yuno-learning"]')).toHaveAttribute('data-mode', 'questions')
+  await expect(modeDetail).toBeVisible()
+  await expect(modeDetail).toHaveAttribute('data-mode', 'questions')
+
+  await open(page, '/app/interview-hub?mode=bogus')
+  await expect(page.getByRole('heading', { level: 1, name: /Choose the mode you need/i })).toBeVisible()
+  await expect(page.locator('[data-app="yuno-learning"]')).not.toHaveAttribute('data-mode')
+  await expect(modeDetail).toHaveCount(0)
+  await expect(notFound).toHaveCount(0)
+
+  await open(page, '/app/interview-hub')
+  await page.getByRole('button', { name: /Open Refresher/i }).click()
+  await expect(page).toHaveURL(/\/app\/interview-hub\?mode=refresher$/)
+  await expect(modeDetail).toBeVisible()
+  await expect(modeDetail).toHaveAttribute('data-mode', 'refresher')
+
+  await open(page, '/app/interview-hub')
+  await page.getByRole('button', { name: /Open Question bank/i }).click()
+  await expect(page).toHaveURL(/\/app\/interview-hub\?mode=questions$/)
+  await expect(modeDetail).toBeVisible()
+  await expect(modeDetail).toHaveAttribute('data-mode', 'questions')
+})
+
+test('focused Mock renders without GlobalHeader or CourseBand at every required viewport', async ({ page, diagnostics }) => {
+  void diagnostics
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    await open(page, '/app/mock')
+    await expect(page.locator('header.app-header')).toHaveCount(0)
+    await expect(page.locator('.app-course-band')).toHaveCount(0)
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+  }
+})
+
+// Deliberately does not take the `diagnostics` fixture: aborting the API reads
+// is the point of the test, and a blocked request is a console error by design.
+test('a failed backend read shows the route failure state with retry, and leaves not-found unaffected', async ({ page }) => {
+  await page.route('**/api/v1/**', route => route.abort())
+
+  await open(page, '/app/reports')
+  const failure = page.locator('[data-route-state="failure"]')
+  await expect(failure).toBeVisible()
+  await expect(failure.getByRole('button', { name: 'Retry' })).toBeVisible()
+  // The shell itself survives: the failure replaces the page body only.
+  await expect(page.locator('header.app-header')).toBeVisible()
+
+  // Recovery reconciles the authoritative GET resource (spec §2.1).
+  await page.unroute('**/api/v1/**')
+  await failure.getByRole('button', { name: 'Retry' }).click()
+  await expect(page.getByText(/No terminal mock report is available/i)).toBeVisible()
+  await expect(page.locator('[data-route-state]')).toHaveCount(0)
+
+  // Not-found is unaffected by backend errors.
+  await page.route('**/api/v1/**', route => route.abort())
+  await page.goto('/app/home')
+  await expect(page.getByRole('heading', { name: /That learning view does not exist/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Open My learning/i })).toBeVisible()
 })
