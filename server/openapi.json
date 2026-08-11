@@ -321,6 +321,299 @@
         "title": "FieldError",
         "type": "object"
       },
+      "GoalCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "$ref": "#/components/schemas/GoalPath"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_capability": {
+            "$ref": "#/components/schemas/TargetCapability"
+          },
+          "target_level": {
+            "$ref": "#/components/schemas/TargetLevel"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "target_level",
+          "target_capability",
+          "graph_version_id"
+        ],
+        "title": "GoalCreateRequest",
+        "type": "object"
+      },
+      "GoalPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dismiss_recommendation_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismiss Recommendation Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "resume_destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumeDestination"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resume_position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Position"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "set_current": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Current"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_capability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetCapability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "GoalPatchRequest",
+        "type": "object"
+      },
+      "GoalPath": {
+        "enum": [
+          "learn",
+          "interview_prep"
+        ],
+        "title": "GoalPath",
+        "type": "string"
+      },
+      "GoalResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dismissed_recommendation_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissed Recommendation Keys",
+            "type": "array"
+          },
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "$ref": "#/components/schemas/GoalPath"
+          },
+          "resume_destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumeDestination"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resume_position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Position"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GoalStatus"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "target_capability": {
+            "$ref": "#/components/schemas/TargetCapability"
+          },
+          "target_level": {
+            "$ref": "#/components/schemas/TargetLevel"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "path",
+          "subject",
+          "role",
+          "target_level",
+          "target_capability",
+          "graph_version_id",
+          "status",
+          "resume_position",
+          "resume_destination",
+          "last_accessed_at",
+          "dismissed_recommendation_keys",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GoalResponse",
+        "type": "object"
+      },
+      "GoalStatus": {
+        "enum": [
+          "active",
+          "archived"
+        ],
+        "title": "GoalStatus",
+        "type": "string"
+      },
       "HealthResponse": {
         "description": "`GET /api/v1/health` response body.",
         "properties": {
@@ -339,6 +632,144 @@
         ],
         "title": "HealthResponse",
         "type": "object"
+      },
+      "LearnerProfilePatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "strengths": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weaknesses"
+          }
+        },
+        "title": "LearnerProfilePatchRequest",
+        "type": "object"
+      },
+      "LearnerProfileResponse": {
+        "properties": {
+          "current_goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Goal Id"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "profile_revision": {
+            "title": "Profile Revision",
+            "type": "integer"
+          },
+          "strengths": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strengths"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "weaknesses": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weaknesses"
+          }
+        },
+        "required": [
+          "experience",
+          "strengths",
+          "weaknesses",
+          "current_goal_id",
+          "profile_revision",
+          "updated_at"
+        ],
+        "title": "LearnerProfileResponse",
+        "type": "object"
+      },
+      "ResumeDestination": {
+        "enum": [
+          "/app/learn-roadmap",
+          "/app/topic-studio",
+          "/app/interview-hub",
+          "/app/practice",
+          "/app/mock"
+        ],
+        "title": "ResumeDestination",
+        "type": "string"
+      },
+      "TargetCapability": {
+        "enum": [
+          "know",
+          "understand",
+          "choose",
+          "implement",
+          "diagnose",
+          "defend"
+        ],
+        "title": "TargetCapability",
+        "type": "string"
+      },
+      "TargetLevel": {
+        "enum": [
+          "Mid-level",
+          "Senior",
+          "Staff"
+        ],
+        "title": "TargetLevel",
+        "type": "string"
       }
     }
   },
@@ -427,6 +858,280 @@
         ]
       }
     },
+    "/api/v1/goals": {
+      "get": {
+        "operationId": "list_goals_api_v1_goals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalResponse"
+                  },
+                  "title": "Response List Goals Api V1 Goals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "List Goals",
+        "tags": [
+          "profiles-goals"
+        ]
+      },
+      "post": {
+        "operationId": "post_goal_api_v1_goals_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Goal",
+        "tags": [
+          "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}": {
+      "get": {
+        "operationId": "get_goal_api_v1_goals__goal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Goal",
+        "tags": [
+          "profiles-goals"
+        ]
+      },
+      "patch": {
+        "operationId": "update_goal_api_v1_goals__goal_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Update Goal",
+        "tags": [
+          "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/archive": {
+      "post": {
+        "operationId": "post_archive_goal_api_v1_goals__goal_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Archive Goal",
+        "tags": [
+          "profiles-goals"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "description": "Liveness/readiness probe. The server only starts once\n`api.app.create_app` has confirmed a single Alembic head, so a `200`\nhere implies the schema is at a known revision.",
@@ -456,6 +1161,94 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "operationId": "get_profile_api_v1_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnerProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Profile",
+        "tags": [
+          "profiles-goals"
+        ]
+      },
+      "patch": {
+        "operationId": "update_profile_api_v1_profile_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearnerProfilePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnerProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Update Profile",
+        "tags": [
+          "profiles-goals"
         ]
       }
     }

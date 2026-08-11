@@ -4,6 +4,7 @@ import LearningApp from '../selected/LearningApp'
 import { isAppPageId, isInterviewMode, type InterviewMode } from '../selected/app-model'
 import { LearningStateProvider } from '../shared/state'
 import { queryClient } from './query-client'
+import { useProfileGoals } from '../shared/use-profile-goals'
 import './root.css'
 
 function MissingRoute() {
@@ -12,10 +13,15 @@ function MissingRoute() {
 
 const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: MissingRoute })
 
+function GoalScopedLearningState({ children }: { children: React.ReactNode }) {
+  const { currentGoal } = useProfileGoals()
+  return <LearningStateProvider scope={currentGoal?.id ?? 'setup'}>{children}</LearningStateProvider>
+}
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => <LearningStateProvider><LearningApp page="home" /></LearningStateProvider>,
+  component: () => <GoalScopedLearningState><LearningApp page="home" /></GoalScopedLearningState>,
 })
 
 const appRoute = createRoute({
@@ -32,7 +38,7 @@ const appRoute = createRoute({
     const rawMode: unknown = appRoute.useSearch().mode
     const mode = isInterviewMode(rawMode) ? rawMode : undefined
     if (!isAppPageId(pageId)) return <MissingRoute />
-    return <LearningStateProvider><LearningApp page={pageId} {...(mode ? { mode } : {})} /></LearningStateProvider>
+    return <GoalScopedLearningState><LearningApp page={pageId} {...(mode ? { mode } : {})} /></GoalScopedLearningState>
   },
 })
 

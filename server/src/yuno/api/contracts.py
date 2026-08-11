@@ -10,8 +10,15 @@ dataclasses (`YunoError`, `JobRef`) into them happens only here and in
 from __future__ import annotations
 
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from yuno.modules.profiles_goals.domain import (
+    GoalPath,
+    GoalStatus,
+    ResumeDestination,
+    TargetCapability,
+    TargetLevel,
+)
 from yuno.shared.application.jobs import JobRef, JobStatus
 
 
@@ -59,6 +66,65 @@ class HealthResponse(BaseModel):
 
     status: str
     schema_revision: str
+
+
+class LearnerProfileResponse(BaseModel):
+    experience: str | None
+    strengths: str | None
+    weaknesses: str | None
+    current_goal_id: str | None
+    profile_revision: int
+    updated_at: str
+
+
+class LearnerProfilePatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    experience: str | None = None
+    strengths: str | None = None
+    weaknesses: str | None = None
+
+
+class GoalCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    path: GoalPath
+    subject: str | None = None
+    role: str | None = None
+    target_level: TargetLevel
+    target_capability: TargetCapability
+    graph_version_id: str
+
+
+class GoalPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = None
+    subject: str | None = None
+    role: str | None = None
+    target_level: TargetLevel | None = None
+    target_capability: TargetCapability | None = None
+    resume_position: str | None = None
+    resume_destination: ResumeDestination | None = None
+    dismiss_recommendation_key: str | None = None
+    set_current: bool | None = None
+
+
+class GoalResponse(BaseModel):
+    id: str
+    name: str
+    path: GoalPath
+    subject: str | None
+    role: str | None
+    target_level: TargetLevel
+    target_capability: TargetCapability
+    graph_version_id: str
+    status: GoalStatus
+    resume_position: str | None
+    resume_destination: ResumeDestination | None
+    last_accessed_at: str | None
+    dismissed_recommendation_keys: list[str]
+    row_version: int
+    created_at: str
+    updated_at: str
 
 
 class CanonicalVersionSummaryResponse(BaseModel):

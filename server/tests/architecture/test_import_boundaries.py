@@ -45,7 +45,12 @@ EXPECTED_FORBIDDEN_CONTRACT_NAME = "Domain and application are framework-free (s
 EXPECTED_INDEPENDENCE_CONTRACT_NAME = "Module independence (spec §3.3, IDK-102 scope)"
 
 EXPECTED_ROOT_LAYERS = ["yuno.api", "yuno.modules", "yuno.shared"]
-EXPECTED_MODULE_CONTAINERS = ["yuno.modules.identity", "yuno.modules.audit", "yuno.modules.canonical"]
+EXPECTED_MODULE_CONTAINERS = [
+    "yuno.modules.identity",
+    "yuno.modules.audit",
+    "yuno.modules.canonical",
+    "yuno.modules.profiles_goals",
+]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {"fastapi", "starlette", "sqlalchemy", "alembic", "pydantic", "subprocess"}
 EXPECTED_FORBIDDEN_SOURCE_MODULES = {
@@ -59,8 +64,16 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.canonical.domain",
     "yuno.modules.canonical.ports",
     "yuno.modules.canonical.validation",
+    "yuno.modules.profiles_goals.domain",
+    "yuno.modules.profiles_goals.ports",
+    "yuno.modules.profiles_goals.service",
 }
-EXPECTED_INDEPENDENCE_MODULES = {"yuno.modules.identity", "yuno.modules.audit", "yuno.modules.canonical"}
+EXPECTED_INDEPENDENCE_MODULES = {
+    "yuno.modules.identity",
+    "yuno.modules.audit",
+    "yuno.modules.canonical",
+    "yuno.modules.profiles_goals",
+}
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
 # CLI) means doing two bits of bootstrapping the CLI normally does for us:
@@ -127,6 +140,8 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.identity.service -> yuno.modules.audit.**",
         "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
         "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
+        "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
+        "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
     }
 
 

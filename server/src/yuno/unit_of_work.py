@@ -32,6 +32,8 @@ from yuno.modules.canonical.ports import CanonicalGraphRepository
 from yuno.modules.canonical.repository import SqlAlchemyCanonicalRepository
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
+from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
+from yuno.modules.profiles_goals.repository import SqlAlchemyProfilesGoalsRepository
 from yuno.shared.application.unit_of_work import UnitOfWork, UnitOfWorkFactory
 
 _WRITE_OPEN_KEY = "yuno_write_transaction_open"
@@ -68,6 +70,7 @@ class SqlAlchemyUnitOfWork:
     owners: OwnerRepository
     audit: AuditRepository
     canonical: CanonicalGraphRepository
+    profiles_goals: ProfilesGoalsRepository
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -84,6 +87,7 @@ class SqlAlchemyUnitOfWork:
         self.owners = SqlAlchemyOwnerRepository(self._session)
         self.audit = SqlAlchemyAuditRepository(self._session)
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
+        self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         return self
 
     def __exit__(

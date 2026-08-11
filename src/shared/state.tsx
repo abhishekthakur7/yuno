@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type Dispatch, type ReactNode } from 'react'
 import {
   ALL_LESSONS,
-  COURSE,
+  CURRICULUM_MODULES,
   CURRENT_LESSON_ID,
   MOCK_CURRENT_QUESTION,
   MOCK_FIXTURE_DRAFT,
@@ -62,7 +62,6 @@ export interface LearningState {
     approved: boolean
     sourceMaterial: string
   }
-  recommendationDismissed: boolean
   currentLessonId: string
   roadmapOrder: readonly string[]
   roadmap: Readonly<Record<string, RoadmapChoice>>
@@ -92,7 +91,6 @@ export type LearningAction =
   | { type: 'SET_ONBOARDING'; field: OnboardingField; value: string }
   | { type: 'SET_ONBOARDING_SOURCE'; value: string }
   | { type: 'APPROVE_ROADMAP' }
-  | { type: 'DISMISS_RECOMMENDATION' }
   | { type: 'SELECT_LESSON'; lessonId: string }
   | { type: 'SET_DEPTH'; lessonId: string; depth: Depth }
   | { type: 'SET_LEARNER_STATE'; lessonId: string; learnerState: KnowledgeState }
@@ -129,12 +127,11 @@ export function createInitialState(): LearningState {
     onboarding: {
       path: 'Learn',
       target: 'Senior',
-      goalName: COURSE.shortTitle,
+      goalName: '',
       diagnostic: 'skip',
       approved: false,
       sourceMaterial: '',
     },
-    recommendationDismissed: false,
     currentLessonId: CURRENT_LESSON_ID,
     roadmapOrder: ALL_LESSONS.map((lesson) => lesson.id),
     roadmap: createRoadmap(),
@@ -234,8 +231,6 @@ export function learningReducer(state: LearningState, action: LearningAction): L
       return { ...state, onboarding: { ...state.onboarding, sourceMaterial: action.value, approved: false } }
     case 'APPROVE_ROADMAP':
       return { ...state, onboarding: { ...state.onboarding, approved: true } }
-    case 'DISMISS_RECOMMENDATION':
-      return { ...state, recommendationDismissed: true }
     case 'SELECT_LESSON': {
       const choice = state.roadmap[action.lessonId]
       if (!choice) return state
@@ -265,8 +260,8 @@ export function learningReducer(state: LearningState, action: LearningAction): L
       if (index < 0 || target < 0 || target >= order.length) return state
       const swap = order[target]
       if (!swap) return state
-      const sourceModule = COURSE.modules.find((module) => module.lessons.some((lesson) => lesson.id === action.lessonId))
-      const targetModule = COURSE.modules.find((module) => module.lessons.some((lesson) => lesson.id === swap))
+      const sourceModule = CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === action.lessonId))
+      const targetModule = CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === swap))
       if (!sourceModule || sourceModule.id !== targetModule?.id) return state
       order[target] = action.lessonId
       order[index] = swap
@@ -342,6 +337,9 @@ interface LearningContextValue {
 const LearningContext = createContext<LearningContextValue | null>(null)
 
 export const LEARNING_STORAGE_KEY = 'yuno.learning.state.v1'
+export function learningStorageKey(scope: string): string {
+  return `${LEARNING_STORAGE_KEY}.${encodeURIComponent(scope)}`
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -425,7 +423,6 @@ function hydrateLearningState(value: unknown, initial = createInitialState()): L
       approved: typeof onboarding.approved === 'boolean' ? onboarding.approved : initial.onboarding.approved,
       sourceMaterial: typeof onboarding.sourceMaterial === 'string' ? onboarding.sourceMaterial : initial.onboarding.sourceMaterial,
     },
-    recommendationDismissed: typeof value.recommendationDismissed === 'boolean' ? value.recommendationDismissed : initial.recommendationDismissed,
     currentLessonId: typeof value.currentLessonId === 'string' && hydratedRoadmap[value.currentLessonId] ? value.currentLessonId : initial.currentLessonId,
     roadmapOrder,
     roadmap: hydratedRoadmap,
@@ -450,7 +447,7 @@ function hydrateLearningState(value: unknown, initial = createInitialState()): L
   }
 }
 
-function loadState(): LearningState {
+function loadState(storageKey: string): LearningState {
   const initial = createInitialState()
   const keepCurrentLessonActive = (loaded: LearningState): LearningState => {
     if (!loaded.roadmap[loaded.currentLessonId]?.skipped) return loaded
@@ -463,19 +460,24 @@ function loadState(): LearningState {
     if (!raw) return null
     try { return JSON.parse(raw) as unknown } catch { return null }
   }
-  const current = hydrateLearningState(parse(window.localStorage.getItem(LEARNING_STORAGE_KEY)), initial)
+  const current = hydrateLearningState(parse(window.localStorage.getItem(storageKey)), initial)
   if (current) return keepCurrentLessonActive(current)
 
   return initial
 }
 
-export function LearningStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(learningReducer, undefined, loadState)
+function LearningStateStore({ children, storageKey }: { children: ReactNode; storageKey: string }) {
+  const [state, dispatch] = useReducer(learningReducer, storageKey, loadState)
   useEffect(() => {
-    window.localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(state))
-  }, [state])
+    window.localStorage.setItem(storageKey, JSON.stringify(state))
+  }, [state, storageKey])
   const value = useMemo(() => ({ state, dispatch }), [state])
   return <LearningContext.Provider value={value}>{children}</LearningContext.Provider>
+}
+
+export function LearningStateProvider({ children, scope = 'setup' }: { children: ReactNode; scope?: string }) {
+  const storageKey = learningStorageKey(scope)
+  return <LearningStateStore key={storageKey} storageKey={storageKey}>{children}</LearningStateStore>
 }
 
 export function useLearningState(): LearningContextValue {

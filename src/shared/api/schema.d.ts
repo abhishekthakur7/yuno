@@ -46,6 +46,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Goals */
+        get: operations["list_goals_api_v1_goals_get"];
+        put?: never;
+        /** Post Goal */
+        post: operations["post_goal_api_v1_goals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal */
+        get: operations["get_goal_api_v1_goals__goal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Goal */
+        patch: operations["update_goal_api_v1_goals__goal_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Archive Goal */
+        post: operations["post_archive_goal_api_v1_goals__goal_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -66,6 +119,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Profile */
+        get: operations["get_profile_api_v1_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Profile */
+        patch: operations["update_profile_api_v1_profile_patch"];
         trace?: never;
     };
 }
@@ -199,6 +270,78 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** GoalCreateRequest */
+        GoalCreateRequest: {
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Name */
+            name: string;
+            path: components["schemas"]["GoalPath"];
+            /** Role */
+            role?: string | null;
+            /** Subject */
+            subject?: string | null;
+            target_capability: components["schemas"]["TargetCapability"];
+            target_level: components["schemas"]["TargetLevel"];
+        };
+        /** GoalPatchRequest */
+        GoalPatchRequest: {
+            /** Dismiss Recommendation Key */
+            dismiss_recommendation_key?: string | null;
+            /** Name */
+            name?: string | null;
+            resume_destination?: components["schemas"]["ResumeDestination"] | null;
+            /** Resume Position */
+            resume_position?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Set Current */
+            set_current?: boolean | null;
+            /** Subject */
+            subject?: string | null;
+            target_capability?: components["schemas"]["TargetCapability"] | null;
+            target_level?: components["schemas"]["TargetLevel"] | null;
+        };
+        /**
+         * GoalPath
+         * @enum {string}
+         */
+        GoalPath: "learn" | "interview_prep";
+        /** GoalResponse */
+        GoalResponse: {
+            /** Created At */
+            created_at: string;
+            /** Dismissed Recommendation Keys */
+            dismissed_recommendation_keys: string[];
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Id */
+            id: string;
+            /** Last Accessed At */
+            last_accessed_at: string | null;
+            /** Name */
+            name: string;
+            path: components["schemas"]["GoalPath"];
+            resume_destination: components["schemas"]["ResumeDestination"] | null;
+            /** Resume Position */
+            resume_position: string | null;
+            /** Role */
+            role: string | null;
+            /** Row Version */
+            row_version: number;
+            status: components["schemas"]["GoalStatus"];
+            /** Subject */
+            subject: string | null;
+            target_capability: components["schemas"]["TargetCapability"];
+            target_level: components["schemas"]["TargetLevel"];
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * GoalStatus
+         * @enum {string}
+         */
+        GoalStatus: "active" | "archived";
         /**
          * HealthResponse
          * @description `GET /api/v1/health` response body.
@@ -209,6 +352,45 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** LearnerProfilePatchRequest */
+        LearnerProfilePatchRequest: {
+            /** Experience */
+            experience?: string | null;
+            /** Strengths */
+            strengths?: string | null;
+            /** Weaknesses */
+            weaknesses?: string | null;
+        };
+        /** LearnerProfileResponse */
+        LearnerProfileResponse: {
+            /** Current Goal Id */
+            current_goal_id: string | null;
+            /** Experience */
+            experience: string | null;
+            /** Profile Revision */
+            profile_revision: number;
+            /** Strengths */
+            strengths: string | null;
+            /** Updated At */
+            updated_at: string;
+            /** Weaknesses */
+            weaknesses: string | null;
+        };
+        /**
+         * ResumeDestination
+         * @enum {string}
+         */
+        ResumeDestination: "/app/learn-roadmap" | "/app/topic-studio" | "/app/interview-hub" | "/app/practice" | "/app/mock";
+        /**
+         * TargetCapability
+         * @enum {string}
+         */
+        TargetCapability: "know" | "understand" | "choose" | "implement" | "diagnose" | "defend";
+        /**
+         * TargetLevel
+         * @enum {string}
+         */
+        TargetLevel: "Mid-level" | "Senior" | "Staff";
     };
     responses: never;
     parameters: never;
@@ -278,6 +460,172 @@ export interface operations {
             };
         };
     };
+    list_goals_api_v1_goals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_goal_api_v1_goals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_goal_api_v1_goals__goal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_goal_api_v1_goals__goal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_archive_goal_api_v1_goals__goal_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -294,6 +642,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_profile_api_v1_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearnerProfileResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_profile_api_v1_profile_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LearnerProfilePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearnerProfileResponse"];
                 };
             };
             /** @description Default Response */

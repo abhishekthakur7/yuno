@@ -35,3 +35,4 @@
 .so-update-summary strong{font-family:inherit;font-size:26px}
 .so-dialog h2{font-family:inherit;font-size:25px;font-weight:700}
 .so-chip--gray,.so-panel-head>span.so-chip--gray{color:#4f5b54}
+.so-settings-grid textarea{width:100%;min-height:92px;margin-top:6px;padding:8px 10px;border:1px solid #bfcac3;background:#fff;color:var(--so-ink);resize:vertical}.so-error{margin:12px 0;color:#8a2f2a;font-size:12px}

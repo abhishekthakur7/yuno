@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { useLearningState } from '../../shared/state'
+import { useProfileGoals } from '../../shared/use-profile-goals'
 import './operations.css'
 
 export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'search' | 'jobs' | 'settings'
@@ -253,15 +254,36 @@ function ConfirmDialog({ trigger, title, description, confirm, onConfirm, reduce
   return <AlertDialog.Root><AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger><AlertDialog.Portal><AlertDialog.Overlay className={`so-dialog-overlay${motionClass}`} /><AlertDialog.Content className={`so-dialog${motionClass}`}><AlertDialog.Title>{title}</AlertDialog.Title><AlertDialog.Description>{description}</AlertDialog.Description><div><AlertDialog.Cancel asChild><Button tone="secondary">Cancel</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button tone="danger" onClick={onConfirm}>{confirm}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
 }
 
+function GlobalProfileSettings() {
+  const workspace = useProfileGoals()
+  const profile = workspace.profile.data
+  const [experience, setExperience] = useState('')
+  const [strengths, setStrengths] = useState('')
+  const [weaknesses, setWeaknesses] = useState('')
+
+  useEffect(() => {
+    if (!profile) return
+    setExperience(profile.experience ?? '')
+    setStrengths(profile.strengths ?? '')
+    setWeaknesses(profile.weaknesses ?? '')
+  }, [profile])
+
+  if (workspace.profile.isPending) return <section className="so-panel" aria-live="polite"><div className="so-panel-head"><div><UserRound size={20} /><h2>Global learner profile</h2></div></div><p>Loading profile…</p></section>
+  if (!profile || workspace.profile.isError) return <section className="so-panel" aria-live="polite"><div className="so-panel-head"><div><UserRound size={20} /><h2>Global learner profile</h2></div></div><p>The profile is unavailable. Goal-scoped data was not substituted.</p><Button tone="secondary" onClick={() => void workspace.profile.refetch()}>Retry</Button></section>
+
+  const unchanged = experience === (profile.experience ?? '') && strengths === (profile.strengths ?? '') && weaknesses === (profile.weaknesses ?? '')
+  return <section className="so-panel" aria-labelledby="so-global-profile-title"><div className="so-panel-head"><div><UserRound size={20} /><h2 id="so-global-profile-title">Global learner profile</h2></div><span className="so-chip so-chip--gray">All goals</span></div><label>Experience<textarea value={experience} onChange={(event) => setExperience(event.target.value)} /></label><label>Strengths<textarea value={strengths} onChange={(event) => setStrengths(event.target.value)} /></label><label>Weaknesses or gaps<textarea value={weaknesses} onChange={(event) => setWeaknesses(event.target.value)} /></label><p className="so-help">This profile is global. Progress, evidence, and roadmap decisions remain isolated inside each goal.</p>{workspace.saveProfile.isError && <p className="so-error" role="alert">The profile changed or could not be saved. Reload the latest revision and try again.</p>}<Button disabled={unchanged || workspace.saveProfile.isPending} onClick={() => workspace.saveProfile.mutate({ update: { experience: experience || null, strengths: strengths || null, weaknesses: weaknesses || null }, revision: profile.profile_revision })}>{workspace.saveProfile.isPending ? 'Saving…' : workspace.saveProfile.isSuccess && unchanged ? 'Saved' : 'Save profile'}</Button></section>
+}
+
 function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), scope: 'application prototype local operations state', ...state }, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
   }
   return <>
-    <PageHead eyebrow="Local preferences and data" title="Settings" description="These controls affect this browser prototype only. There is one local owner and no account, authentication, cloud sync, or hosted security boundary." />
+    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile applies across every goal. Goal progress and evidence remain isolated; other prototype preferences on this page are local to this browser." />
     <div className="so-settings-grid">
-      <section className="so-panel"><div className="so-panel-head"><div><UserRound size={20} /><h2>Local owner profile</h2></div></div><label>Name<input value={state.owner.name} onChange={(event) => setState((s) => ({ ...s, owner: { ...s.owner, name: event.target.value } }))} /></label><label>Target role<select value={state.owner.role} onChange={(event) => setState((s) => ({ ...s, owner: { ...s.owner, role: event.target.value } }))}><option>Mid-level backend engineer</option><option>Senior backend engineer</option><option>Staff backend engineer</option></select></label><p className="so-help">Used to shape local fixture language. It does not establish identity.</p></section>
+      <GlobalProfileSettings />
       <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div><fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" checked={state.progress === 'detailed'} onChange={() => setState((s) => ({ ...s, progress: 'detailed' }))} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, and evidence links.</small></span></label><label><input type="radio" name="progress" checked={state.progress === 'simple'} onChange={() => setState((s) => ({ ...s, progress: 'simple' }))} /><span><strong>Simple</strong><small>Condensed display only; underlying local fixture data is not deleted.</small></span></label></fieldset></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div><label className="so-switch"><input type="checkbox" checked={state.review.enabled} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, enabled: event.target.checked } }))} /><span>{state.review.enabled ? 'Enabled' : 'Disabled'}</span></label></div><div className="so-review-controls" aria-disabled={!state.review.enabled}><label>Session length<select disabled={!state.review.enabled} value={state.review.duration} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, duration: Number(event.target.value) } }))}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={25}>25 minutes</option></select></label><label>Cadence<select disabled={!state.review.enabled} value={state.review.cadence} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, cadence: event.target.value } }))}><option>Once a week</option><option>Twice a week</option><option>Three times a week</option></select></label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.retrieval} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, retrieval: event.target.checked } }))} /> Retrieval prompts</label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.variedContext} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, variedContext: event.target.checked } }))} /> Varied contexts</label></div><p className="so-help">Disabling or dismissing review never blocks the roadmap and carries no readiness penalty.</p></section>
       <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>

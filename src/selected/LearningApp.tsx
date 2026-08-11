@@ -17,8 +17,8 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { COURSE } from '../shared/model'
 import { activeRoadmapLessonIds, useLearningState } from '../shared/state'
+import { useProfileGoals } from '../shared/use-profile-goals'
 import RouteView from './shell/RouteView'
 import { useShellViewState } from './shell/useShellViewState'
 import CorePageView, { type CorePage } from './core/CorePages'
@@ -79,7 +79,7 @@ function GlobalHeader({ page }: { page: AppPage }) {
         <div className="app-header-actions">
           <button className="app-search-button" onClick={() => go('search')} aria-label="Search learning content"><Search size={18} /><span>Search</span></button>
           <button className={`app-menu-button ${group === 'tools' ? 'is-active' : ''}`} onClick={(event) => { menuTriggerRef.current = event.currentTarget; setMenuOpen(true) }} aria-haspopup="dialog"><SlidersHorizontal size={18} /><span>Tools</span></button>
-          <span className="app-avatar" role="img" aria-label="Local learner Aditi Rao">AT</span>
+          <span className="app-avatar" role="img" aria-label="Local learner">YU</span>
           <button className="app-mobile-menu" onClick={(event) => { menuTriggerRef.current = event.currentTarget; setMenuOpen(true) }} aria-label="Open navigation"><Menu size={21} /></button>
         </div>
       </header>
@@ -111,6 +111,7 @@ function GlobalHeader({ page }: { page: AppPage }) {
 
 function CourseBand({ page }: { page: AppPage }) {
   const { state } = useLearningState()
+  const { currentGoal } = useProfileGoals()
   const navigate = useNavigate()
   const isInterview = page === 'interview-hub' || page === 'practice' || page === 'reports'
   const activeLessonIds = activeRoadmapLessonIds(state)
@@ -118,7 +119,7 @@ function CourseBand({ page }: { page: AppPage }) {
   return (
     <div className="app-course-band">
       <button className="app-course-back" onClick={() => navigateTo(navigate, isInterview ? 'interview-hub' : 'home')}><ArrowLeft size={16} /> {isInterview ? 'Interview prep' : 'My learning'}</button>
-      <div className="app-course-name"><span>{isInterview ? 'Preparation workspace' : 'Current course'}</span><strong>{COURSE.shortTitle}</strong></div>
+      <div className="app-course-name"><span>{isInterview ? 'Preparation workspace' : 'Current goal'}</span><strong>{currentGoal?.name ?? 'No current goal selected'}</strong></div>
       <div className="app-band-progress"><span>Position {position} of {activeLessonIds.length} active · evidence separate</span><div><span style={{ width: `${activeLessonIds.length ? (position / activeLessonIds.length) * 100 : 0}%` }} /></div></div>
     </div>
   )

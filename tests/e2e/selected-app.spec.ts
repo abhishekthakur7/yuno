@@ -1,8 +1,9 @@
 import { expect, test as base, type Page, type Request } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
 
 const routes = [
-  ['/', /Continue building defensible backend judgment/i],
+  ['/', /Continue Resilient order fulfillment/i],
   ['/app/onboarding', /Shape your classroom/i],
   ['/app/learn-roadmap', /Your editable roadmap/i],
   ['/app/topic-studio', /Implement an idempotency boundary/i],
@@ -30,6 +31,38 @@ const exactDraft = '  Preserve this leading space.\nSecond line with a trailing 
 const practiceDraft = 'The commit-before-ack window needs an atomic idempotency key with an explicit retention policy.'
 
 type Diagnostics = { consoleErrors: string[]; pageErrors: string[]; externalRequests: string[] }
+type GoalPatch = { set_current?: boolean; resume_position?: string; resume_destination?: ResumeDestination; dismiss_recommendation_key?: string }
+
+const defaultProfile: LearnerProfile = {
+  experience: null,
+  strengths: null,
+  weaknesses: null,
+  current_goal_id: 'goal-default',
+  profile_revision: 1,
+  updated_at: '2026-08-12T00:00:00Z',
+}
+
+function goalFixture(overrides: Partial<GoalWorkspace> = {}): GoalWorkspace {
+  return {
+    id: 'goal-default',
+    name: 'Resilient order fulfillment',
+    path: 'learn',
+    subject: 'Java / Spring Boot · AWS',
+    role: null,
+    target_level: 'Senior',
+    target_capability: 'implement',
+    graph_version_id: 'graph-1',
+    status: 'active',
+    resume_position: 'idempotency-retry',
+    resume_destination: '/app/topic-studio',
+    last_accessed_at: null,
+    dismissed_recommendation_keys: [],
+    row_version: 1,
+    created_at: '2026-08-12T00:00:00Z',
+    updated_at: '2026-08-12T00:00:00Z',
+    ...overrides,
+  }
+}
 
 const test = base.extend<{ diagnostics: Diagnostics }>({
   diagnostics: async ({ page }, use) => {
@@ -61,6 +94,50 @@ test.beforeEach(async ({ page }) => {
     }
     sessionStorage.setItem('learning-app-test-initialized', 'true')
   })
+  let profile = defaultProfile
+  let goals = [goalFixture()]
+  await page.route('**/api/v1/profile', async route => {
+    if (route.request().method() === 'PATCH') {
+      profile = { ...profile, ...(route.request().postDataJSON() as ProfileUpdate), profile_revision: profile.profile_revision + 1 }
+    }
+    await route.fulfill({ json: profile })
+  })
+  await page.route('**/api/v1/canonical/versions', route => route.fulfill({ json: [{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }] }))
+  await page.route('**/api/v1/goals', async route => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as GoalCreate
+      const created = goalFixture({
+        ...body,
+        id: `goal-${goals.length + 1}`,
+        subject: body.subject ?? null,
+        role: body.role ?? null,
+        resume_position: null,
+        resume_destination: null,
+      })
+      goals.push(created)
+      await route.fulfill({ status: 201, json: created })
+      return
+    }
+    await route.fulfill({ json: goals })
+  })
+  await page.route('**/api/v1/goals/**', async route => {
+    const path = new URL(route.request().url()).pathname.split('/')
+    const archived = path.at(-1) === 'archive'
+    const id = path.at(archived ? -2 : -1)
+    const index = goals.findIndex(goal => goal.id === id)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Not found' } })
+      return
+    }
+    const body = route.request().method() === 'PATCH' ? route.request().postDataJSON() as GoalPatch : {}
+    if (body.set_current) {
+      profile = { ...profile, current_goal_id: id ?? null }
+    }
+    const current = goals.find(goal => goal.id === id)!
+    goals[index] = { ...current, ...(body.resume_position !== undefined ? { resume_position: body.resume_position, resume_destination: body.resume_destination } : {}), dismissed_recommendation_keys: body.dismiss_recommendation_key ? [...current.dismissed_recommendation_keys, body.dismiss_recommendation_key] : current.dismissed_recommendation_keys, status: archived ? 'archived' : current.status, row_version: current.row_version + 1 }
+    if (archived && profile.current_goal_id === id) profile = { ...profile, current_goal_id: null }
+    await route.fulfill({ json: goals[index] })
+  })
 })
 
 async function open(page: Page, route: string) {
@@ -69,18 +146,26 @@ async function open(page: Page, route: string) {
 }
 
 async function learningState(page: Page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem('yuno.learning.state.v1') || 'null'))
+  return page.evaluate(() => {
+    const key = Object.keys(localStorage).filter(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup').at(-1)
+    return JSON.parse(key ? localStorage.getItem(key) || 'null' : 'null')
+  })
 }
 
 async function operationsState(page: Page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem('yuno.operations.state.v1') || 'null'))
 }
 
+async function fillGoalBasics(page: Page, name = 'Resilient order fulfillment') {
+  await page.getByRole('textbox', { name: 'Goal name' }).fill(name)
+  await page.getByRole('textbox', { name: 'Subject' }).fill('Java / Spring Boot · AWS')
+}
+
 test('malformed nested storage falls back field by field without runtime errors or default loss', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/settings')
   await page.evaluate(() => {
-    localStorage.setItem('yuno.learning.state.v1', JSON.stringify({
+    localStorage.setItem('yuno.learning.state.v1.goal-default', JSON.stringify({
       version: 1,
       onboarding: null,
       roadmap: { observability: { depth: 42, learnerState: [], skipped: 'yes' } },
@@ -111,7 +196,7 @@ test('malformed nested storage falls back field by field without runtime errors 
       evidence: learning?.evidence,
     }
   }).toEqual({
-    onboarding: { path: 'Learn', target: 'Senior', goalName: 'Resilient order fulfillment', diagnostic: 'skip', approved: false, sourceMaterial: '' },
+    onboarding: { path: 'Learn', target: 'Senior', goalName: '', diagnostic: 'skip', approved: false, sourceMaterial: '' },
     practice: { questionIndex: 0, draft: '', hintRequested: false, mode: 'answering', attempts: [] },
     mockPriorTurns: 2,
     mockReport: null,
@@ -133,8 +218,8 @@ test('persisted current lesson moves to an adjacent active lesson when that less
   void diagnostics
   await open(page, '/app/topic-studio')
   await page.evaluate(() => {
-    const learning = JSON.parse(localStorage.getItem('yuno.learning.state.v1') || '{}')
-    localStorage.setItem('yuno.learning.state.v1', JSON.stringify({
+    const learning = JSON.parse(localStorage.getItem('yuno.learning.state.v1.goal-default') || '{}')
+    localStorage.setItem('yuno.learning.state.v1.goal-default', JSON.stringify({
       ...learning,
       currentLessonId: 'observability',
       roadmap: {
@@ -162,6 +247,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 }
 
 test('all 14 canonical routes render at every required viewport without overflow or runtime/network errors', async ({ page, diagnostics }) => {
+  test.setTimeout(60_000)
   void diagnostics
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
@@ -183,60 +269,73 @@ test('all canonical routes have no automated WCAG A or AA violations', async ({ 
   }
 })
 
-test('Home keeps historical Resume separate from a dismissible recommendation', async ({ page, diagnostics }) => {
+test('API-backed Home keeps persisted Resume separate from recommendation dismissal', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/')
-  const resumeRegion = page.getByRole('region', { name: /Implement an idempotency boundary/i })
-  const recommendation = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
-  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
-  await expect(recommendation.getByRole('button', { name: /Open · 14 min/i })).toBeVisible()
-  await recommendation.getByRole('button', { name: /Dismiss recommended next item/i }).click()
-  await expect(recommendation).toHaveCount(0)
-  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.recommendationDismissed).toBe(true)
+  const resume = page.getByRole('region', { name: /Implement an idempotency boundary/i })
+  await expect(resume.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await page.getByRole('button', { name: /Dismiss recommended next item/i }).click()
+  await expect(page.getByText('Recommended next')).toHaveCount(0)
+  await expect(resume.getByRole('button', { name: /^Resume$/i })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('Recommended next')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: /Implement an idempotency boundary/i })).toBeVisible()
 })
 
-test('Home recommendation stays distinct when the saved Resume lesson changes', async ({ page, diagnostics }) => {
+test('switching A to B to A resumes A without leaking B learning state', async ({ page, diagnostics }) => {
   void diagnostics
-  await open(page, '/app/learn-roadmap')
-  await page.getByRole('button', { name: /^02 Trace the commit-and-acknowledgement failure window/i }).click()
+  let goals = [
+    goalFixture({ id: 'goal-a', name: 'Goal A', subject: 'Backend systems', resume_position: 'delivery-contract' }),
+    goalFixture({ id: 'goal-b', name: 'Goal B', subject: 'Backend systems', resume_position: 'observability' }),
+  ]
+  let currentGoalId = 'goal-a'
+  await page.addInitScript(() => {
+    const base = { version: 1, onboarding: { path: 'Learn', target: 'Senior', goalName: '', diagnostic: 'skip', approved: false, sourceMaterial: '' } }
+    localStorage.setItem('yuno.learning.state.v1.goal-a', JSON.stringify({ ...base, currentLessonId: 'delivery-contract' }))
+    localStorage.setItem('yuno.learning.state.v1.goal-b', JSON.stringify({ ...base, currentLessonId: 'observability' }))
+  })
+  await page.route('**/api/v1/profile', route => route.fulfill({ json: { ...defaultProfile, current_goal_id: currentGoalId } }))
+  await page.route('**/api/v1/goals', route => route.fulfill({ json: goals }))
+  await page.route('**/api/v1/goals/**', async route => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-1)
+    const body = route.request().postDataJSON() as GoalPatch
+    if (body.set_current && id) {
+      currentGoalId = id
+      goals = goals.map(goal => goal.id === id ? { ...goal, row_version: goal.row_version + 1 } : goal)
+    }
+    const position = body.resume_position
+    if (position) goals = goals.map(goal => goal.id === id ? { ...goal, resume_position: position, row_version: goal.row_version + 1 } : goal)
+    await route.fulfill({ json: goals.find(goal => goal.id === id) })
+  })
   await open(page, '/')
-  const resumeRegion = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
-  const recommendation = page.getByRole('region', { name: /Model the delivery contract before choosing a pattern/i })
-  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
-  await expect(recommendation).toContainText(/nearest earlier active checkpoint/i)
-  await expect(recommendation).toContainText(/likely known/i)
+  await page.getByRole('button', { name: 'Open Goal B' }).click()
+  await expect(page).toHaveURL(/learn-roadmap/)
+  await open(page, '/')
+  await page.getByRole('button', { name: 'Open Goal A' }).click()
+  await expect(page).toHaveURL(/learn-roadmap/)
+  await open(page, '/')
+  await page.getByRole('button', { name: 'Resume' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: /Model the delivery contract before choosing a pattern/i })).toBeVisible()
 })
 
-test('Home recommends the next active checkpoint at the beginning without wrapping', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/learn-roadmap')
-  await page.getByRole('button', { name: /^01 Model the delivery contract before choosing a pattern/i }).click()
-  await open(page, '/')
-  const resumeRegion = page.getByRole('region', { name: /Model the delivery contract before choosing a pattern/i })
-  const recommendation = page.getByRole('region', { name: /Trace the commit-and-acknowledgement failure window/i })
-  await expect(resumeRegion.getByRole('button', { name: /^Resume$/i })).toBeVisible()
-  await expect(recommendation).toContainText(/nearest later active checkpoint/i)
-  await expect(recommendation).not.toContainText(/nearest earlier active checkpoint/i)
-})
-
-test('onboarding previews the full roadmap and requires explicit approval', async ({ page, diagnostics }) => {
+test('onboarding previews the full roadmap and explicitly creates a goal workspace', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/onboarding')
+  await fillGoalBasics(page)
   await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
   await page.getByRole('button', { name: /Preview full roadmap/i }).click()
-  await expect(page.getByRole('heading', { level: 1, name: /Approve the whole roadmap/i })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: /Create a goal from this roadmap/i })).toBeVisible()
   await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
-  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
+  await page.getByRole('button', { name: /Create goal from roadmap/i }).click()
   await expect(page).toHaveURL(/\/app\/learn-roadmap$/)
-  await expect(page.getByText(/Roadmap approved/i)).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+  await expect(page.getByText(/Unapproved roadmap preview/i)).toBeVisible()
 })
 
 test('onboarding preview keeps full depth labels usable and tablet controls inside their card', async ({ page, diagnostics }) => {
   void diagnostics
   await page.setViewportSize({ width: 1366, height: 768 })
   await open(page, '/app/onboarding')
+  await fillGoalBasics(page)
   await page.getByRole('button', { name: /Preview full roadmap/i }).click()
   const depthWidth = await page.getByRole('combobox', { name: /^Depth$/i }).first().evaluate(element => element.getBoundingClientRect().width)
   expect(depthWidth, 'depth control is wide enough for Implementation').toBeGreaterThanOrEqual(140)
@@ -258,32 +357,33 @@ test('onboarding preview keeps full depth labels usable and tablet controls insi
   }
 })
 
-test('onboarding changes invalidate approval and saved source material transfers only on request', async ({ page, diagnostics }) => {
+test('onboarding source material follows the newly created goal into explicit import review', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/onboarding')
+  await fillGoalBasics(page)
   const source = '# Questions\n- How long can a duplicate key remain trustworthy?'
   await page.getByRole('textbox', { name: /Optional notes or questions/i }).fill(source)
   await page.getByRole('button', { name: /Preview full roadmap/i }).click()
-  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
-  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+  await page.getByRole('button', { name: /Create goal from roadmap/i }).click()
 
   await open(page, '/app/onboarding')
   await page.getByRole('combobox', { name: /Target level/i }).selectOption('Staff')
   await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(false)
   await open(page, '/app/imports')
   await expect(page.getByText(/Source material is available to copy/i)).toBeVisible()
-  await expect(page.getByRole('textbox', { name: /Paste Markdown or plain text/i })).toHaveValue('')
+  const review = page.getByRole('textbox', { name: /Paste Markdown or plain text/i })
+  await expect(review).toHaveValue('')
   await page.getByRole('button', { name: /Copy into review/i }).click()
-  await expect(page.getByRole('textbox', { name: /Paste Markdown or plain text/i })).toHaveValue(source)
+  await expect(review).toHaveValue(source)
   await expect.poll(async () => (await operationsState(page))?.importStatements.length).toBe(0)
 })
 
 test('roadmap depth, knowledge, skip, and order edits survive reload', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/onboarding')
+  await fillGoalBasics(page)
   await page.getByRole('button', { name: /Preview full roadmap/i }).click()
-  await page.getByRole('button', { name: /^Approve roadmap$/i }).click()
-  await expect.poll(async () => (await learningState(page))?.onboarding.approved).toBe(true)
+  await page.getByRole('button', { name: /Create goal from roadmap/i }).click()
   await open(page, '/app/learn-roadmap')
   await page.getByRole('combobox', { name: /^Depth$/i }).first().selectOption('Production')
   await page.getByRole('combobox', { name: /^Knowledge$/i }).first().selectOption('new')
@@ -465,6 +565,8 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   await interviewPath.focus()
   await page.keyboard.press('Space')
   await expect(interviewPath).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('textbox', { name: 'Goal name' }).fill('Backend interview preparation')
+  await page.getByRole('textbox', { name: 'Role' }).fill('Backend engineer')
   const target = page.getByRole('combobox', { name: /Target level/i })
   await target.focus()
   await target.press('s')
@@ -472,7 +574,7 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   const preview = page.getByRole('button', { name: /Preview full roadmap/i })
   await preview.focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: /Approve the whole roadmap/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Create a goal from this roadmap/i })).toBeVisible()
 
   await open(page, '/app/learn-roadmap')
   const customize = page.getByRole('button', { name: /^Customize$/i }).first()

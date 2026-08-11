@@ -24,3 +24,14 @@ export function healthQueryOptions() {
     },
   })
 }
+
+export function canonicalVersionsQueryOptions() {
+  return queryOptions({
+    queryKey: ['canonical', 'versions'],
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/canonical/versions')
+      if (error || !data) throw new ApiError(error?.message ?? 'Failed to load canonical versions', response.status)
+      return data
+    },
+  })
+}

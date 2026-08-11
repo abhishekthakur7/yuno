@@ -18,26 +18,9 @@ export interface CourseModule {
   lessons: readonly Lesson[]
 }
 
-export interface CourseFixture {
-  id: string
-  title: string
-  shortTitle: string
-  target: string
-  subject: string
-  goal: string
-  progressLabel: string
-  modules: readonly CourseModule[]
-}
-
-export const COURSE: CourseFixture = {
-  id: 'resilient-order-fulfillment',
-  title: 'Resilient order fulfillment with Spring Boot and SQS',
-  shortTitle: 'Resilient order fulfillment',
-  target: 'Senior backend engineer',
-  subject: 'Java / Spring Boot · AWS',
-  goal: 'Design, implement, diagnose, and defend duplicate-safe message handling.',
-  progressLabel: '4 of 11 lessons have qualified evidence',
-  modules: [
+// Authored curriculum content used by the learning views. Goal identity, target,
+// selection, status, and resume state come from GoalWorkspace records.
+export const CURRICULUM_MODULES: readonly CourseModule[] = [
     {
       id: 'failure-boundaries',
       title: 'Frame the failure boundary',
@@ -77,14 +60,10 @@ export const COURSE: CourseFixture = {
         { id: 'transfer-check', title: 'Transfer the pattern to a new failure scenario', duration: '18 min', capability: 'defend', state: 'new', recommendedDepth: 'Interview', kind: 'review' },
       ],
     },
-  ],
-}
+]
 
 export const CURRENT_LESSON_ID = 'idempotency-retry'
-export const CURRENT_MODULE_INDEX = 1
-export const CURRENT_LESSON_INDEX = 2
-
-export const ALL_LESSONS = COURSE.modules.flatMap((module) => module.lessons)
+export const ALL_LESSONS = CURRICULUM_MODULES.flatMap((module) => module.lessons)
 export const CURRENT_LESSON = ALL_LESSONS.find((lesson) => lesson.id === CURRENT_LESSON_ID)!
 
 export const STARTER_CODE = `public Reservation reserve(String requestId, Supplier<Reservation> create) {

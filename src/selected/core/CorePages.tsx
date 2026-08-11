@@ -1,18 +1,22 @@
 import { forwardRef, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Tabs from '@radix-ui/react-tabs'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, Circle,
-  Clock3, Code2, FileText, HelpCircle, Lightbulb, ListTree, MessageSquareText,
-  NotebookPen, Pause, Play, RefreshCcw, RotateCcw, Settings2, ShieldCheck, X,
+  Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, Circle,
+  Clock3, Code2, FileText, HelpCircle, History, Lightbulb, ListTree, MessageSquareText,
+  LockKeyhole, NotebookPen, Pause, Play, RefreshCcw, RotateCcw, Settings2, ShieldCheck, X,
 } from 'lucide-react'
 import {
-  ALL_LESSONS, COURSE, CURRENT_LESSON_ID, FIXTURE_REPORT,
+  ALL_LESSONS, CURRICULUM_MODULES, CURRENT_LESSON_ID, FIXTURE_REPORT,
   MOCK_CURRENT_QUESTION, PRACTICE_QUESTIONS, SIMULATION_LIMITATION, TOPIC_BRIEF,
   type Depth, type KnowledgeState, type Lesson,
 } from '../../shared/model'
-import { activeRoadmapLessonIds, currentPracticeQuestion, useLearningState } from '../../shared/state'
+import { activeRoadmapLessonIds, currentPracticeQuestion, learningStorageKey, useLearningState } from '../../shared/state'
+import { ApiError, canonicalVersionsQueryOptions } from '../../shared/api/queries'
+import { goalDestination, resumePage, useProfileGoals } from '../../shared/use-profile-goals'
+import type { GoalCreate, GoalWorkspace } from '../../shared/api/profile-goals'
 import type { InterviewMode } from '../app-model'
 import './core.css'
 
@@ -43,10 +47,10 @@ function lessonById(id: string): Lesson {
 }
 
 function moduleForLesson(id: string) {
-  return COURSE.modules.find((module) => module.lessons.some((lesson) => lesson.id === id)) ?? COURSE.modules[0]!
+  return CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === id)) ?? CURRICULUM_MODULES[0]!
 }
 
-function orderedModuleLessons(module: (typeof COURSE.modules)[number], order: readonly string[]): readonly Lesson[] {
+function orderedModuleLessons(module: (typeof CURRICULUM_MODULES)[number], order: readonly string[]): readonly Lesson[] {
   const position = new Map(order.map((id, index) => [id, index]))
   return [...module.lessons].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0))
 }
@@ -59,84 +63,187 @@ function PageIntro({ eyebrow, title, children, action }: { eyebrow: string; titl
   return <header className="sb-page-intro"><div><span className="sb-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{children}</p></div>{action}</header>
 }
 
-function Home({ navigate }: PageProps) {
-  const { state, dispatch } = useLearningState()
-  const resumeLesson = lessonById(state.currentLessonId)
-  const activeIds = activeRoadmapLessonIds(state)
-  const resumeIndex = activeIds.indexOf(resumeLesson.id)
-  const recommendationDirection = resumeIndex > 0 ? 'earlier' : 'later'
-  const recommendationId = resumeIndex > 0 ? activeIds[resumeIndex - 1] : activeIds[resumeIndex + 1]
-  const recommendation = recommendationId && recommendationId !== resumeLesson.id ? lessonById(recommendationId) : null
-  const recommendationState = recommendation ? state.roadmap[recommendation.id]?.learnerState : null
-  return <main className="sb-page sb-home">
-    <PageIntro eyebrow="Your goal workspace" title="Continue building defensible backend judgment" action={<Button tone="quiet" onClick={() => navigate('learn-roadmap')}>View roadmap <ArrowRight size={17} /></Button>}>
-      Resume your saved work or choose the next recommendation. Recommendations never alter your plan.
+function WorkspaceState({ state, navigate, retry }: { state: 'loading' | 'empty' | 'locked' | 'unavailable'; navigate: Navigate; retry: () => void }) {
+  if (state === 'loading') {
+    return <main className="sb-page sb-workspace-state" aria-live="polite"><RefreshCcw aria-hidden="true" /><h1>Loading My learning</h1><p>Fetching your goals.</p></main>
+  }
+  if (state === 'empty') {
+    return <main className="sb-page sb-workspace-state" data-workspace-state="empty"><BookOpen aria-hidden="true" /><h1>No learning goals yet</h1><p>Set up a Learn or Interview Prep goal.</p><Button onClick={() => navigate('onboarding')}>Set up a goal <ArrowRight size={16} /></Button></main>
+  }
+  const locked = state === 'locked'
+  return <main className="sb-page sb-workspace-state" data-workspace-state={state} aria-live="polite"><LockKeyhole aria-hidden="true" /><h1>{locked ? 'My learning is locked' : 'My learning is unavailable'}</h1><p>{locked ? 'The selected goal is being updated.' : 'Your goals could not be loaded.'}</p><Button onClick={retry}>Retry</Button></main>
+}
+
+function GoalCard({ goal, current, navigate, workspace }: { goal: GoalWorkspace; current: boolean; navigate: Navigate; workspace: ReturnType<typeof useProfileGoals> }) {
+  const open = async () => {
+    if (!current) await workspace.switchGoal.mutateAsync(goal)
+    navigate(goalDestination(goal))
+  }
+
+  return <article className={`sb-course-row ${current ? 'is-current' : ''}`}>
+    <div className="sb-course-icon"><BookOpen /></div>
+    <div>
+      <span className="sb-chip">{current ? 'Current' : 'Active'}</span>
+      <h3>{goal.name}</h3>
+      <p>{goal.subject ?? goal.role ?? (goal.path === 'learn' ? 'Learn' : 'Interview Prep')} · {goal.target_level}</p>
+      <small>{goal.resume_position ? `Resume: ${goal.resume_position}` : 'No saved position yet'} · target capability: {goal.target_capability}</small>
+    </div>
+    <div className="sb-goal-actions">
+      {!current && <Button tone="secondary" disabled={workspace.switchGoal.isPending} onClick={() => workspace.switchGoal.mutate(goal)}>Make current</Button>}
+      <Button tone="quiet" disabled={workspace.switchGoal.isPending} onClick={() => void open()} aria-label={`Open ${goal.name}`}>Open <ArrowRight size={16} /></Button>
+      <AlertDialog.Root>
+        <AlertDialog.Trigger asChild><Button tone="quiet" aria-label={`Archive ${goal.name}`}><Archive size={16} /> Archive</Button></AlertDialog.Trigger>
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="sb-overlay" />
+          <AlertDialog.Content className="sb-alert">
+            <AlertDialog.Title>Archive {goal.name}?</AlertDialog.Title>
+            <AlertDialog.Description>This removes the goal from your active workspaces without moving its saved state.</AlertDialog.Description>
+            <div><AlertDialog.Cancel asChild><Button tone="secondary">Cancel</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button onClick={() => workspace.archive.mutate(goal)}>Archive goal</Button></AlertDialog.Action></div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
+    </div>
+  </article>
+}
+
+export function Home({ navigate }: PageProps) {
+  const workspace = useProfileGoals()
+  const { dispatch } = useLearningState()
+  const canonicalVersions = useQuery(canonicalVersionsQueryOptions())
+  const error = workspace.goals.error ?? workspace.profile.error
+  const errorStatus = error instanceof ApiError ? error.status : null
+
+  if (workspace.goals.isPending || workspace.profile.isPending) {
+    return <WorkspaceState state="loading" navigate={navigate} retry={() => void workspace.refresh()} />
+  }
+  if (error) {
+    return <WorkspaceState state={errorStatus === 423 ? 'locked' : 'unavailable'} navigate={navigate} retry={() => void workspace.refresh()} />
+  }
+  if (workspace.profile.data?.current_goal_id && !workspace.currentGoal) {
+    return <WorkspaceState state="unavailable" navigate={navigate} retry={() => void workspace.refresh()} />
+  }
+  if (workspace.activeGoals.length === 0) {
+    return <WorkspaceState state="empty" navigate={navigate} retry={() => void workspace.refresh()} />
+  }
+
+  const currentGoal = workspace.currentGoal
+  const refreshing = workspace.goals.isFetching || workspace.profile.isFetching
+  const latestGraph = canonicalVersions.data?.[0]
+  const canonicalStale = Boolean(currentGoal && latestGraph && currentGoal.graph_version_id !== latestGraph.id)
+  const recommendationKey = currentGoal ? `goal-entry:${currentGoal.path}:${currentGoal.target_capability}` : null
+  const recommendationVisible = currentGoal && recommendationKey && !currentGoal.dismissed_recommendation_keys.includes(recommendationKey)
+  const resumeTitle = currentGoal?.resume_position ? LESSONS.find((lesson) => lesson.id === currentGoal.resume_position)?.title ?? currentGoal.resume_position : null
+  const actionError = workspace.switchGoal.error ?? workspace.archive.error ?? workspace.dismissRecommendation.error ?? workspace.recordNavigation.error
+  const resume = () => {
+    if (!currentGoal?.resume_position) return
+    if (LESSONS.some((lesson) => lesson.id === currentGoal.resume_position)) {
+      dispatch({ type: 'SELECT_LESSON', lessonId: currentGoal.resume_position })
+    }
+    navigate(resumePage(currentGoal))
+  }
+  return <main className="sb-page sb-home" data-workspace-state={canonicalStale ? 'stale' : 'ready'}>
+    <PageIntro eyebrow="Your goal workspaces" title={currentGoal ? `Continue ${currentGoal.name}` : 'Choose a learning goal'} action={<Button tone="quiet" onClick={() => navigate('onboarding')}>Set up another goal <ArrowRight size={17} /></Button>}>
+      Resume saved work or open another goal.
     </PageIntro>
-    <section className="sb-resume" aria-labelledby="sb-resume-title">
-      <div className="sb-resume-art"><Code2 size={28} /><span>Implementation lab</span><strong>Concurrent retry boundary</strong></div>
-      <div><span className="sb-kicker">Resume from your last position</span><h2 id="sb-resume-title">{resumeLesson.title}</h2><p>{COURSE.shortTitle} · Section {COURSE.modules.indexOf(moduleForLesson(resumeLesson.id)) + 1}</p><div className="sb-meta"><span><Clock3 size={15} /> {resumeLesson.duration} checkpoint</span><span>Course position saved in this browser</span></div></div>
-      <Button onClick={() => navigate('topic-studio')}><Play size={17} /> Resume</Button>
-    </section>
-    {!state.recommendationDismissed && recommendation && <section className="sb-recommend" aria-labelledby="sb-recommend-title">
-      <div className="sb-round-icon"><Lightbulb size={20} /></div><div><span className="sb-kicker">Recommended next</span><h2 id="sb-recommend-title">{recommendation.title}</h2><p><strong>Why this:</strong> it is the nearest {recommendationDirection} active checkpoint to your saved {resumeLesson.title} position and is marked {recommendationState}. This is a suggestion only.</p></div>
-      <Button tone="secondary" onClick={() => { dispatch({ type: 'SELECT_LESSON', lessonId: recommendation.id }); navigate('topic-studio') }}>Open · {recommendation.duration}</Button>
-      <button className="sb-icon-button" onClick={() => dispatch({ type: 'DISMISS_RECOMMENDATION' })} aria-label="Dismiss recommended next item"><X size={18} /></button>
+    {canonicalStale && <p className="sb-stale-note" role="status">A newer approved curriculum is available. This goal stays pinned until you review it.</p>}
+    {refreshing && <p className="sb-refreshing-note" role="status">Refreshing goals…</p>}
+    {canonicalVersions.isError && <div className="sb-action-error" role="alert"><span>Could not check for curriculum updates.</span><Button tone="secondary" onClick={() => void canonicalVersions.refetch()}>Retry</Button></div>}
+    {actionError && <div className="sb-action-error" role="alert"><span>The goal action was not saved.</span><Button tone="secondary" onClick={() => void workspace.refresh()}>Reload goals</Button></div>}
+    {currentGoal?.resume_position && <section className="sb-resume" aria-labelledby="sb-resume-title">
+      <div className="sb-resume-art"><History size={28} /><span>Historical Resume</span><strong>Saved position</strong></div>
+      <div><span className="sb-kicker">Resume from your last position</span><h2 id="sb-resume-title">{resumeTitle}</h2><p>{currentGoal.name}</p><div className="sb-meta"><span><Clock3 size={15} /> Last saved learning position</span><span>Kept separately from recommendations</span></div></div>
+      <Button onClick={resume}><Play size={17} /> Resume</Button>
     </section>}
-    <section className="sb-library" aria-labelledby="sb-library-title"><div className="sb-section-title"><div><span className="sb-kicker">History</span><h2 id="sb-library-title">Active goal</h2></div><span>Local browser fixture</span></div>
-      <article className="sb-course-row"><div className="sb-course-icon"><BookOpen /></div><div><span className="sb-chip">In progress</span><h3>{COURSE.title}</h3><p>{COURSE.subject} · {COURSE.target}</p><div className="sb-progress"><span /></div><small>Historical course state · {COURSE.progressLabel}</small></div><Button tone="quiet" onClick={() => navigate('learn-roadmap')} aria-label="Open active goal roadmap"><ArrowRight /></Button></article>
+    {recommendationVisible && <section className="sb-recommend" aria-labelledby="sb-recommend-title">
+      <div className="sb-round-icon"><Lightbulb size={20} /></div><div><span className="sb-kicker">Recommended next</span><h2 id="sb-recommend-title">Review the {currentGoal.path === 'learn' ? 'learning roadmap' : 'interview preparation hub'}</h2><p>Suggested for your {currentGoal.target_capability} target. Your saved Resume position will not change.</p></div>
+      <Button tone="secondary" onClick={() => navigate(goalDestination(currentGoal))}>Open</Button>
+      <button className="sb-icon-button" disabled={workspace.dismissRecommendation.isPending} onClick={() => workspace.dismissRecommendation.mutate({ goal: currentGoal, key: recommendationKey })} aria-label="Dismiss recommended next item"><X size={18} /></button>
+    </section>}
+    <section className="sb-library" aria-labelledby="sb-library-title"><div className="sb-section-title"><div><span className="sb-kicker">Active workspaces</span><h2 id="sb-library-title">Your goals</h2></div><span>{workspace.activeGoals.length} active</span></div>
+      {workspace.activeGoals.map((goal) => <GoalCard key={goal.id} goal={goal} current={goal.id === currentGoal?.id} navigate={navigate} workspace={workspace} />)}
     </section>
   </main>
 }
 
-function Onboarding({ navigate }: PageProps) {
+export function Onboarding({ navigate }: PageProps) {
   const { state, dispatch } = useLearningState()
+  const workspace = useProfileGoals()
+  const canonicalVersions = useQuery(canonicalVersionsQueryOptions())
   const [preview, setPreview] = useState(false)
+  const [subjectOrRole, setSubjectOrRole] = useState('')
+  const [targetCapability, setTargetCapability] = useState<GoalCreate['target_capability']>('implement')
+  const idempotencyKey = useRef(crypto.randomUUID())
+  const graphVersion = canonicalVersions.data?.[0]
+  const createWorkspace = () => {
+    if (!graphVersion) return
+    workspace.create.mutate({ input: {
+      name: state.onboarding.goalName.trim(),
+      path: state.onboarding.path === 'Learn' ? 'learn' : 'interview_prep',
+      target_level: state.onboarding.target,
+      target_capability: targetCapability,
+      graph_version_id: graphVersion.id,
+      ...(state.onboarding.path === 'Learn' ? { subject: subjectOrRole.trim() || null } : { role: subjectOrRole.trim() || null }),
+    }, idempotencyKey: idempotencyKey.current }, { onSuccess: async (goal) => {
+      window.localStorage.setItem(learningStorageKey(goal.id), JSON.stringify(state))
+      const refreshedProfile = await workspace.profile.refetch()
+      if (refreshedProfile.data?.current_goal_id === goal.id) await workspace.goals.refetch()
+      else await workspace.switchGoal.mutateAsync(goal)
+      navigate(goalDestination(goal))
+    } })
+  }
   return <main className="sb-page sb-onboarding">
     {!preview ? <section className="sb-card">
       <PageIntro eyebrow="Goal setup · 1 of 2" title="Shape your classroom"><span>For experienced backend engineers. Set the target; every inferred state remains editable.</span></PageIntro>
       <div className="sb-form-grid">
         <fieldset><legend>Primary path</legend><div className="sb-segments">{(['Learn', 'Interview Prep'] as const).map(value => <button type="button" key={value} className={state.onboarding.path === value ? 'is-selected' : ''} aria-pressed={state.onboarding.path === value} onClick={() => dispatch({ type: 'SET_ONBOARDING', field: 'path', value })}>{value === 'Learn' ? <BookOpen size={18} /> : <MessageSquareText size={18} />}{value}</button>)}</div></fieldset>
-        <label>Target level<select value={state.onboarding.target} onChange={e => dispatch({ type: 'SET_ONBOARDING', field: 'target', value: e.target.value })}><option>Mid-level</option><option>Senior</option><option>Staff</option></select></label>
+        <label>Target level<select value={state.onboarding.target} onChange={e => dispatch({ type: 'SET_ONBOARDING', field: 'target', value: e.target.value })}><option>Mid-level</option><option>Senior</option><option>Staff</option></select><small>Yuno’s MVP curriculum is for experienced backend engineers and does not include a beginner track.</small></label>
+        <label>{state.onboarding.path === 'Learn' ? 'Subject' : 'Role'}<input value={subjectOrRole} onChange={(event) => setSubjectOrRole(event.target.value)} /></label>
+        <label>Target capability<select value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as GoalCreate['target_capability'])}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
         <label className="sb-wide">Goal name<input value={state.onboarding.goalName} onChange={e => dispatch({ type: 'SET_ONBOARDING', field: 'goalName', value: e.target.value })} /></label>
         <fieldset className="sb-wide"><legend>Starting evidence</legend><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={state.onboarding.diagnostic === 'take'} onChange={() => dispatch({ type: 'SET_ONBOARDING', field: 'diagnostic', value: 'take' })} /><span><strong>Take a short diagnostic</strong><small>Estimate what should be verified; this does not mark completion.</small></span></label><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={state.onboarding.diagnostic === 'skip'} onChange={() => dispatch({ type: 'SET_ONBOARDING', field: 'diagnostic', value: 'skip' })} /><span><strong>Skip for now</strong><small>Begin with conservative self-reported states.</small></span></label></fieldset>
         <label className="sb-wide">Optional notes or questions<textarea value={state.onboarding.sourceMaterial} onChange={e => dispatch({ type: 'SET_ONBOARDING_SOURCE', value: e.target.value })} placeholder={state.onboarding.path === 'Learn' ? 'Paste plain text or Markdown notes for later review.' : 'Paste questions you want to review later.'} /><small>Saved in this browser as untrusted source material. It is not parsed, imported, or treated as truth; Imports offers the explicit review handoff.</small></label>
-      </div><footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => setPreview(true)} disabled={!state.onboarding.goalName.trim()}>Preview full roadmap <ArrowRight size={16} /></Button></footer>
+      </div><footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => setPreview(true)} disabled={!state.onboarding.goalName.trim() || !subjectOrRole.trim()}>Preview full roadmap <ArrowRight size={16} /></Button></footer>
     </section> : <section className="sb-card">
-      <PageIntro eyebrow="Goal setup · 2 of 2" title="Approve the whole roadmap" action={<Button tone="quiet" onClick={() => setPreview(false)}><Settings2 size={16} /> Edit setup</Button>}>
+      <PageIntro eyebrow="Goal setup · 2 of 2" title="Create a goal from this roadmap" action={<Button tone="quiet" onClick={() => setPreview(false)}><Settings2 size={16} /> Edit setup</Button>}>
         {state.onboarding.path} · {state.onboarding.target} · inferred states are not completion.
       </PageIntro>
-      <div className="sb-preview">{COURSE.modules.map((module, i) => {
+      <div className="sb-preview">{CURRICULUM_MODULES.map((module, i) => {
         const moduleLessons = orderedModuleLessons(module, state.roadmapOrder)
         return <section key={module.id}><header><span>{String(i + 1).padStart(2, '0')}</span><div><h2>{module.title}</h2><small>{module.duration}</small></div></header><ol>{moduleLessons.map((lesson, lessonIndex) => {
           const choice = state.roadmap[lesson.id]
           return <li key={lesson.id} className={choice?.skipped ? 'is-skipped' : ''}><span>{lesson.title}</span><div className="sb-preview-controls"><label><span>Knowledge</span><select value={choice?.learnerState} onChange={e => dispatch({ type: 'SET_LEARNER_STATE', lessonId: lesson.id, learnerState: e.target.value as KnowledgeState })}>{STATES.map(value => <option key={value}>{value}</option>)}</select></label><label><span>Depth</span><select value={choice?.depth} onChange={e => dispatch({ type: 'SET_DEPTH', lessonId: lesson.id, depth: e.target.value as Depth })}>{DEPTHS.map(value => <option key={value}>{value}</option>)}</select></label><Button tone="quiet" onClick={() => dispatch({ type: 'TOGGLE_SKIP', lessonId: lesson.id })}>{choice?.skipped ? 'Restore' : 'Skip'}</Button><div className="sb-order"><button disabled={lessonIndex === 0} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: -1 })} aria-label={`Move ${lesson.title} earlier`}><ArrowUp size={16} /></button><button disabled={lessonIndex === moduleLessons.length - 1} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: 1 })} aria-label={`Move ${lesson.title} later`}><ArrowDown size={16} /></button></div></div></li>
         })}</ol></section>
       })}</div>
-      <footer className="sb-card-footer sb-approval"><span><ShieldCheck size={18} /> No goal is approved until you choose this action.</span><Button onClick={() => { dispatch({ type: 'APPROVE_ROADMAP' }); navigate('learn-roadmap') }}><Check size={17} /> Approve roadmap</Button></footer>
+      <footer className="sb-card-footer sb-approval"><span><ShieldCheck size={18} /> {workspace.create.isError ? 'Goal creation failed.' : canonicalVersions.isError ? 'Approved curriculum could not be loaded.' : canonicalVersions.isPending ? 'Loading approved curriculum…' : graphVersion ? 'Ready to create this goal.' : 'No approved curriculum is available.'}</span><span>{canonicalVersions.isError && <Button tone="secondary" onClick={() => void canonicalVersions.refetch()}>Retry</Button>}<Button disabled={!graphVersion || workspace.create.isPending} onClick={createWorkspace}><Check size={17} /> {workspace.create.isPending ? 'Creating goal…' : 'Create goal from roadmap'}</Button></span></footer>
     </section>}
   </main>
 }
 
 function Roadmap({ navigate }: PageProps) {
   const { state, dispatch } = useLearningState()
+  const workspace = useProfileGoals()
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([CURRENT_LESSON_ID]))
   const byId = useMemo(() => new Map(LESSONS.map(lesson => [lesson.id, lesson])), [])
   const ordered = state.roadmapOrder.map(id => byId.get(id)).filter((x): x is Lesson => Boolean(x))
   const toggle = (id: string) => setOpen(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next })
+  const openLesson = (lessonId: string) => {
+    if (!workspace.currentGoal) return
+    workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: lessonId, destination: '/app/topic-studio' }, { onSuccess: () => { dispatch({ type: 'SELECT_LESSON', lessonId }); navigate('topic-studio') } })
+  }
   return <main className="sb-page sb-roadmap"><PageIntro eyebrow={state.onboarding.approved ? 'Approved personal overlay' : 'Unapproved roadmap preview'} title="Your editable roadmap" action={<Button onClick={() => navigate(state.onboarding.approved ? 'topic-studio' : 'onboarding')}>{state.onboarding.approved ? 'Jump to current' : 'Return to approval'} <ArrowRight size={16} /></Button>}>
     Jump, skip, reorder, or correct any inferred state. Changes are learner-owned and never claim mastery.
   </PageIntro>
   <div className="sb-roadmap-summary"><span><span className="sb-dot is-qualified" /> Historical: 4 with qualified evidence</span><span><span className="sb-dot is-current" /> Current checkpoint</span><span>{state.onboarding.approved ? 'Roadmap approved' : 'Preview state'}</span></div>
   <section className="sb-roadmap-list" aria-label="Editable roadmap">{ordered.map((lesson, index) => {
     const choice = state.roadmap[lesson.id]
-    const module = COURSE.modules.find(item => item.lessons.some(candidate => candidate.id === lesson.id))!
+    const module = CURRICULUM_MODULES.find(item => item.lessons.some(candidate => candidate.id === lesson.id))!
     const previousLesson = ordered[index - 1]
     const first = !previousLesson || moduleForLesson(previousLesson.id).id !== module.id
     const moduleLessons = orderedModuleLessons(module, state.roadmapOrder)
     const moduleIndex = moduleLessons.findIndex((item) => item.id === lesson.id)
-    return <div key={lesson.id}>{first && <header className="sb-module-head"><span>Section {COURSE.modules.indexOf(module) + 1}</span><strong>{module.title}</strong><small>{module.duration}</small></header>}
+    return <div key={lesson.id}>{first && <header className="sb-module-head"><span>Section {CURRICULUM_MODULES.indexOf(module) + 1}</span><strong>{module.title}</strong><small>{module.duration}</small></header>}
       <article className={`sb-roadmap-row ${lesson.id === state.currentLessonId ? 'is-current' : ''} ${choice?.skipped ? 'is-skipped' : ''}`}>
-        <button className="sb-lesson-link" onClick={() => { dispatch({ type: 'SELECT_LESSON', lessonId: lesson.id }); navigate('topic-studio') }} aria-label={`${String(index + 1).padStart(2, '0')} ${lesson.title}${choice?.skipped ? ' · skipped; opening restores it to the roadmap sequence' : ''}`}><span>{String(index + 1).padStart(2, '0')}</span><span><strong>{lesson.title}</strong><small>{lesson.kind} · {lesson.duration} · capability: {lesson.capability}{choice?.skipped ? ' · Skipped · open to restore' : ''}</small></span></button>
+        <button className="sb-lesson-link" disabled={!workspace.currentGoal || workspace.recordNavigation.isPending} onClick={() => openLesson(lesson.id)} aria-label={`${String(index + 1).padStart(2, '0')} ${lesson.title}${choice?.skipped ? ' · skipped; opening restores it to the roadmap sequence' : ''}`}><span>{String(index + 1).padStart(2, '0')}</span><span><strong>{lesson.title}</strong><small>{lesson.kind} · {lesson.duration} · capability: {lesson.capability}{choice?.skipped ? ' · Skipped · open to restore' : ''}</small></span></button>
         <button className="sb-customize" aria-expanded={open.has(lesson.id)} aria-controls={`sb-controls-${lesson.id}`} onClick={() => toggle(lesson.id)}><Settings2 size={16} /> Customize</button>
         <div id={`sb-controls-${lesson.id}`} className={`sb-roadmap-controls ${open.has(lesson.id) ? 'is-open' : ''}`}><label>Depth<select value={choice?.depth} onChange={e => dispatch({ type: 'SET_DEPTH', lessonId: lesson.id, depth: e.target.value as Depth })}>{DEPTHS.map(x => <option key={x}>{x}</option>)}</select></label><label>Knowledge<select value={choice?.learnerState} onChange={e => dispatch({ type: 'SET_LEARNER_STATE', lessonId: lesson.id, learnerState: e.target.value as KnowledgeState })}>{STATES.map(x => <option key={x}>{x}</option>)}</select></label><Button tone="quiet" onClick={() => dispatch({ type: 'TOGGLE_SKIP', lessonId: lesson.id })}>{choice?.skipped ? 'Restore' : 'Skip'}</Button><div className="sb-order"><button disabled={moduleIndex === 0} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: -1 })} aria-label={`Move ${lesson.title} earlier`}><ArrowUp size={16} /></button><button disabled={moduleIndex === moduleLessons.length - 1} onClick={() => dispatch({ type: 'MOVE_LESSON', lessonId: lesson.id, direction: 1 })} aria-label={`Move ${lesson.title} later`}><ArrowDown size={16} /></button></div></div>
       </article></div>
@@ -146,7 +253,12 @@ function Roadmap({ navigate }: PageProps) {
 
 function Curriculum({ navigate, close }: PageProps & { close?: () => void }) {
   const { state, dispatch } = useLearningState()
-  return <div className="sb-curriculum"><header><div><span className="sb-kicker">Roadmap</span><strong>4 sections · 11 lessons</strong></div><Button tone="quiet" onClick={() => navigate('learn-roadmap')}>Edit plan</Button></header>{COURSE.modules.map((module, i) => <details key={module.id} open><summary><span>{String(i + 1).padStart(2, '0')} · {module.title}</span><ChevronDown size={16} /></summary>{orderedModuleLessons(module, state.roadmapOrder).map((lesson) => { const skipped = state.roadmap[lesson.id]?.skipped; return <button key={lesson.id} className={`${lesson.id === state.currentLessonId ? 'is-current' : ''} ${skipped ? 'is-skipped' : ''}`} aria-current={lesson.id === state.currentLessonId ? 'step' : undefined} aria-label={`${lesson.title}${skipped ? ' · skipped; opening restores it to the roadmap sequence' : ''}`} onClick={() => { dispatch({ type: 'SELECT_LESSON', lessonId: lesson.id }); navigate('topic-studio'); close?.() }}><span className="sb-mini-check"><Circle size={10} /></span><span><strong>{lesson.title}</strong><small>{lesson.duration} · {state.roadmap[lesson.id]?.learnerState}{skipped ? ' · Skipped · open to restore' : ''}</small></span></button> })}</details>)}</div>
+  const workspace = useProfileGoals()
+  const openLesson = (lessonId: string) => {
+    if (!workspace.currentGoal) return
+    workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: lessonId, destination: '/app/topic-studio' }, { onSuccess: () => { dispatch({ type: 'SELECT_LESSON', lessonId }); navigate('topic-studio'); close?.() } })
+  }
+  return <div className="sb-curriculum"><header><div><span className="sb-kicker">Roadmap</span><strong>4 sections · 11 lessons</strong></div><Button tone="quiet" onClick={() => navigate('learn-roadmap')}>Edit plan</Button></header>{CURRICULUM_MODULES.map((module, i) => <details key={module.id} open><summary><span>{String(i + 1).padStart(2, '0')} · {module.title}</span><ChevronDown size={16} /></summary>{orderedModuleLessons(module, state.roadmapOrder).map((lesson) => { const skipped = state.roadmap[lesson.id]?.skipped; return <button key={lesson.id} disabled={!workspace.currentGoal || workspace.recordNavigation.isPending} className={`${lesson.id === state.currentLessonId ? 'is-current' : ''} ${skipped ? 'is-skipped' : ''}`} aria-current={lesson.id === state.currentLessonId ? 'step' : undefined} aria-label={`${lesson.title}${skipped ? ' · skipped; opening restores it to the roadmap sequence' : ''}`} onClick={() => openLesson(lesson.id)}><span className="sb-mini-check"><Circle size={10} /></span><span><strong>{lesson.title}</strong><small>{lesson.duration} · {state.roadmap[lesson.id]?.learnerState}{skipped ? ' · Skipped · open to restore' : ''}</small></span></button> })}</details>)}</div>
 }
 
 function Classroom({ children, navigate }: PageProps & { children: ReactNode }) {
@@ -162,6 +274,7 @@ function ClassroomProgress({ navigate, previous, previousTarget, next, nextTarge
 
 function Topic({ navigate }: PageProps) {
   const { state, dispatch } = useLearningState()
+  const workspace = useProfileGoals()
   const lesson = lessonById(state.currentLessonId)
   const module = moduleForLesson(lesson.id)
   const activeIds = activeRoadmapLessonIds(state)
@@ -170,9 +283,12 @@ function Topic({ navigate }: PageProps) {
   const nextId = activeIds[currentIndex + 1]
   const nextLesson = nextId ? lessonById(nextId) : null
   const context = LESSON_CONTEXT[lesson.id] ?? LESSON_CONTEXT[CURRENT_LESSON_ID]!
-  const selectLesson = (id: string) => { dispatch({ type: 'SELECT_LESSON', lessonId: id }); window.scrollTo({ top: 0 }) }
+  const selectLesson = (id: string) => {
+    if (!workspace.currentGoal) return
+    workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: id, destination: '/app/topic-studio' }, { onSuccess: () => { dispatch({ type: 'SELECT_LESSON', lessonId: id }); window.scrollTo({ top: 0 }) } })
+  }
   return <Classroom navigate={navigate}><article className="sb-topic">
-    <PageIntro eyebrow={`Section ${COURSE.modules.indexOf(module) + 1} · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={lesson.title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{lesson.id === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{state.roadmap[lesson.id]?.depth} · {lesson.duration} · target capability: {lesson.capability}</span></PageIntro>
+    <PageIntro eyebrow={`Section ${CURRICULUM_MODULES.indexOf(module) + 1} · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={lesson.title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{lesson.id === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{state.roadmap[lesson.id]?.depth} · {lesson.duration} · target capability: {lesson.capability}</span></PageIntro>
     <section className="sb-reading"><span>{String(currentIndex + 1).padStart(2, '0')}</span><div><h2>{context.heading}</h2>{lesson.id === CURRENT_LESSON_ID && <p>{TOPIC_BRIEF.problem}</p>}<p>{context.explanation}</p><aside><strong>Evidence target</strong><p>{context.evidence}</p></aside></div></section>
     {lesson.id === CURRENT_LESSON_ID ? <section className="sb-code" id="sb-lesson-artifact"><header><span><Code2 size={17} /> ReservationService.java</span><Button tone="quiet" onClick={() => dispatch({ type: 'RESET_CODE' })}><RotateCcw size={15} /> Reset</Button></header><label className="sb-sr-only" htmlFor="sb-code">Java code</label><textarea id="sb-code" value={state.codeDraft} onChange={e => dispatch({ type: 'SET_CODE', value: e.target.value })} spellCheck={false} />
       <footer><p>{SIMULATION_LIMITATION}</p><div><Button tone="secondary" onClick={() => dispatch({ type: 'RUN_CHECKS' })}><Play size={16} /> Run static checks</Button><Button onClick={() => dispatch({ type: 'SUBMIT_CODE' })}><ShieldCheck size={16} /> Submit evidence</Button></div></footer>

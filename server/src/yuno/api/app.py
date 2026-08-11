@@ -16,9 +16,11 @@ from yuno.api.contracts import ErrorResponse
 from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
 from yuno.api.routes.canonical import router as canonical_router
+from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
 from yuno.modules.identity.service import ensure_local_owner
+from yuno.modules.profiles_goals.service import ensure_profile
 from yuno.shared.infrastructure.alembic_guard import require_single_head
 from yuno.shared.infrastructure.database import (
     create_engine_for,
@@ -51,7 +53,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # One UoW, one commit: provisions the singleton local owner
             # (idempotent) before the app accepts any traffic (DAT-01).
             with uow_factory() as uow:
-                ensure_local_owner(uow, resolved_settings.owner_display_name)
+                owner = ensure_local_owner(uow, resolved_settings.owner_display_name)
+                ensure_profile(uow, owner.id)
                 uow.commit()
 
             dispatcher = InProcessJobDispatcher()
@@ -84,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     api_router.include_router(system_router)
     api_router.include_router(canonical_router)
+    api_router.include_router(profiles_goals_router)
     app.include_router(api_router)
 
     register_exception_handlers(app)

@@ -72,6 +72,7 @@ containers = [
     "yuno.modules.identity",
     "yuno.modules.audit",
     "yuno.modules.canonical",
+    "yuno.modules.profiles_goals",
 ]
 layers = [
     "(service)",
@@ -95,6 +96,9 @@ source_modules = [
     "yuno.modules.canonical.domain",
     "yuno.modules.canonical.ports",
     "yuno.modules.canonical.validation",
+    "yuno.modules.profiles_goals.domain",
+    "yuno.modules.profiles_goals.ports",
+    "yuno.modules.profiles_goals.service",
 ]
 forbidden_modules = [
     "fastapi",
@@ -125,9 +129,12 @@ modules = [
     "yuno.modules.identity",
     "yuno.modules.audit",
     "yuno.modules.canonical",
+    "yuno.modules.profiles_goals",
 ]
 ignore_imports = [
     "yuno.modules.identity.service -> yuno.modules.audit.**",
     "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
     "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
+    "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
+    "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
 ]
