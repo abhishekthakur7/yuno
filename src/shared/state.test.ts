@@ -1,5 +1,5 @@
 import { MOCK_FIXTURE_DRAFT, REFERENCE_CODE } from './model'
-import { activeRoadmapLessonIds, createInitialState, learningReducer } from './state'
+import { createInitialState, learningReducer, persistedLearningDrafts } from './state'
 
 describe('shared learner behavior', () => {
   it('keeps exploratory Run separate from evidence-producing Submit', () => {
@@ -60,55 +60,15 @@ describe('shared learner behavior', () => {
     expect(state.mock.reportKind).toBe('transcript-only')
   })
 
-  it('requires an explicit onboarding approval and preserves roadmap choices', () => {
-    let state = createInitialState()
-    expect(state.onboarding.approved).toBe(false)
-    state = learningReducer(state, { type: 'SET_DEPTH', lessonId: 'idempotency-retry', depth: 'Production' })
-    state = learningReducer(state, { type: 'MOVE_LESSON', lessonId: 'idempotency-retry', direction: 1 })
-    state = learningReducer(state, { type: 'APPROVE_ROADMAP' })
-    expect(state.onboarding.approved).toBe(true)
-    expect(state.roadmap['idempotency-retry']?.depth).toBe('Production')
-    expect(state.roadmapOrder.indexOf('idempotency-retry')).toBeGreaterThan(2)
-  })
-
-  it('tracks the learner-selected lesson and keeps reordering within a section', () => {
-    let state = createInitialState()
-    state = learningReducer(state, { type: 'SELECT_LESSON', lessonId: 'observability' })
-    expect(state.currentLessonId).toBe('observability')
-
-    const before = state.roadmapOrder
-    state = learningReducer(state, { type: 'MOVE_LESSON', lessonId: 'commit-window', direction: 1 })
-    expect(state.roadmapOrder).toBe(before)
-  })
-
-  it('requires reapproval after onboarding inputs change', () => {
-    let state = learningReducer(createInitialState(), { type: 'APPROVE_ROADMAP' })
-    state = learningReducer(state, { type: 'SET_ONBOARDING', field: 'target', value: 'Staff' })
-    expect(state.onboarding.approved).toBe(false)
-  })
-
-  it.each([
-    { type: 'SET_DEPTH', lessonId: 'idempotency-retry', depth: 'Production' } as const,
-    { type: 'SET_LEARNER_STATE', lessonId: 'idempotency-retry', learnerState: 'new' } as const,
-    { type: 'TOGGLE_SKIP', lessonId: 'idempotency-retry' } as const,
-    { type: 'MOVE_LESSON', lessonId: 'idempotency-retry', direction: 1 } as const,
-  ])('requires reapproval after roadmap mutation $type', (action) => {
-    const approved = learningReducer(createInitialState(), { type: 'APPROVE_ROADMAP' })
-    expect(learningReducer(approved, action).onboarding.approved).toBe(false)
-  })
-
-  it('uses reordered non-skipped lessons for progression and moves current off a skipped lesson', () => {
-    let state = createInitialState()
-    state = learningReducer(state, { type: 'MOVE_LESSON', lessonId: 'idempotency-retry', direction: 1 })
-    expect(activeRoadmapLessonIds(state).slice(2, 5)).toEqual(['atomic-write', 'idempotency-retry', 'delayed-duplicates'])
-
-    state = learningReducer(state, { type: 'TOGGLE_SKIP', lessonId: 'idempotency-retry' })
-    expect(state.currentLessonId).toBe('delayed-duplicates')
-    expect(activeRoadmapLessonIds(state)).not.toContain('idempotency-retry')
-
-    state = learningReducer(state, { type: 'SELECT_LESSON', lessonId: 'idempotency-retry' })
-    expect(state.currentLessonId).toBe('idempotency-retry')
-    expect(state.roadmap['idempotency-retry']?.skipped).toBe(false)
+  it('serializes only the bounded draft slices that remain browser-backed', () => {
+    const persisted = persistedLearningDrafts(createInitialState())
+    expect(Object.keys(persisted).sort()).toEqual([
+      'codeDraft', 'codeNotes', 'evidence', 'mock', 'practice', 'runResult', 'version',
+    ])
+    expect(persisted).not.toHaveProperty('onboarding')
+    expect(persisted).not.toHaveProperty('roadmap')
+    expect(persisted).not.toHaveProperty('roadmapOrder')
+    expect(persisted).not.toHaveProperty('currentLessonId')
   })
 
 })

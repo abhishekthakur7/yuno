@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LearningStateProvider } from '../../shared/state'
 import type { GoalWorkspace } from '../../shared/api/profile-goals'
-import { Home, Onboarding } from './CorePages'
+import { Home, Onboarding, Roadmap } from './CorePages'
 import type { DiagnosticSession } from '../../shared/api/diagnostics'
 
 const profile = { experience: null, strengths: null, weaknesses: null, current_goal_id: null, profile_revision: 1, updated_at: '2026-08-12T00:00:00Z' }
@@ -34,6 +34,30 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('profile-backed goal pages', () => {
+  it('keeps the accepted roadmap visible when a background refresh fails', async () => {
+    let roadmapFails = false
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestFrom(input, init).url
+      if (url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (url.endsWith('/learning-states')) return json([])
+      if (url.endsWith('/roadmap')) return roadmapFails
+        ? json({ message: 'Refresh failed' }, 503)
+        : json({ goal_id: 'a', graph_version_id: 'graph-1', projection_version: 'projection-1', state: 'stale-canonical-version', topics: [{ stable_id: 'delivery-contract', title: 'Delivery contracts', subject: 'Queues', level_tag: 'Senior', target_capability: 'implement', scope_tags: [], classification: 'unverified', recommended_depth: 'Implementation', depth_override: null, is_skipped: false, has_transferred_evidence: false, explanation: 'Saved projection', pending_proposals: [], conflicts: [] }] })
+      return json([])
+    }))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={queryClient}><LearningStateProvider><Roadmap navigate={vi.fn()} /></LearningStateProvider></QueryClientProvider>)
+
+    expect(await screen.findByText('Delivery contracts')).toBeInTheDocument()
+    expect(screen.getByText(/newer approved curriculum is available/i)).toBeInTheDocument()
+    roadmapFails = true
+    await queryClient.invalidateQueries({ queryKey: ['goals', 'a', 'roadmap'] })
+
+    expect(await screen.findByText(/last accepted projection is still shown/i)).toBeInTheDocument()
+    expect(screen.getByText('Delivery contracts')).toBeInTheDocument()
+  })
+
   it('renders the explicit empty My learning state', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => requestFrom(input, init).url.endsWith('/profile') ? json(profile) : json([])))
     renderPage(<Home navigate={vi.fn()} />)
@@ -124,7 +148,7 @@ describe('profile-backed goal pages', () => {
         if (body.action === 'skip_diagnostic') return json(diagnosticSession({ state: 'skipped', seed_skipped: true, diagnostic_skipped: true, next_question: null, row_version: 3 }))
         return json(diagnosticSession({ state: 'roadmap-preview', seed_skipped: true, diagnostic_skipped: true, next_question: null, row_version: 4 }))
       }
-      if (request.url.endsWith('/diagnostics/diagnostic-1/roadmap-preview')) return json({ session_id: 'diagnostic-1', captured_graph_version_id: 'graph-1', state: 'roadmap-preview', answer_count: 0, diagnostic_skipped: true, projection_version: 'diagnostic-preview-placeholder-v1', topic_recommendations: [] })
+      if (request.url.endsWith('/diagnostics/diagnostic-1/roadmap-preview')) return json({ session_id: 'diagnostic-1', captured_graph_version_id: 'graph-1', state: 'roadmap-preview', answer_count: 0, diagnostic_skipped: true, projection_version: 'diagnostic-preview-v1', topic_recommendations: [] })
       return json({}, 404)
     }))
     renderPage(<Onboarding navigate={vi.fn()} />)
@@ -136,14 +160,13 @@ describe('profile-backed goal pages', () => {
   })
 
   it('resumes a paused server session with every prior answer visible', async () => {
-    window.localStorage.setItem('yuno.diagnostics.active-session', 'diagnostic-1')
     const savedAnswer = { id: 'answer-1', sequence: 1, question_ref: 'delivery-contract', answer: 'At-least-once delivery permits duplicates.', confidence: 'high' as const, adaptive_context_version: 'diagnostic-fixture-v1', answered_at: '2026-08-12T00:01:00Z' }
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestFrom(input, init)
       if (request.url.endsWith('/canonical/versions')) return json([])
       if (request.url.endsWith('/profile')) return json(profile)
       if (request.url.endsWith('/goals')) return json([])
-      if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'GET') return json(diagnosticSession({ state: 'paused', seed_skipped: true, answers: [savedAnswer], next_question: null, paused_at: '2026-08-12T00:02:00Z' }))
+      if (request.url.endsWith('/diagnostics/active') && request.method === 'GET') return json(diagnosticSession({ state: 'paused', seed_skipped: true, answers: [savedAnswer], next_question: null, paused_at: '2026-08-12T00:02:00Z' }))
       if (request.url.endsWith('/diagnostics/diagnostic-1') && request.method === 'PATCH') return json(diagnosticSession({ state: 'resumed', seed_skipped: true, answers: [savedAnswer], next_question: { ref: 'atomic-boundary', prompt: 'Where should the duplicate decision live?', sequence: 2, adaptive_context_version: 'diagnostic-fixture-v1' }, row_version: 2 }))
       return json({}, 404)
     }))

@@ -74,6 +74,7 @@ containers = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.roadmap",
 ]
 layers = [
     "(service)",
@@ -103,6 +104,8 @@ source_modules = [
     "yuno.modules.diagnostics.domain",
     "yuno.modules.diagnostics.ports",
     "yuno.modules.diagnostics.service",
+    "yuno.modules.roadmap.domain",
+    "yuno.modules.roadmap.ports",
 ]
 forbidden_modules = [
     "fastapi",
@@ -135,6 +138,7 @@ modules = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.roadmap",
 ]
 ignore_imports = [
     "yuno.modules.identity.service -> yuno.modules.audit.**",

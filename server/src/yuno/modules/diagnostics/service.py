@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -13,6 +13,7 @@ from yuno.modules.diagnostics.domain import (
     DiagnosticAnswer,
     DiagnosticConfidence,
     DiagnosticPath,
+    DiagnosticPreviewEdit,
     DiagnosticSession,
     DiagnosticState,
     UntrustedSeedKind,
@@ -148,9 +149,10 @@ def patch_diagnostic(
                     current_state=before.state.value,
                 )
             answers = tuple(uow.diagnostics.list_answers(owner_id, session_id))
-            if before.state is not DiagnosticState.SKIPPED and next_question(
-                before, answers
-            ) is not None:
+            if (
+                before.state is not DiagnosticState.SKIPPED
+                and next_question(before, answers) is not None
+            ):
                 raise ConflictError(
                     "Finish or skip the diagnostic before opening its roadmap preview.",
                     current_state=before.state.value,
@@ -249,6 +251,97 @@ def record_diagnostic_failure(
             "The diagnostic has changed; reload it and retry."
         )
     _audit(uow, owner_id, session_id, "failed", before, updated, active_clock)
+    return updated
+
+
+def replace_roadmap_preview_edits(
+    uow: DiagnosticsUnitOfWork,
+    owner_id: str,
+    session_id: str,
+    *,
+    edits: Sequence[Mapping[str, object]],
+    published_topic_ids: frozenset[str],
+    clock: Clock | None = None,
+) -> DiagnosticSession:
+    active_clock = clock or SystemClock()
+    session = get_diagnostic(uow, owner_id, session_id, clock=active_clock)
+    if session.state is not DiagnosticState.ROADMAP_PREVIEW:
+        raise ConflictError(
+            "Roadmap edits can only be saved while previewing the roadmap.",
+            current_state=session.state.value,
+        )
+    timestamp = now_text(active_clock)
+    persisted: list[DiagnosticPreviewEdit] = []
+    for sequence, edit in enumerate(edits, start=1):
+        entry_type = str(edit.get("entry_type", ""))
+        topic_id_value = edit.get("topic_stable_id")
+        topic_id = str(topic_id_value) if topic_id_value is not None else None
+        value = edit.get("value")
+        if entry_type not in {"order_constraint", "skip", "depth", "correction"}:
+            raise DomainValidationError("A preview edit has an unsupported entry type.")
+        if not isinstance(value, Mapping):
+            raise DomainValidationError("A preview edit value must be an object.")
+        if entry_type == "order_constraint":
+            before = value.get("before_topic_id")
+            after = value.get("after_topic_id")
+            if before not in published_topic_ids or after not in published_topic_ids:
+                raise DomainValidationError(
+                    "An order constraint must reference topics in the captured graph."
+                )
+            topic_id = None
+        elif topic_id not in published_topic_ids:
+            raise DomainValidationError(
+                "A preview edit must reference a topic in the captured graph."
+            )
+        if entry_type == "skip" and not isinstance(value.get("skipped"), bool):
+            raise DomainValidationError("A skip preview edit requires a boolean value.")
+        if entry_type == "depth" and not (
+            isinstance(value.get("depth"), str) and str(value["depth"]).strip()
+        ):
+            raise DomainValidationError("A depth preview edit requires a depth value.")
+        if entry_type == "correction" and value.get("classification") not in {
+            "likely-known",
+            "partial",
+            "unverified",
+            "new",
+        }:
+            raise DomainValidationError(
+                "A correction preview edit requires a valid classification."
+            )
+        persisted.append(
+            DiagnosticPreviewEdit(
+                id=new_id(),
+                owner_id=owner_id,
+                session_id=session_id,
+                sequence=sequence,
+                topic_stable_id=topic_id,
+                entry_type=entry_type,
+                value=dict(value),
+                reason=(
+                    str(edit["reason"]).strip()
+                    if edit.get("reason") is not None
+                    else None
+                ),
+                updated_at=timestamp,
+            )
+        )
+    uow.diagnostics.replace_preview_edits(owner_id, session_id, persisted)
+    updated = uow.diagnostics.update_session(
+        owner_id, session_id, session.row_version, {"updated_at": timestamp}
+    )
+    if updated is None:
+        raise PreconditionFailedError(
+            "The diagnostic changed while its roadmap edits were being saved; retry."
+        )
+    _audit(
+        uow,
+        owner_id,
+        session_id,
+        "preview_edits_replaced",
+        session,
+        updated,
+        active_clock,
+    )
     return updated
 
 

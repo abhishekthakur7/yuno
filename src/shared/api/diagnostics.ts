@@ -9,20 +9,8 @@ export type DiagnosticSetup = components['schemas']['DiagnosticCreateRequest']
 export type DiagnosticSession = components['schemas']['DiagnosticResponse']
 export type DiagnosticRoadmapPreview = components['schemas']['DiagnosticRoadmapPreviewResponse']
 export type DiagnosticPatch = components['schemas']['DiagnosticPatchRequest']
-
-const ACTIVE_DIAGNOSTIC_KEY = 'yuno.diagnostics.active-session'
-
-export function activeDiagnosticId(): string | null {
-  return typeof window === 'undefined' ? null : window.localStorage.getItem(ACTIVE_DIAGNOSTIC_KEY)
-}
-
-export function rememberActiveDiagnostic(id: string): void {
-  window.localStorage.setItem(ACTIVE_DIAGNOSTIC_KEY, id)
-}
-
-export function forgetActiveDiagnostic(): void {
-  window.localStorage.removeItem(ACTIVE_DIAGNOSTIC_KEY)
-}
+export type DiagnosticPreviewEdit = components['schemas']['DiagnosticPreviewEditRequest']
+export type GoalWorkspace = components['schemas']['GoalResponse']
 
 function failure(
   error: components['schemas']['ErrorResponse'] | undefined,
@@ -36,6 +24,17 @@ export function diagnosticQueryOptions(id: string | null) {
     queryKey: ['diagnostics', id],
     enabled: Boolean(id),
     queryFn: () => getDiagnostic(id!),
+  })
+}
+
+export function activeDiagnosticQueryOptions() {
+  return queryOptions({
+    queryKey: ['diagnostics', 'active'],
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/diagnostics/active')
+      if (error) failure(error, response.status)
+      return data ?? null
+    },
   })
 }
 
@@ -101,6 +100,27 @@ export async function getDiagnosticRoadmapPreview(
 ): Promise<DiagnosticRoadmapPreview> {
   const { data, error, response } = await client.GET(
     '/api/v1/diagnostics/{session_id}/roadmap-preview',
+    { params: { path: { session_id: sessionId } } },
+  )
+  if (error || !data) failure(error, response.status)
+  return data
+}
+
+export async function saveDiagnosticRoadmapPreview(
+  sessionId: string,
+  edits: DiagnosticPreviewEdit[],
+): Promise<DiagnosticRoadmapPreview> {
+  const { data, error, response } = await client.PUT(
+    '/api/v1/diagnostics/{session_id}/roadmap-preview',
+    { params: { path: { session_id: sessionId } }, body: { edits } },
+  )
+  if (error || !data) failure(error, response.status)
+  return data
+}
+
+export async function confirmDiagnosticGoal(sessionId: string): Promise<GoalWorkspace> {
+  const { data, error, response } = await client.POST(
+    '/api/v1/diagnostics/{session_id}/confirm-goal',
     { params: { path: { session_id: sessionId } } },
   )
   if (error || !data) failure(error, response.status)

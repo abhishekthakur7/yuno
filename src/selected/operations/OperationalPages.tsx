@@ -159,7 +159,7 @@ function Disclosure({ children }: { children: React.ReactNode }) {
 }
 
 function EvidencePage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
-  const { state: learning, dispatch } = useLearningState()
+  const { state: learning } = useLearningState()
   const latestEvidence = learning.evidence.at(-1)
   const olderEvidence = learning.evidence.slice(0, -1).reverse()
   const latestPractice = learning.practice.attempts.at(-1)
@@ -169,7 +169,7 @@ function EvidencePage({ state, setState, navigate }: { state: OperationsState; s
     <section className={`so-hero-card so-evidence-hero ${latestEvidence ? '' : 'is-unavailable'}`} aria-labelledby="so-conclusion">
       <div className="so-status-icon">{latestEvidence ? <Check size={24} /> : <FileText size={24} />}</div>
       <div><span className="so-kicker">{latestEvidence ? 'Latest submitted conclusion' : 'Evidence unavailable'}</span><h2 id="so-conclusion">{latestEvidence?.conclusion ?? 'No submitted lab evidence is available yet.'}</h2><p>{latestEvidence?.limitation ?? 'Running checks can preview local feedback, but only an explicit submission creates an evidence record. No progress or qualification is inferred from a draft.'}</p></div>
-      <div className="so-next"><span>Next useful action</span><strong>{latestEvidence ? 'Defend the same boundary in a new failure scenario.' : 'Open Topic Studio, review the artifact, and submit it when it represents your decision.'}</strong><Button tone="secondary" onClick={() => { if (!latestEvidence) dispatch({ type: 'SELECT_LESSON', lessonId: 'idempotency-retry' }); navigate(latestEvidence ? 'practice' : 'topic-studio') }}>{latestEvidence ? 'Open transfer check' : 'Open Topic Studio'} <ArrowRight size={16} /></Button></div>
+      <div className="so-next"><span>Next useful action</span><strong>{latestEvidence ? 'Defend the same boundary in a new failure scenario.' : 'Open Topic Studio, review the artifact, and submit it when it represents your decision.'}</strong><Button tone="secondary" onClick={() => navigate(latestEvidence ? 'practice' : 'topic-studio')}>{latestEvidence ? 'Open transfer check' : 'Open Topic Studio'} <ArrowRight size={16} /></Button></div>
     </section>
     {latestPractice && <section className="so-panel so-practice-summary"><div><span className="so-kicker">Latest guided-practice attempt</span><h2>{latestPractice.facts[0] ?? 'A practice response was saved.'}</h2><p>{latestPractice.tradeoffs[0] ?? 'Open practice to inspect and repair the response.'}</p></div><Button tone="secondary" onClick={() => navigate('practice')}>Review practice <ArrowRight size={16} /></Button></section>}
     <details className="so-details"><summary><span><History size={18} /> Inspect provenance <small>Method, artifact, and authority</small></span><ChevronRight size={18} /></summary><div className="so-inspection">{latestEvidence ? <dl className="so-facts"><dt>Record</dt><dd>{latestEvidence.id}</dd><dt>Artifact</dt><dd>Learner-submitted code ({latestEvidence.artifact.length} characters)</dd><dt>Review</dt><dd>{latestEvidence.kind === 'static-review' ? 'Deterministic browser static review' : latestEvidence.kind}</dd><dt>Authority</dt><dd>Learner evidence; not canonical content or runtime proof</dd></dl> : <p>No submitted artifact exists, so there is no evidence provenance to inspect.</p>}</div></details>
@@ -223,7 +223,7 @@ function CanonicalUpdatesPage({ state, setState }: { state: OperationsState; set
 }
 
 function SearchPage({ navigate }: { navigate: Navigate }) {
-  const { state: learning, dispatch } = useLearningState()
+  const { state: learning } = useLearningState()
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [stale, setStale] = useState(true)
@@ -233,7 +233,7 @@ function SearchPage({ navigate }: { navigate: Navigate }) {
     <PageHead eyebrow="Course and content search" title="Find a lesson, reading, review, or evidence record" description="Search uses this bundled local fixture. It is deterministic and makes no network, vector, semantic, or source-retrieval claim." />
     <form className="so-search" onSubmit={(event) => { event.preventDefault(); setSubmitted(query.trim()) }}><Search size={20} /><label className="so-sr-only" htmlFor="so-search-input">Search course content</label><input id="so-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try “idempotency” or “dead letter”" /><Button type="submit">Search</Button></form>
     {stale && <div className="so-warning"><AlertTriangle size={19} /><div><strong>Bundled index may be stale</strong><p>Bundled course entries represent graph 2026.07. Submitted evidence results come directly from this application’s local learner state.</p></div><Button tone="secondary" onClick={() => setStale(false)}><X size={16} /> Dismiss notice</Button></div>}
-    {!submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current local course</h2><p>Results include titles and fixture keywords only. No remote sources are queried.</p></div> : results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try a topic term such as retry, acknowledgement, idempotency, or DLQ.</p></div> : <section><div className="so-section-head"><div><span className="so-kicker">Local results</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>Bundled entries + submitted evidence</span></div><div className="so-results">{results.map((item) => <button key={`${item.kind}-${item.path}`} onClick={() => { if (item.lessonId) dispatch({ type: 'SELECT_LESSON', lessonId: item.lessonId }); navigate(item.kind === 'Evidence' ? 'evidence' : 'topic-studio') }}><span className="so-chip">{item.kind}</span><strong>{item.title}</strong><small>{item.path}</small><ChevronRight size={19} /></button>)}</div></section>}
+    {!submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current local course</h2><p>Results include titles and fixture keywords only. No remote sources are queried.</p></div> : results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try a topic term such as retry, acknowledgement, idempotency, or DLQ.</p></div> : <section><div className="so-section-head"><div><span className="so-kicker">Local results</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>Bundled entries + submitted evidence</span></div><div className="so-results">{results.map((item) => <button key={`${item.kind}-${item.path}`} onClick={() => navigate(item.kind === 'Evidence' ? 'evidence' : 'topic-studio')}><span className="so-chip">{item.kind}</span><strong>{item.title}</strong><small>{item.path}</small><ChevronRight size={19} /></button>)}</div></section>}
   </>
 }
 

@@ -118,6 +118,19 @@ class DiagnosticsIdempotencyRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class DiagnosticPreviewEdit:
+    id: str
+    owner_id: str
+    session_id: str
+    sequence: int
+    topic_stable_id: str | None
+    entry_type: str
+    value: Mapping[str, object]
+    reason: str | None
+    updated_at: str
+
+
 def validate_setup_inputs(setup_inputs: Mapping[str, object]) -> None:
     path = DiagnosticPath(str(setup_inputs.get("path", "")))
     subject = setup_inputs.get("subject")

@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from yuno.modules.diagnostics.domain import (
     DiagnosticAnswer,
     DiagnosticConfidence,
+    DiagnosticPreviewEdit,
     DiagnosticSession,
     DiagnosticsIdempotencyRecord,
     DiagnosticState,
@@ -19,6 +20,7 @@ from yuno.modules.diagnostics.domain import (
 )
 from yuno.modules.diagnostics.models import (
     DiagnosticAnswerRow,
+    DiagnosticPreviewEditRow,
     DiagnosticsCommandLockRow,
     DiagnosticSessionRow,
     DiagnosticsIdempotencyRow,
@@ -75,6 +77,20 @@ class SqlAlchemyDiagnosticsRepository(SqlAlchemyRepository):
         ).one_or_none()
         return _session_to_domain(row) if row is not None else None
 
+    def get_latest_unconfirmed_session(
+        self, owner_id: str
+    ) -> DiagnosticSession | None:
+        row = self._session.scalars(
+            owner_scoped_select(DiagnosticSessionRow, owner_id)
+            .where(DiagnosticSessionRow.state != DiagnosticState.CONFIRMED.value)
+            .order_by(
+                DiagnosticSessionRow.updated_at.desc(),
+                DiagnosticSessionRow.id.desc(),
+            )
+            .limit(1)
+        ).one_or_none()
+        return _session_to_domain(row) if row is not None else None
+
     def update_session(
         self,
         owner_id: str,
@@ -126,6 +142,57 @@ class SqlAlchemyDiagnosticsRepository(SqlAlchemyRepository):
             .order_by(DiagnosticAnswerRow.sequence)
         ).all()
         return tuple(_answer_to_domain(row) for row in rows)
+
+    def replace_preview_edits(
+        self,
+        owner_id: str,
+        session_id: str,
+        edits: Sequence[DiagnosticPreviewEdit],
+    ) -> None:
+        self._session.execute(
+            delete(DiagnosticPreviewEditRow).where(
+                DiagnosticPreviewEditRow.owner_id == owner_id,
+                DiagnosticPreviewEditRow.session_id == session_id,
+            )
+        )
+        self._session.add_all(
+            DiagnosticPreviewEditRow(
+                id=edit.id,
+                owner_id=edit.owner_id,
+                session_id=edit.session_id,
+                sequence=edit.sequence,
+                topic_stable_id=edit.topic_stable_id,
+                entry_type=edit.entry_type,
+                value_json=json.dumps(edit.value, sort_keys=True, separators=(",", ":")),
+                reason=edit.reason,
+                updated_at=edit.updated_at,
+            )
+            for edit in edits
+        )
+        self._session.flush()
+
+    def list_preview_edits(
+        self, owner_id: str, session_id: str
+    ) -> Sequence[DiagnosticPreviewEdit]:
+        rows = self._session.scalars(
+            owner_scoped_select(DiagnosticPreviewEditRow, owner_id)
+            .where(DiagnosticPreviewEditRow.session_id == session_id)
+            .order_by(DiagnosticPreviewEditRow.sequence)
+        ).all()
+        return tuple(
+            DiagnosticPreviewEdit(
+                id=row.id,
+                owner_id=row.owner_id,
+                session_id=row.session_id,
+                sequence=row.sequence,
+                topic_stable_id=row.topic_stable_id,
+                entry_type=row.entry_type,
+                value=json.loads(row.value_json),
+                reason=row.reason,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        )
 
     def get_idempotency(
         self, owner_id: str, operation: str, key: str

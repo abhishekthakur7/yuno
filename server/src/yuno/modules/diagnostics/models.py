@@ -131,6 +131,44 @@ class DiagnosticAnswerRow(Base):
     answered_at: Mapped[str] = utc_timestamp_column()
 
 
+class DiagnosticPreviewEditRow(Base):
+    __tablename__ = "diagnostic_preview_edits"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["session_id", "owner_id"],
+            ["diagnostic_sessions.id", "diagnostic_sessions.owner_id"],
+            name="fk_diagnostic_preview_edits_session_owner",
+        ),
+        CheckConstraint("sequence >= 1", name="sequence_positive"),
+        CheckConstraint(
+            "entry_type IN ('order_constraint','skip','depth','correction')",
+            name="entry_type_valid",
+        ),
+        CheckConstraint("json_valid(value_json)", name="value_json_valid"),
+        CheckConstraint("json_type(value_json) = 'object'", name="value_json_object"),
+        UniqueConstraint("id", "owner_id", name="uq_diagnostic_preview_edits_id_owner"),
+        UniqueConstraint(
+            "session_id", "sequence", name="uq_diagnostic_preview_edits_sequence"
+        ),
+        Index(
+            "ix_diagnostic_preview_edits_owner_session_sequence",
+            "owner_id",
+            "session_id",
+            "sequence",
+        ),
+    )
+
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    topic_stable_id: Mapped[str | None] = mapped_column(Text)
+    entry_type: Mapped[str] = mapped_column(Text, nullable=False)
+    value_json: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[str] = utc_timestamp_column()
+
+
 class DiagnosticsCommandLockRow(Base):
     __tablename__ = "diagnostics_command_locks"
 

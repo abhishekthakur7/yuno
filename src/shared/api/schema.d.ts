@@ -63,6 +63,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Diagnostic Session
+         * @description Return the server-persisted onboarding session, if one exists.
+         *
+         *     The client deliberately keeps no diagnostic identifier in browser
+         *     storage. A cleared browser therefore resumes from the same durable
+         *     server state instead of silently starting another onboarding flow.
+         */
+        get: operations["get_active_diagnostic_session_api_v1_diagnostics_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics/{session_id}": {
         parameters: {
             query?: never;
@@ -98,6 +122,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnostics/{session_id}/confirm-goal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Confirm Goal
+         * @description Atomically turn a persisted preview into a complete goal workspace.
+         */
+        post: operations["post_confirm_goal_api_v1_diagnostics__session_id__confirm_goal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics/{session_id}/roadmap-preview": {
         parameters: {
             query?: never;
@@ -107,7 +151,8 @@ export interface paths {
         };
         /** Get Roadmap Preview */
         get: operations["get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get"];
-        put?: never;
+        /** Put Roadmap Preview */
+        put: operations["put_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -162,6 +207,108 @@ export interface paths {
         put?: never;
         /** Post Archive Goal */
         post: operations["post_archive_goal_api_v1_goals__goal_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Correction */
+        post: operations["post_correction_api_v1_goals__goal_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/depth-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Depth */
+        post: operations["post_depth_api_v1_goals__goal_id__depth_overrides_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/learning-states": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Learning States */
+        get: operations["get_learning_states_api_v1_goals__goal_id__learning_states_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/order-constraints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Order Constraint */
+        post: operations["post_order_constraint_api_v1_goals__goal_id__order_constraints_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/roadmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Roadmap */
+        get: operations["get_goal_roadmap_api_v1_goals__goal_id__roadmap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/skip-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Skip */
+        post: operations["post_skip_api_v1_goals__goal_id__skip_decisions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -302,6 +449,20 @@ export interface components {
             version_label: string;
         };
         /**
+         * CorrectionType
+         * @enum {string}
+         */
+        CorrectionType: "correction" | "confirmation" | "gap" | "transfer-confirmation";
+        /** DepthOverrideRequest */
+        DepthOverrideRequest: {
+            /** Depth */
+            depth: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
+        /**
          * DiagnosticAction
          * @enum {string}
          */
@@ -362,6 +523,19 @@ export interface components {
          * @enum {string}
          */
         DiagnosticPath: "learn" | "interview_prep";
+        /** DiagnosticPreviewEditRequest */
+        DiagnosticPreviewEditRequest: {
+            /** Entry Type */
+            entry_type: string;
+            /** Reason */
+            reason?: string | null;
+            /** Topic Stable Id */
+            topic_stable_id?: string | null;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+        };
         /** DiagnosticQuestionResponse */
         DiagnosticQuestionResponse: {
             /** Adaptive Context Version */
@@ -425,6 +599,10 @@ export interface components {
             diagnostic_skipped: boolean;
             /** Projection Version */
             projection_version: string;
+            /** Saved Edits */
+            saved_edits: {
+                [key: string]: unknown;
+            }[];
             /** Session Id */
             session_id: string;
             state: components["schemas"]["DiagnosticState"];
@@ -432,6 +610,11 @@ export interface components {
             topic_recommendations: {
                 [key: string]: unknown;
             }[];
+        };
+        /** DiagnosticRoadmapPreviewUpdateRequest */
+        DiagnosticRoadmapPreviewUpdateRequest: {
+            /** Edits */
+            edits?: components["schemas"]["DiagnosticPreviewEditRequest"][];
         };
         /**
          * DiagnosticState
@@ -568,6 +751,16 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** LearnerCorrectionRequest */
+        LearnerCorrectionRequest: {
+            classification: components["schemas"]["LearningClassification"];
+            /** @default correction */
+            correction_type: components["schemas"]["CorrectionType"];
+            /** Reason */
+            reason?: string | null;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
         /** LearnerProfilePatchRequest */
         LearnerProfilePatchRequest: {
             /** Experience */
@@ -593,10 +786,102 @@ export interface components {
             weaknesses: string | null;
         };
         /**
+         * LearningClassification
+         * @enum {string}
+         */
+        LearningClassification: "likely-known" | "partial" | "unverified" | "new";
+        /** LearningStateResponse */
+        LearningStateResponse: {
+            classification: components["schemas"]["LearningClassification"];
+            corrected_classification?: components["schemas"]["LearningClassification"] | null;
+            /** Explanation */
+            explanation: string;
+            /** Origin */
+            origin: string;
+            /** Recommended Depth */
+            recommended_depth: string;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
+        /** OrderConstraintRequest */
+        OrderConstraintRequest: {
+            /** After Topic Id */
+            after_topic_id: string;
+            /** Before Topic Id */
+            before_topic_id: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
          * ResumeDestination
          * @enum {string}
          */
         ResumeDestination: "/app/learn-roadmap" | "/app/topic-studio" | "/app/interview-hub" | "/app/practice" | "/app/mock";
+        /** RoadmapMutationResponse */
+        RoadmapMutationResponse: {
+            /**
+             * Checkpoint Saved
+             * @default true
+             */
+            checkpoint_saved: boolean;
+            projection: components["schemas"]["RoadmapResponse"];
+        };
+        /** RoadmapResponse */
+        RoadmapResponse: {
+            /** Goal Id */
+            goal_id: string;
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Projection Version */
+            projection_version: string;
+            /** State */
+            state: string;
+            /** Topics */
+            topics: components["schemas"]["RoadmapTopicResponse"][];
+        };
+        /** RoadmapTopicResponse */
+        RoadmapTopicResponse: {
+            classification: components["schemas"]["LearningClassification"];
+            /** Conflicts */
+            conflicts: {
+                [key: string]: unknown;
+            }[];
+            /** Depth Override */
+            depth_override: string | null;
+            /** Explanation */
+            explanation: string;
+            /** Has Transferred Evidence */
+            has_transferred_evidence: boolean;
+            /** Is Skipped */
+            is_skipped: boolean;
+            /** Level Tag */
+            level_tag: string;
+            /** Pending Proposals */
+            pending_proposals: {
+                [key: string]: unknown;
+            }[];
+            /** Recommended Depth */
+            recommended_depth: string;
+            /** Scope Tags */
+            scope_tags: string[];
+            /** Stable Id */
+            stable_id: string;
+            /** Subject */
+            subject: string;
+            /** Target Capability */
+            target_capability: string;
+            /** Title */
+            title: string;
+        };
+        /** SkipDecisionRequest */
+        SkipDecisionRequest: {
+            /** Reason */
+            reason?: string | null;
+            /** Skipped */
+            skipped: boolean;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
         /**
          * TargetCapability
          * @enum {string}
@@ -716,6 +1001,35 @@ export interface operations {
             };
         };
     };
+    get_active_diagnostic_session_api_v1_diagnostics_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticResponse"] | null;
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_diagnostic_session_api_v1_diagnostics__session_id__get: {
         parameters: {
             query?: never;
@@ -821,6 +1135,37 @@ export interface operations {
             };
         };
     };
+    post_confirm_goal_api_v1_diagnostics__session_id__confirm_goal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get: {
         parameters: {
             query?: never;
@@ -831,6 +1176,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosticRoadmapPreviewResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    put_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosticRoadmapPreviewUpdateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1005,6 +1385,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_correction_api_v1_goals__goal_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LearnerCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapMutationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_depth_api_v1_goals__goal_id__depth_overrides_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepthOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapMutationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_learning_states_api_v1_goals__goal_id__learning_states_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStateResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_order_constraint_api_v1_goals__goal_id__order_constraints_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderConstraintRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapMutationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_goal_roadmap_api_v1_goals__goal_id__roadmap_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_skip_api_v1_goals__goal_id__skip_decisions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapMutationResponse"];
                 };
             };
             /** @description Default Response */

@@ -17,8 +17,8 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { activeRoadmapLessonIds, useLearningState } from '../shared/state'
 import { useProfileGoals } from '../shared/use-profile-goals'
+import { useRoadmap } from '../shared/use-roadmap'
 import RouteView from './shell/RouteView'
 import { useShellViewState } from './shell/useShellViewState'
 import CorePageView, { type CorePage } from './core/CorePages'
@@ -110,12 +110,12 @@ function GlobalHeader({ page }: { page: AppPage }) {
 }
 
 function CourseBand({ page }: { page: AppPage }) {
-  const { state } = useLearningState()
   const { currentGoal } = useProfileGoals()
+  const roadmap = useRoadmap(currentGoal?.id ?? null)
   const navigate = useNavigate()
   const isInterview = page === 'interview-hub' || page === 'practice' || page === 'reports'
-  const activeLessonIds = activeRoadmapLessonIds(state)
-  const position = Math.max(0, activeLessonIds.indexOf(state.currentLessonId)) + 1
+  const activeLessonIds = (roadmap.roadmap.data?.topics ?? []).filter(topic => !topic.is_skipped).map(topic => topic.stable_id)
+  const position = currentGoal?.resume_position ? Math.max(0, activeLessonIds.indexOf(currentGoal.resume_position)) + 1 : 0
   return (
     <div className="app-course-band">
       <button className="app-course-back" onClick={() => navigateTo(navigate, isInterview ? 'interview-hub' : 'home')}><ArrowLeft size={16} /> {isInterview ? 'Interview prep' : 'My learning'}</button>

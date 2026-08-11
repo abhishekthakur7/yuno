@@ -51,6 +51,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.roadmap",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {"fastapi", "starlette", "sqlalchemy", "alembic", "pydantic", "subprocess"}
@@ -71,6 +72,8 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.diagnostics.domain",
     "yuno.modules.diagnostics.ports",
     "yuno.modules.diagnostics.service",
+    "yuno.modules.roadmap.domain",
+    "yuno.modules.roadmap.ports",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -78,6 +81,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.roadmap",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`

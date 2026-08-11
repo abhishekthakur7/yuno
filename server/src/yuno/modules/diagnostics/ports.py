@@ -8,6 +8,7 @@ from typing import Protocol
 from yuno.modules.audit.ports import AuditRepository
 from yuno.modules.diagnostics.domain import (
     DiagnosticAnswer,
+    DiagnosticPreviewEdit,
     DiagnosticSession,
     DiagnosticsIdempotencyRecord,
 )
@@ -19,6 +20,10 @@ class DiagnosticsRepository(Protocol):
 
     def get_session(
         self, owner_id: str, session_id: str
+    ) -> DiagnosticSession | None: ...
+
+    def get_latest_unconfirmed_session(
+        self, owner_id: str
     ) -> DiagnosticSession | None: ...
 
     def update_session(
@@ -34,6 +39,17 @@ class DiagnosticsRepository(Protocol):
     def list_answers(
         self, owner_id: str, session_id: str
     ) -> Sequence[DiagnosticAnswer]: ...
+
+    def replace_preview_edits(
+        self,
+        owner_id: str,
+        session_id: str,
+        edits: Sequence[DiagnosticPreviewEdit],
+    ) -> None: ...
+
+    def list_preview_edits(
+        self, owner_id: str, session_id: str
+    ) -> Sequence[DiagnosticPreviewEdit]: ...
 
     def get_idempotency(
         self, owner_id: str, operation: str, key: str

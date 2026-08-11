@@ -1,23 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type Dispatch, type ReactNode } from 'react'
 import {
-  ALL_LESSONS,
-  CURRICULUM_MODULES,
-  CURRENT_LESSON_ID,
   MOCK_CURRENT_QUESTION,
   MOCK_FIXTURE_DRAFT,
   MOCK_PRIOR_TURNS,
   PRACTICE_QUESTIONS,
   STARTER_CODE,
-  type Depth,
-  type KnowledgeState,
 } from './model'
-
-export interface RoadmapChoice {
-  id: string
-  depth: Depth
-  learnerState: KnowledgeState
-  skipped: boolean
-}
 
 export interface RunCheck {
   label: string
@@ -54,15 +42,6 @@ export interface MockTurn {
 
 export interface LearningState {
   version: 1
-  onboarding: {
-    path: 'Learn' | 'Interview Prep'
-    target: 'Mid-level' | 'Senior' | 'Staff'
-    goalName: string
-    approved: boolean
-  }
-  currentLessonId: string
-  roadmapOrder: readonly string[]
-  roadmap: Readonly<Record<string, RoadmapChoice>>
   codeDraft: string
   codeNotes: string
   runResult: RunResult | null
@@ -83,16 +62,7 @@ export interface LearningState {
   }
 }
 
-type OnboardingField = 'path' | 'target' | 'goalName'
-
 export type LearningAction =
-  | { type: 'SET_ONBOARDING'; field: OnboardingField; value: string }
-  | { type: 'APPROVE_ROADMAP' }
-  | { type: 'SELECT_LESSON'; lessonId: string }
-  | { type: 'SET_DEPTH'; lessonId: string; depth: Depth }
-  | { type: 'SET_LEARNER_STATE'; lessonId: string; learnerState: KnowledgeState }
-  | { type: 'TOGGLE_SKIP'; lessonId: string }
-  | { type: 'MOVE_LESSON'; lessonId: string; direction: -1 | 1 }
   | { type: 'SET_CODE'; value: string }
   | { type: 'SET_NOTES'; value: string }
   | { type: 'RUN_CHECKS' }
@@ -109,27 +79,9 @@ export type LearningAction =
   | { type: 'COMPLETE_MOCK' }
   | { type: 'RESET_LEARNING_STATE' }
 
-function createRoadmap(): Readonly<Record<string, RoadmapChoice>> {
-  return Object.fromEntries(ALL_LESSONS.map((lesson) => [lesson.id, {
-    id: lesson.id,
-    depth: lesson.recommendedDepth,
-    learnerState: lesson.state,
-    skipped: false,
-  }]))
-}
-
 export function createInitialState(): LearningState {
   return {
     version: 1,
-    onboarding: {
-      path: 'Learn',
-      target: 'Senior',
-      goalName: '',
-      approved: false,
-    },
-    currentLessonId: CURRENT_LESSON_ID,
-    roadmapOrder: ALL_LESSONS.map((lesson) => lesson.id),
-    roadmap: createRoadmap(),
     codeDraft: STARTER_CODE,
     codeNotes: 'Assumption: the ledger and reservation write share one database boundary.',
     runResult: null,
@@ -149,34 +101,6 @@ export function createInitialState(): LearningState {
       reportKind: null,
     },
   }
-}
-
-function replaceRoadmapChoice(state: LearningState, lessonId: string, next: Partial<RoadmapChoice>): LearningState {
-  const current = state.roadmap[lessonId]
-  if (!current) return state
-  const updated = { ...current, ...next }
-  if (Object.entries(next).every(([key, value]) => current[key as keyof RoadmapChoice] === value)) return state
-  return {
-    ...state,
-    onboarding: { ...state.onboarding, approved: false },
-    roadmap: { ...state.roadmap, [lessonId]: updated },
-  }
-}
-
-export function activeRoadmapLessonIds(state: LearningState): readonly string[] {
-  return state.roadmapOrder.filter((lessonId) => state.roadmap[lessonId] && !state.roadmap[lessonId]?.skipped)
-}
-
-function adjacentActiveLessonId(state: LearningState, lessonId: string): string | null {
-  const index = state.roadmapOrder.indexOf(lessonId)
-  if (index < 0) return activeRoadmapLessonIds(state)[0] ?? null
-  for (let offset = 1; offset < state.roadmapOrder.length; offset += 1) {
-    const next = state.roadmapOrder[index + offset]
-    if (next && state.roadmap[next] && !state.roadmap[next]?.skipped) return next
-    const previous = state.roadmapOrder[index - offset]
-    if (previous && state.roadmap[previous] && !state.roadmap[previous]?.skipped) return previous
-  }
-  return null
 }
 
 export function evaluateCode(code: string): RunResult {
@@ -215,50 +139,6 @@ function practiceFeedback(answer: string): Pick<PracticeAttempt, 'facts' | 'trad
 
 export function learningReducer(state: LearningState, action: LearningAction): LearningState {
   switch (action.type) {
-    case 'SET_ONBOARDING': {
-      if (action.field === 'path' && (action.value === 'Learn' || action.value === 'Interview Prep')) return { ...state, onboarding: { ...state.onboarding, path: action.value, approved: false } }
-      if (action.field === 'target' && (action.value === 'Mid-level' || action.value === 'Senior' || action.value === 'Staff')) return { ...state, onboarding: { ...state.onboarding, target: action.value, approved: false } }
-      if (action.field === 'goalName') return { ...state, onboarding: { ...state.onboarding, goalName: action.value, approved: false } }
-      return state
-    }
-    case 'APPROVE_ROADMAP':
-      return { ...state, onboarding: { ...state.onboarding, approved: true } }
-    case 'SELECT_LESSON': {
-      const choice = state.roadmap[action.lessonId]
-      if (!choice) return state
-      if (!choice.skipped) return { ...state, currentLessonId: action.lessonId }
-      return {
-        ...state,
-        currentLessonId: action.lessonId,
-        onboarding: { ...state.onboarding, approved: false },
-        roadmap: { ...state.roadmap, [action.lessonId]: { ...choice, skipped: false } },
-      }
-    }
-    case 'SET_DEPTH':
-      return replaceRoadmapChoice(state, action.lessonId, { depth: action.depth })
-    case 'SET_LEARNER_STATE':
-      return replaceRoadmapChoice(state, action.lessonId, { learnerState: action.learnerState })
-    case 'TOGGLE_SKIP': {
-      const current = state.roadmap[action.lessonId]
-      if (!current) return state
-      const next = replaceRoadmapChoice(state, action.lessonId, { skipped: !current.skipped })
-      if (current.skipped || action.lessonId !== state.currentLessonId) return next
-      return { ...next, currentLessonId: adjacentActiveLessonId(next, action.lessonId) ?? state.currentLessonId }
-    }
-    case 'MOVE_LESSON': {
-      const order = [...state.roadmapOrder]
-      const index = order.indexOf(action.lessonId)
-      const target = index + action.direction
-      if (index < 0 || target < 0 || target >= order.length) return state
-      const swap = order[target]
-      if (!swap) return state
-      const sourceModule = CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === action.lessonId))
-      const targetModule = CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === swap))
-      if (!sourceModule || sourceModule.id !== targetModule?.id) return state
-      order[target] = action.lessonId
-      order[index] = swap
-      return { ...state, onboarding: { ...state.onboarding, approved: false }, roadmapOrder: order }
-    }
     case 'SET_CODE':
       return { ...state, codeDraft: action.value, runResult: null }
     case 'SET_NOTES':
@@ -341,28 +221,11 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function hydrateLearningState(value: unknown, initial = createInitialState()): LearningState | null {
+function hydratePersistedDrafts(value: unknown, initial = createInitialState()): LearningState | null {
   if (!isRecord(value) || value.version !== 1) return null
 
-  const onboarding = isRecord(value.onboarding) ? value.onboarding : {}
   const practice = isRecord(value.practice) ? value.practice : {}
   const mock = isRecord(value.mock) ? value.mock : {}
-  const roadmap = isRecord(value.roadmap) ? value.roadmap : {}
-  const hydratedRoadmap = { ...initial.roadmap }
-  for (const [lessonId, rawChoice] of Object.entries(roadmap)) {
-    const fallback = initial.roadmap[lessonId]
-    if (!fallback || !isRecord(rawChoice)) continue
-    hydratedRoadmap[lessonId] = {
-      id: fallback.id,
-      depth: rawChoice.depth === 'Essential' || rawChoice.depth === 'Implementation' || rawChoice.depth === 'Production' || rawChoice.depth === 'Interview'
-        ? rawChoice.depth
-        : fallback.depth,
-      learnerState: rawChoice.learnerState === 'likely known' || rawChoice.learnerState === 'partial' || rawChoice.learnerState === 'unverified' || rawChoice.learnerState === 'new'
-        ? rawChoice.learnerState
-        : fallback.learnerState,
-      skipped: typeof rawChoice.skipped === 'boolean' ? rawChoice.skipped : fallback.skipped,
-    }
-  }
 
   const attempts = Array.isArray(practice.attempts)
     ? practice.attempts.filter((item): item is PracticeAttempt => isRecord(item)
@@ -400,22 +263,8 @@ function hydrateLearningState(value: unknown, initial = createInitialState()): L
         && typeof check.detail === 'string')
         ? rawRunResult as unknown as RunResult
         : initial.runResult
-  const persistedOrder = isStringArray(value.roadmapOrder)
-    ? value.roadmapOrder.filter((id, index, order) => Boolean(hydratedRoadmap[id]) && order.indexOf(id) === index)
-    : []
-  const roadmapOrder = [...persistedOrder, ...initial.roadmapOrder.filter((id) => !persistedOrder.includes(id))]
-
   return {
-    version: 1,
-    onboarding: {
-      path: onboarding.path === 'Learn' || onboarding.path === 'Interview Prep' ? onboarding.path : initial.onboarding.path,
-      target: onboarding.target === 'Mid-level' || onboarding.target === 'Senior' || onboarding.target === 'Staff' ? onboarding.target : initial.onboarding.target,
-      goalName: typeof onboarding.goalName === 'string' ? onboarding.goalName : initial.onboarding.goalName,
-      approved: typeof onboarding.approved === 'boolean' ? onboarding.approved : initial.onboarding.approved,
-    },
-    currentLessonId: typeof value.currentLessonId === 'string' && hydratedRoadmap[value.currentLessonId] ? value.currentLessonId : initial.currentLessonId,
-    roadmapOrder,
-    roadmap: hydratedRoadmap,
+    ...initial,
     codeDraft: typeof value.codeDraft === 'string' ? value.codeDraft : initial.codeDraft,
     codeNotes: typeof value.codeNotes === 'string' ? value.codeNotes : initial.codeNotes,
     runResult,
@@ -439,27 +288,32 @@ function hydrateLearningState(value: unknown, initial = createInitialState()): L
 
 function loadState(storageKey: string): LearningState {
   const initial = createInitialState()
-  const keepCurrentLessonActive = (loaded: LearningState): LearningState => {
-    if (!loaded.roadmap[loaded.currentLessonId]?.skipped) return loaded
-    return {
-      ...loaded,
-      currentLessonId: adjacentActiveLessonId(loaded, loaded.currentLessonId) ?? loaded.currentLessonId,
-    }
-  }
   const parse = (raw: string | null): unknown => {
     if (!raw) return null
     try { return JSON.parse(raw) as unknown } catch { return null }
   }
-  const current = hydrateLearningState(parse(window.localStorage.getItem(storageKey)), initial)
-  if (current) return keepCurrentLessonActive(current)
+  const current = hydratePersistedDrafts(parse(window.localStorage.getItem(storageKey)), initial)
+  if (current) return current
 
   return initial
+}
+
+export function persistedLearningDrafts(state: LearningState) {
+  return {
+    version: state.version,
+    codeDraft: state.codeDraft,
+    codeNotes: state.codeNotes,
+    runResult: state.runResult,
+    evidence: state.evidence,
+    practice: state.practice,
+    mock: state.mock,
+  }
 }
 
 function LearningStateStore({ children, storageKey }: { children: ReactNode; storageKey: string }) {
   const [state, dispatch] = useReducer(learningReducer, storageKey, loadState)
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(state))
+    window.localStorage.setItem(storageKey, JSON.stringify(persistedLearningDrafts(state)))
   }, [state, storageKey])
   const value = useMemo(() => ({ state, dispatch }), [state])
   return <LearningContext.Provider value={value}>{children}</LearningContext.Provider>
@@ -478,13 +332,4 @@ export function useLearningState(): LearningContextValue {
 
 export function currentPracticeQuestion(state: LearningState) {
   return PRACTICE_QUESTIONS[state.practice.questionIndex] ?? PRACTICE_QUESTIONS[0]
-}
-
-export function currentRoadmapChoice(state: LearningState): RoadmapChoice {
-  return state.roadmap[CURRENT_LESSON_ID] ?? {
-    id: CURRENT_LESSON_ID,
-    depth: 'Implementation',
-    learnerState: 'partial',
-    skipped: false,
-  }
 }

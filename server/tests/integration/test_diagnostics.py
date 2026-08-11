@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, text
 
 from yuno.api.routes import diagnostics as diagnostics_routes
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
     EditorialApproval,
+    RelationType,
+    Topic,
+    TopicIdentity,
+    TopicRelation,
 )
 from yuno.modules.diagnostics.service import (
     create_diagnostic,
     record_diagnostic_failure,
 )
+from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.ids import new_id
@@ -34,6 +40,42 @@ def _seed_graph(uow_factory: UnitOfWorkFactory) -> tuple[str, str]:
                 created_at=timestamp,
                 published_at=timestamp,
                 supersedes_version_id=None,
+            )
+        )
+        for stable_id, layer in (
+            ("fixture-topic-alpha", "Essential"),
+            ("fixture-topic-beta", "Implementation"),
+        ):
+            uow.canonical.create_topic_identity(
+                TopicIdentity(
+                    stable_id=stable_id,
+                    stable_slug=stable_id,
+                    created_at=timestamp,
+                    retired_at=None,
+                )
+            )
+            uow.canonical.add_topic(
+                Topic(
+                    graph_version_id=graph_id,
+                    stable_id=stable_id,
+                    title=stable_id,
+                    subject="backend-engineering",
+                    scope_tags=("backend-engineering",),
+                    level_tag="Senior",
+                    target_capability="diagnose",
+                    recommended_layer=layer,
+                    checkpoint_start=30,
+                    checkpoint_end=60,
+                )
+            )
+        uow.canonical.add_relation(
+            TopicRelation(
+                id=new_id(),
+                graph_version_id=graph_id,
+                from_stable_id="fixture-topic-alpha",
+                to_stable_id="fixture-topic-beta",
+                relation_type=RelationType.PREREQUISITE,
+                rationale=None,
             )
         )
         uow.canonical.record_approval(
@@ -60,7 +102,10 @@ def _create(client: TestClient, graph_id: str, key: str) -> dict[str, object]:
             "target_level": "Senior",
             "target_capability": "diagnose",
             "graph_version_id": graph_id,
-            "setup_inputs": {"weekly_time": "4 hours"},
+            "setup_inputs": {
+                "weekly_time": "4 hours",
+                "goal_name": "Diagnose distributed systems",
+            },
         },
     )
     assert response.status_code == 201, response.text
@@ -263,12 +308,10 @@ def test_unexpected_answer_failure_persists_retryable_state_and_prior_answers(
     def fail_answer(*_args, **_kwargs):
         raise RuntimeError("injected diagnostic service failure")
 
-    monkeypatch.setattr(
-        diagnostics_routes, "append_diagnostic_answer", fail_answer
-    )
-    next_question_body = client.get(
-        f"/api/v1/diagnostics/{session_id}"
-    ).json()["next_question"]
+    monkeypatch.setattr(diagnostics_routes, "append_diagnostic_answer", fail_answer)
+    next_question_body = client.get(f"/api/v1/diagnostics/{session_id}").json()[
+        "next_question"
+    ]
     failed = client.post(
         f"/api/v1/diagnostics/{session_id}/answers",
         headers={"Idempotency-Key": "failing-answer"},
@@ -287,3 +330,223 @@ def test_unexpected_answer_failure_persists_retryable_state_and_prior_answers(
     assert [answer["answer"] for answer in persisted["answers"]] == [
         "A durable unique key decides duplicate delivery."
     ]
+
+
+def test_invalid_preview_replacement_rolls_back_to_last_valid_edits(
+    client: TestClient, uow_factory: UnitOfWorkFactory
+) -> None:
+    _, graph_id = _seed_graph(uow_factory)
+    created = _create(client, graph_id, "preview-validation-create")
+    session_id = str(created["id"])
+    skipped = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": "1"},
+        json={"action": "skip_diagnostic"},
+    ).json()
+    seed_skipped = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": str(skipped["row_version"])},
+        json={"action": "skip_notes"},
+    ).json()
+    opened = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": str(seed_skipped["row_version"])},
+        json={"action": "open_roadmap_preview"},
+    )
+    assert opened.status_code == 200, opened.text
+
+    valid = client.put(
+        f"/api/v1/diagnostics/{session_id}/roadmap-preview",
+        json={
+            "edits": [
+                {
+                    "topic_stable_id": "fixture-topic-alpha",
+                    "entry_type": "correction",
+                    "value": {"classification": "partial"},
+                    "reason": "I need more practice",
+                }
+            ]
+        },
+    )
+    assert valid.status_code == 200, valid.text
+    assert valid.json()["topic_recommendations"][0]["classification"] == "partial"
+
+    invalid = client.put(
+        f"/api/v1/diagnostics/{session_id}/roadmap-preview",
+        json={
+            "edits": [
+                {
+                    "entry_type": "order_constraint",
+                    "value": {
+                        "before_topic_id": "fixture-topic-beta",
+                        "after_topic_id": "fixture-topic-alpha",
+                    },
+                }
+            ]
+        },
+    )
+    assert invalid.status_code == 409
+    persisted = client.get(f"/api/v1/diagnostics/{session_id}/roadmap-preview").json()
+    assert persisted["saved_edits"] == valid.json()["saved_edits"]
+
+
+def test_confirm_goal_rolls_back_every_side_effect_then_succeeds_once(
+    client: TestClient,
+    uow_factory: UnitOfWorkFactory,
+    engine: Engine,
+    monkeypatch,
+) -> None:
+    owner_id, graph_id = _seed_graph(uow_factory)
+    created = _create(client, graph_id, "atomic-confirm-create")
+    session_id = str(created["id"])
+    skipped = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": "1"},
+        json={"action": "skip_diagnostic"},
+    ).json()
+    seed_skipped = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": str(skipped["row_version"])},
+        json={"action": "skip_notes"},
+    ).json()
+    previewed = client.patch(
+        f"/api/v1/diagnostics/{session_id}",
+        headers={"If-Match": str(seed_skipped["row_version"])},
+        json={"action": "open_roadmap_preview"},
+    )
+    assert previewed.status_code == 200, previewed.text
+    saved_preview = client.put(
+        f"/api/v1/diagnostics/{session_id}/roadmap-preview",
+        json={
+            "edits": [
+                {
+                    "topic_stable_id": "fixture-topic-alpha",
+                    "entry_type": "depth",
+                    "value": {"depth": "Production"},
+                    "reason": "Learner chose production depth",
+                },
+                {
+                    "topic_stable_id": "fixture-topic-alpha",
+                    "entry_type": "correction",
+                    "value": {"classification": "partial"},
+                    "reason": "Learner corrected the inference",
+                },
+            ]
+        },
+    )
+    assert saved_preview.status_code == 200, saved_preview.text
+
+    newer_graph_id = new_id()
+    timestamp = now_text(SystemClock())
+    with uow_factory() as uow:
+        uow.canonical.create_version(
+            CanonicalGraphVersion(
+                id=newer_graph_id,
+                version_label=f"diagnostics-newer-{newer_graph_id}",
+                manifest_version="v2",
+                manifest_hash=new_id(),
+                status=CanonicalVersionStatus.PUBLISHED,
+                creator_owner_id=owner_id,
+                created_at=timestamp,
+                published_at=timestamp,
+                supersedes_version_id=graph_id,
+            )
+        )
+        for stable_id, layer in (
+            ("fixture-topic-alpha", "Production"),
+            ("fixture-topic-beta", "Production"),
+        ):
+            uow.canonical.add_topic(
+                Topic(
+                    graph_version_id=newer_graph_id,
+                    stable_id=stable_id,
+                    title=f"newer-{stable_id}",
+                    subject="backend-engineering",
+                    scope_tags=("backend-engineering",),
+                    level_tag="Senior",
+                    target_capability="diagnose",
+                    recommended_layer=layer,
+                    checkpoint_start=30,
+                    checkpoint_end=60,
+                )
+            )
+        uow.canonical.record_approval(
+            EditorialApproval(
+                id=new_id(),
+                graph_version_id=newer_graph_id,
+                approver_owner_id=owner_id,
+                approver_role="designated_editorial_approver",
+                basis_ref="newer-graph-after-diagnostic-start",
+                approved_at=timestamp,
+            )
+        )
+        uow.commit()
+
+    def counts() -> dict[str, int]:
+        with engine.connect() as connection:
+            return {
+                table: connection.execute(
+                    text(f"SELECT count(*) FROM {table}")
+                ).scalar_one()
+                for table in (
+                    "goal_workspaces",
+                    "learning_states",
+                    "learner_corrections",
+                    "personal_overlays",
+                    "overlay_entries",
+                    "audit_events",
+                    "diagnostics_idempotency",
+                )
+            }
+
+    baseline = counts()
+    original_append = SqlAlchemyRoadmapRepository.append_overlay_entry
+
+    def fail_overlay(*_args, **_kwargs):
+        raise RuntimeError("injected overlay write failure")
+
+    monkeypatch.setattr(
+        SqlAlchemyRoadmapRepository, "append_overlay_entry", fail_overlay
+    )
+    failed = client.post(f"/api/v1/diagnostics/{session_id}/confirm-goal")
+    assert failed.status_code == 503, failed.text
+    assert failed.json()["current_state"] == "roadmap-preview"
+    after_failure = counts()
+    assert after_failure == baseline
+    assert after_failure["goal_workspaces"] == 0
+    with uow_factory() as uow:
+        profile = uow.profiles_goals.get_profile(owner_id)
+        session = uow.diagnostics.get_session(owner_id, session_id)
+        assert profile is not None and profile.current_goal_id is None
+        assert session is not None
+        assert session.state.value == "roadmap-preview"
+        assert session.confirmed_goal_id is None
+        assert len(uow.diagnostics.list_preview_edits(owner_id, session_id)) == 2
+
+    monkeypatch.setattr(
+        SqlAlchemyRoadmapRepository, "append_overlay_entry", original_append
+    )
+    confirmed = client.post(f"/api/v1/diagnostics/{session_id}/confirm-goal")
+    assert confirmed.status_code == 201, confirmed.text
+    goal = confirmed.json()
+    assert goal["graph_version_id"] == graph_id
+    with uow_factory() as uow:
+        states = uow.roadmap.list_learning_states(owner_id, goal["id"])
+        entries = uow.roadmap.list_overlay_entries(owner_id, goal["id"])
+        corrections = uow.roadmap.list_corrections(owner_id, goal["id"])
+        session = uow.diagnostics.get_session(owner_id, session_id)
+        assert len(states) == 2
+        assert {item.topic_stable_id for item in states} == {
+            "fixture-topic-alpha",
+            "fixture-topic-beta",
+        }
+        assert all(item.graph_version_id == graph_id for item in states)
+        assert len(entries) == 1
+        assert entries[0].value == {"depth": "Production"}
+        assert len(corrections) == 1
+        assert corrections[0].value == "partial"
+        assert session is not None and session.confirmed_goal_id == goal["id"]
+        assert session.state.value == "confirmed"
+
+    replay = client.post(f"/api/v1/diagnostics/{session_id}/confirm-goal")
+    assert replay.status_code == 409, replay.text

@@ -221,6 +221,53 @@
         "title": "CanonicalVersionSummaryResponse",
         "type": "object"
       },
+      "CorrectionType": {
+        "enum": [
+          "correction",
+          "confirmation",
+          "gap",
+          "transfer-confirmation"
+        ],
+        "title": "CorrectionType",
+        "type": "string"
+      },
+      "DepthOverrideRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "depth"
+        ],
+        "title": "DepthOverrideRequest",
+        "type": "object"
+      },
       "DiagnosticAction": {
         "enum": [
           "pause",
@@ -395,6 +442,48 @@
         ],
         "title": "DiagnosticPath",
         "type": "string"
+      },
+      "DiagnosticPreviewEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_type": {
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          },
+          "value": {
+            "additionalProperties": true,
+            "title": "Value",
+            "type": "object"
+          }
+        },
+        "required": [
+          "entry_type",
+          "value"
+        ],
+        "title": "DiagnosticPreviewEditRequest",
+        "type": "object"
       },
       "DiagnosticQuestionResponse": {
         "properties": {
@@ -614,6 +703,14 @@
             "title": "Projection Version",
             "type": "string"
           },
+          "saved_edits": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Saved Edits",
+            "type": "array"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -637,9 +734,24 @@
           "answer_count",
           "diagnostic_skipped",
           "projection_version",
-          "topic_recommendations"
+          "topic_recommendations",
+          "saved_edits"
         ],
         "title": "DiagnosticRoadmapPreviewResponse",
+        "type": "object"
+      },
+      "DiagnosticRoadmapPreviewUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticPreviewEditRequest"
+            },
+            "title": "Edits",
+            "type": "array"
+          }
+        },
+        "title": "DiagnosticRoadmapPreviewUpdateRequest",
         "type": "object"
       },
       "DiagnosticState": {
@@ -1089,6 +1201,39 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "LearnerCorrectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/LearningClassification"
+          },
+          "correction_type": {
+            "$ref": "#/components/schemas/CorrectionType",
+            "default": "correction"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "classification"
+        ],
+        "title": "LearnerCorrectionRequest",
+        "type": "object"
+      },
       "LearnerProfilePatchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1195,6 +1340,88 @@
         "title": "LearnerProfileResponse",
         "type": "object"
       },
+      "LearningClassification": {
+        "enum": [
+          "likely-known",
+          "partial",
+          "unverified",
+          "new"
+        ],
+        "title": "LearningClassification",
+        "type": "string"
+      },
+      "LearningStateResponse": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/LearningClassification"
+          },
+          "corrected_classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LearningClassification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "recommended_depth": {
+            "title": "Recommended Depth",
+            "type": "string"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "classification",
+          "origin",
+          "recommended_depth",
+          "explanation"
+        ],
+        "title": "LearningStateResponse",
+        "type": "object"
+      },
+      "OrderConstraintRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "after_topic_id": {
+            "title": "After Topic Id",
+            "type": "string"
+          },
+          "before_topic_id": {
+            "title": "Before Topic Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "before_topic_id",
+          "after_topic_id"
+        ],
+        "title": "OrderConstraintRequest",
+        "type": "object"
+      },
       "ResumeDestination": {
         "enum": [
           "/app/learn-roadmap",
@@ -1205,6 +1432,184 @@
         ],
         "title": "ResumeDestination",
         "type": "string"
+      },
+      "RoadmapMutationResponse": {
+        "properties": {
+          "checkpoint_saved": {
+            "default": true,
+            "title": "Checkpoint Saved",
+            "type": "boolean"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/RoadmapResponse"
+          }
+        },
+        "required": [
+          "projection"
+        ],
+        "title": "RoadmapMutationResponse",
+        "type": "object"
+      },
+      "RoadmapResponse": {
+        "properties": {
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "projection_version": {
+            "title": "Projection Version",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/RoadmapTopicResponse"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal_id",
+          "graph_version_id",
+          "projection_version",
+          "state",
+          "topics"
+        ],
+        "title": "RoadmapResponse",
+        "type": "object"
+      },
+      "RoadmapTopicResponse": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/LearningClassification"
+          },
+          "conflicts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "depth_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth Override"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "has_transferred_evidence": {
+            "title": "Has Transferred Evidence",
+            "type": "boolean"
+          },
+          "is_skipped": {
+            "title": "Is Skipped",
+            "type": "boolean"
+          },
+          "level_tag": {
+            "title": "Level Tag",
+            "type": "string"
+          },
+          "pending_proposals": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Pending Proposals",
+            "type": "array"
+          },
+          "recommended_depth": {
+            "title": "Recommended Depth",
+            "type": "string"
+          },
+          "scope_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope Tags",
+            "type": "array"
+          },
+          "stable_id": {
+            "title": "Stable Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "target_capability": {
+            "title": "Target Capability",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stable_id",
+          "title",
+          "subject",
+          "scope_tags",
+          "level_tag",
+          "target_capability",
+          "recommended_depth",
+          "depth_override",
+          "is_skipped",
+          "classification",
+          "explanation",
+          "has_transferred_evidence",
+          "pending_proposals",
+          "conflicts"
+        ],
+        "title": "RoadmapTopicResponse",
+        "type": "object"
+      },
+      "SkipDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "boolean"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "skipped"
+        ],
+        "title": "SkipDecisionRequest",
+        "type": "object"
       },
       "TargetCapability": {
         "enum": [
@@ -1376,6 +1781,46 @@
           }
         },
         "summary": "Post Diagnostic",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/diagnostics/active": {
+      "get": {
+        "description": "Return the server-persisted onboarding session, if one exists.\n\nThe client deliberately keeps no diagnostic identifier in browser\nstorage. A cleared browser therefore resumes from the same durable\nserver state instead of silently starting another onboarding flow.",
+        "operationId": "get_active_diagnostic_session_api_v1_diagnostics_active_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DiagnosticResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Active Diagnostic Session Api V1 Diagnostics Active Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Active Diagnostic Session",
         "tags": [
           "diagnostics"
         ]
@@ -1557,6 +2002,49 @@
         ]
       }
     },
+    "/api/v1/diagnostics/{session_id}/confirm-goal": {
+      "post": {
+        "description": "Atomically turn a persisted preview into a complete goal workspace.",
+        "operationId": "post_confirm_goal_api_v1_diagnostics__session_id__confirm_goal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Confirm Goal",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/api/v1/diagnostics/{session_id}/roadmap-preview": {
       "get": {
         "operationId": "get_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_get",
@@ -1594,6 +2082,56 @@
           }
         },
         "summary": "Get Roadmap Preview",
+        "tags": [
+          "diagnostics"
+        ]
+      },
+      "put": {
+        "operationId": "put_roadmap_preview_api_v1_diagnostics__session_id__roadmap_preview_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticRoadmapPreviewUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticRoadmapPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Put Roadmap Preview",
         "tags": [
           "diagnostics"
         ]
@@ -1870,6 +2408,366 @@
         "summary": "Post Archive Goal",
         "tags": [
           "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/corrections": {
+      "post": {
+        "operationId": "post_correction_api_v1_goals__goal_id__corrections_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearnerCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Correction",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/depth-overrides": {
+      "post": {
+        "operationId": "post_depth_api_v1_goals__goal_id__depth_overrides_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepthOverrideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Depth",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/learning-states": {
+      "get": {
+        "operationId": "get_learning_states_api_v1_goals__goal_id__learning_states_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LearningStateResponse"
+                  },
+                  "title": "Response Get Learning States Api V1 Goals  Goal Id  Learning States Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Learning States",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/order-constraints": {
+      "post": {
+        "operationId": "post_order_constraint_api_v1_goals__goal_id__order_constraints_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderConstraintRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Order Constraint",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/roadmap": {
+      "get": {
+        "operationId": "get_goal_roadmap_api_v1_goals__goal_id__roadmap_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Goal Roadmap",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/skip-decisions": {
+      "post": {
+        "operationId": "post_skip_api_v1_goals__goal_id__skip_decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoadmapMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Skip",
+        "tags": [
+          "roadmap"
         ]
       }
     },

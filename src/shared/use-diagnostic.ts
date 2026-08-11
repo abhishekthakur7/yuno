@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 
 import {
-  activeDiagnosticId,
+  activeDiagnosticQueryOptions,
   answerDiagnostic,
   createDiagnostic,
-  diagnosticQueryOptions,
-  forgetActiveDiagnostic,
+  confirmDiagnosticGoal,
   getDiagnosticRoadmapPreview,
   patchDiagnostic,
-  rememberActiveDiagnostic,
+  saveDiagnosticRoadmapPreview,
+  type DiagnosticPreviewEdit,
   type DiagnosticConfidence,
   type DiagnosticPatch,
   type DiagnosticSession,
@@ -18,13 +18,12 @@ import {
 
 export function useDiagnostic() {
   const queryClient = useQueryClient()
-  const [sessionId, setSessionId] = useState(activeDiagnosticId)
   const createIdempotencyKey = useRef(crypto.randomUUID())
-  const session = useQuery(diagnosticQueryOptions(sessionId))
+  const session = useQuery(activeDiagnosticQueryOptions())
+  const sessionId = session.data?.id ?? null
   const store = (updated: DiagnosticSession) => {
-    rememberActiveDiagnostic(updated.id)
-    setSessionId(updated.id)
     queryClient.setQueryData(['diagnostics', updated.id], updated)
+    queryClient.setQueryData(['diagnostics', 'active'], updated)
     return updated
   }
   const create = useMutation({
@@ -51,14 +50,28 @@ export function useDiagnostic() {
   const preview = useMutation({
     mutationFn: getDiagnosticRoadmapPreview,
     onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: ['diagnostics', sessionId] }),
+      void queryClient.invalidateQueries({ queryKey: ['diagnostics', 'active'] }),
+  })
+  const savePreview = useMutation({
+    mutationFn: ({ sessionId, edits }: { sessionId: string; edits: DiagnosticPreviewEdit[] }) =>
+      saveDiagnosticRoadmapPreview(sessionId, edits),
+  })
+  const confirm = useMutation({
+    mutationFn: async ({ session, edits }: { session: DiagnosticSession; edits: DiagnosticPreviewEdit[] }) => {
+      await saveDiagnosticRoadmapPreview(session.id, edits)
+      return confirmDiagnosticGoal(session.id)
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(['diagnostics', 'active'], null)
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+      void queryClient.invalidateQueries({ queryKey: ['goals'] })
+    },
   })
   const clear = () => {
-    forgetActiveDiagnostic()
-    setSessionId(null)
+    queryClient.setQueryData(['diagnostics', 'active'], null)
   }
 
-  return { session, sessionId, create, patch, answer, preview, clear }
+  return { session, sessionId, create, patch, answer, preview, savePreview, confirm, clear }
 }
 
-export type { DiagnosticConfidence, DiagnosticSetup }
+export type { DiagnosticConfidence, DiagnosticPreviewEdit, DiagnosticSetup }

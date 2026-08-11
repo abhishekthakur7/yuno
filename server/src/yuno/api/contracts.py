@@ -28,6 +28,7 @@ from yuno.modules.profiles_goals.domain import (
     TargetCapability,
     TargetLevel,
 )
+from yuno.modules.roadmap.domain import CorrectionType, LearningClassification
 from yuno.shared.application.jobs import JobRef, JobStatus
 
 
@@ -208,6 +209,88 @@ class DiagnosticRoadmapPreviewResponse(BaseModel):
     diagnostic_skipped: bool
     projection_version: str
     topic_recommendations: list[dict[str, object]]
+    saved_edits: list[dict[str, object]]
+
+
+class RoadmapTopicResponse(BaseModel):
+    stable_id: str
+    title: str
+    subject: str
+    scope_tags: list[str]
+    level_tag: str
+    target_capability: str
+    recommended_depth: str
+    depth_override: str | None
+    is_skipped: bool
+    classification: LearningClassification
+    explanation: str
+    has_transferred_evidence: bool
+    pending_proposals: list[dict[str, object]]
+    conflicts: list[dict[str, object]]
+
+
+class RoadmapResponse(BaseModel):
+    goal_id: str
+    graph_version_id: str
+    projection_version: str
+    state: str
+    topics: list[RoadmapTopicResponse]
+
+
+class LearningStateResponse(BaseModel):
+    topic_stable_id: str
+    classification: LearningClassification
+    origin: str
+    recommended_depth: str
+    explanation: str
+    corrected_classification: LearningClassification | None = None
+
+
+class RoadmapMutationResponse(BaseModel):
+    projection: RoadmapResponse
+    checkpoint_saved: bool = True
+
+
+class LearnerCorrectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_stable_id: str
+    classification: LearningClassification
+    correction_type: CorrectionType = CorrectionType.CORRECTION
+    reason: str | None = None
+
+
+class OrderConstraintRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    before_topic_id: str
+    after_topic_id: str
+    reason: str | None = None
+
+
+class SkipDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_stable_id: str
+    skipped: bool
+    reason: str | None = None
+
+
+class DepthOverrideRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_stable_id: str
+    depth: str | None
+    reason: str | None = None
+
+
+class DiagnosticPreviewEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_stable_id: str | None = None
+    entry_type: str
+    value: dict[str, object]
+    reason: str | None = None
+
+
+class DiagnosticRoadmapPreviewUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    edits: list[DiagnosticPreviewEditRequest] = Field(default_factory=list)
 
 
 class CanonicalVersionSummaryResponse(BaseModel):
