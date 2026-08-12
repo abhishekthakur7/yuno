@@ -34,13 +34,6 @@ export function topicLayersQueryOptions(goalId: string | null, topicId: string |
       }
       return data
     },
-    refetchInterval: (query) => {
-      const layers = query.state.data?.layers ?? []
-      return layers.some(layer => {
-        const generation = layer.generation
-        return layer.state === 'generating' || generation?.status === 'queued' || generation?.status === 'running'
-      }) ? 1_000 : false
-    },
   })
 }
 

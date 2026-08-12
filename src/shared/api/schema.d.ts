@@ -279,6 +279,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Events */
+        get: operations["get_events_api_v1_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/evidence/{evidence_id}": {
         parameters: {
             query?: never;
@@ -1104,6 +1121,108 @@ export interface paths {
         put?: never;
         /** Post Interview Retry */
         post: operations["post_interview_retry_api_v1_interview_runs__run_id__retry_evaluation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_v1_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_v1_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job Attempts */
+        get: operations["get_job_attempts_api_v1_jobs__job_id__attempts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Job */
+        post: operations["cancel_job_api_v1_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconcile Job */
+        post: operations["reconcile_job_api_v1_jobs__job_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Job */
+        post: operations["retry_job_api_v1_jobs__job_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2245,29 +2364,135 @@ export interface components {
          * @enum {string}
          */
         InterviewTurnKind: "question" | "answer" | "hint" | "follow-up";
+        /** JobAttemptResponse */
+        JobAttemptResponse: {
+            /** Attempt Number */
+            attempt_number: number;
+            /** Confirmation Ref */
+            confirmation_ref: string | null;
+            /** Diagnostic */
+            diagnostic: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Outcome */
+            outcome: string | null;
+            /** Pgid */
+            pgid: number | null;
+            /** Pid */
+            pid: number | null;
+            /** Process Identity */
+            process_identity: string | null;
+            /** Started At */
+            started_at: string;
+            /** Substitution Ref */
+            substitution_ref: string | null;
+            /** Temp Path */
+            temp_path: string | null;
+        };
+        /** JobEventResponse */
+        JobEventResponse: {
+            /** Correlation Id */
+            correlation_id: string;
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string;
+            /** Goal Id */
+            goal_id: string | null;
+            /** Job Id */
+            job_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Progress */
+            progress: string | null;
+            /** Request Id */
+            request_id: string;
+            /** Result Ref */
+            result_ref: string | null;
+            /** Retryable */
+            retryable: boolean;
+            /** Run Id */
+            run_id: string | null;
+            state: components["schemas"]["JobStatus"];
+            /** Timestamp */
+            timestamp: string;
+        };
+        /**
+         * JobLane
+         * @enum {string}
+         */
+        JobLane: "interactive" | "background";
+        /** JobListResponse */
+        JobListResponse: {
+            /** Background Age Promotion Seconds */
+            background_age_promotion_seconds: number;
+            /** Janitor Retention Seconds */
+            janitor_retention_seconds: number;
+            /** Jobs */
+            jobs: components["schemas"]["JobRefResponse"][];
+            /** Pending Job Cap */
+            pending_job_cap: number;
+        };
         /**
          * JobRefResponse
          * @description The `202` response for an asynchronous operation.
          */
         JobRefResponse: {
             /**
+             * Attempt
+             * @default 0
+             */
+            attempt: number;
+            /**
              * Deduplicated
              * @default false
              */
             deduplicated: boolean;
+            /** Diagnostic */
+            diagnostic?: string | null;
             /** Enqueued At */
             enqueued_at: string;
+            /** Goal Id */
+            goal_id?: string | null;
             /** Job Id */
             job_id: string;
             /** Kind */
             kind: string;
+            lane?: components["schemas"]["JobLane"] | null;
+            /** Result Hash */
+            result_hash?: string | null;
+            /** Result Ref */
+            result_ref?: string | null;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /** Started At */
+            started_at?: string | null;
             status: components["schemas"]["JobStatus"];
+            /** Substitution Ref */
+            substitution_ref?: string | null;
+            /** Terminal At */
+            terminal_at?: string | null;
+        };
+        /** JobRetryRequest */
+        JobRetryRequest: {
+            /** Confirmation Ref */
+            confirmation_ref?: string | null;
+            /** Substitution Ref */
+            substitution_ref?: string | null;
         };
         /**
          * JobStatus
          * @enum {string}
          */
-        JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancel-requested" | "cancelled";
         /** LayerGenerationResponse */
         LayerGenerationResponse: {
             /** Failure Reference */
@@ -3677,6 +3902,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosticRoadmapPreviewResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_events_api_v1_events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobEventResponse"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Default Response */
@@ -5629,6 +5886,194 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_jobs_api_v1_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobListResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_job_api_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_job_attempts_api_v1_jobs__job_id__attempts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAttemptResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_job_api_v1_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reconcile_job_api_v1_jobs__job_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_job_api_v1_jobs__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobRetryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

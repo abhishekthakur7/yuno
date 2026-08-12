@@ -72,11 +72,18 @@ def get_goal_progress(
     values = {
         name: {
             **getattr(result, name).__dict__,
-            "supporting_evidence_refs": list(getattr(result, name).supporting_evidence_refs),
+            "supporting_evidence_refs": list(
+                getattr(result, name).supporting_evidence_refs
+            ),
         }
         for name in ("coverage", "proficiency", "retention", "readiness")
     }
-    return GoalProgressResponse(**values, rule_version=result.rule_version, effective_now=result.effective_now, input_hash=result.input_hash)
+    return GoalProgressResponse(
+        **values,
+        rule_version=result.rule_version,
+        effective_now=result.effective_now,
+        input_hash=result.input_hash,
+    )
 
 
 @router.get(
@@ -92,16 +99,25 @@ def get_learning_state_explanations(
     result = get_derived_progress(uow, owner_id, goal_id, clock=clock)
     uow.commit()
     states = [
-        {**item.__dict__, "supporting_evidence_refs": list(item.supporting_evidence_refs)}
+        {
+            **item.__dict__,
+            "supporting_evidence_refs": list(item.supporting_evidence_refs),
+        }
         for item in result.learning_states
     ]
     return LearningStateExplanationsResponse(
-        learning_states=states, rule_version=result.rule_version, effective_now=result.effective_now,
+        learning_states=states,
+        rule_version=result.rule_version,
+        effective_now=result.effective_now,
         input_hash=result.input_hash,
     )
 
 
-@router.post("/goals/{goal_id}/evidence", response_model=EvidenceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/goals/{goal_id}/evidence",
+    response_model=EvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def post_evidence(
     goal_id: str,
     body: EvidenceCreateRequest,
@@ -174,7 +190,9 @@ def post_assess(
         },
         "run_id": body.run_id,
     }
-    ref = dispatcher.enqueue(JobRequest("assess_evidence", owner_id, payload, evidence.id, key))
+    ref = dispatcher.enqueue(
+        JobRequest("assess_evidence", owner_id, payload, evidence.id, key)
+    )
     return accepted_job(ref)
 
 
@@ -184,10 +202,16 @@ def get_assessment_record(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
 ) -> AssessmentResponse:
-    return assessment_response(uow, owner_id, get_assessment(uow, owner_id, assessment_id))
+    return assessment_response(
+        uow, owner_id, get_assessment(uow, owner_id, assessment_id)
+    )
 
 
-@router.post("/assessments/{assessment_id}/disputes", response_model=AssessmentDisputeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/assessments/{assessment_id}/disputes",
+    response_model=AssessmentDisputeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def post_dispute(
     assessment_id: str,
     body: AssessmentDisputeRequest,
@@ -197,11 +221,19 @@ def post_dispute(
 ) -> AssessmentDisputeResponse:
     request_data = body.model_dump(mode="json")
     operation = f"dispute_assessment:{assessment_id}"
-    prior = _prior(uow, owner_id, operation, key, request_data, AssessmentDisputeResponse)
+    prior = _prior(
+        uow, owner_id, operation, key, request_data, AssessmentDisputeResponse
+    )
     if prior is not None:
         return prior
     dispute = create_dispute(uow, owner_id, assessment_id, body.reason)
-    response = AssessmentDisputeResponse(**{field: value for field, value in dispute.__dict__.items() if field not in {"owner_id", "resolved_at", "resolution_note"}})
+    response = AssessmentDisputeResponse(
+        **{
+            field: value
+            for field, value in dispute.__dict__.items()
+            if field not in {"owner_id", "resolved_at", "resolution_note"}
+        }
+    )
     _store(uow, owner_id, operation, key, request_data, response)
     uow.commit()
     return response
@@ -232,7 +264,11 @@ def post_reevaluate(
             )
         if prior.completed:
             return accepted_job(
-                JobRef(**JobRefResponse.model_validate_json(prior.response_json).model_dump())
+                JobRef(
+                    **JobRefResponse.model_validate_json(
+                        prior.response_json
+                    ).model_dump()
+                )
             )
         request = (
             uow.evidence.get_reevaluation_request(owner_id, prior.request_ref)
@@ -250,8 +286,15 @@ def post_reevaluate(
         # redispatch it if enqueue fails.
         uow.evidence.add_idempotency(
             EvidenceEvaluationIdempotencyRecord(
-                new_id(), owner_id, operation, key, request_hash, "{}",
-                now_text(SystemClock()), request.id, False,
+                new_id(),
+                owner_id,
+                operation,
+                key,
+                request_hash,
+                "{}",
+                now_text(SystemClock()),
+                request.id,
+                False,
             )
         )
         uow.commit()
@@ -278,7 +321,13 @@ def post_reevaluate(
             request.requested_at,
             deduplicated=True,
         )
-    response = JobRefResponse(job_id=ref.job_id, kind=ref.kind, status=ref.status, enqueued_at=ref.enqueued_at, deduplicated=ref.deduplicated)
+    response = JobRefResponse(
+        job_id=ref.job_id,
+        kind=ref.kind,
+        status=ref.status,
+        enqueued_at=ref.enqueued_at,
+        deduplicated=ref.deduplicated,
+    )
     uow.evidence.complete_idempotency(
         owner_id, operation, key, response.model_dump_json()
     )
@@ -286,25 +335,41 @@ def post_reevaluate(
     return accepted_job(ref)
 
 
-def run_assessment_job(request: JobRequest, uow_factory: UnitOfWorkFactory, adapter: EvaluationAdapter) -> None:
+def run_assessment_job(
+    request: JobRequest, uow_factory: UnitOfWorkFactory, adapter: EvaluationAdapter
+):
     raw = dict(request.payload["evaluation_request"])
     raw["assumptions"] = tuple(raw["assumptions"])
     raw["source_refs"] = tuple(raw["source_refs"])
     raw["provenance_refs"] = tuple(raw["provenance_refs"])
     with uow_factory() as uow:
-        perform_assessment(uow, adapter, request.owner_id, EvaluationRequest(**raw), run_id=request.payload.get("run_id"))
+        assessment = perform_assessment(
+            uow,
+            adapter,
+            request.owner_id,
+            EvaluationRequest(**raw),
+            run_id=request.payload.get("run_id"),
+        )
         uow.commit()
+        return assessment
 
 
-def run_reevaluation_job(request: JobRequest, uow_factory: UnitOfWorkFactory, adapter: EvaluationAdapter) -> None:
+def run_reevaluation_job(
+    request: JobRequest, uow_factory: UnitOfWorkFactory, adapter: EvaluationAdapter
+):
     request_id = str(request.payload["request_id"])
     try:
         with uow_factory() as uow:
-            complete_reevaluation(uow, adapter, request.owner_id, request_id)
+            assessment = complete_reevaluation(
+                uow, adapter, request.owner_id, request_id
+            )
             uow.commit()
+            return assessment
     except Exception:
         with uow_factory() as uow:
-            fail_reevaluation(uow, request.owner_id, request_id, f"reevaluation:{request_id}")
+            fail_reevaluation(
+                uow, request.owner_id, request_id, f"reevaluation:{request_id}"
+            )
             uow.commit()
         raise
 
@@ -319,14 +384,40 @@ def _evidence_response(
     )
 
 
-def _prior[ResponseModel: BaseModel](uow: EvidenceUnitOfWork, owner_id: str, operation: str, key: str, request: dict[str, object], response_type: type[ResponseModel]) -> ResponseModel | None:
+def _prior[ResponseModel: BaseModel](
+    uow: EvidenceUnitOfWork,
+    owner_id: str,
+    operation: str,
+    key: str,
+    request: dict[str, object],
+    response_type: type[ResponseModel],
+) -> ResponseModel | None:
     prior = uow.evidence.get_idempotency(owner_id, operation, key)
     if prior is None:
         return None
     if prior.request_hash != hash_payload(request):
-        raise IdempotencyConflictError("The Idempotency-Key was reused with a different evidence/evaluation request.")
+        raise IdempotencyConflictError(
+            "The Idempotency-Key was reused with a different evidence/evaluation request."
+        )
     return response_type.model_validate_json(prior.response_json)
 
 
-def _store(uow: EvidenceUnitOfWork, owner_id: str, operation: str, key: str, request: dict[str, object], response: BaseModel) -> None:
-    uow.evidence.add_idempotency(EvidenceEvaluationIdempotencyRecord(new_id(), owner_id, operation, key, hash_payload(request), response.model_dump_json(), now_text(SystemClock())))
+def _store(
+    uow: EvidenceUnitOfWork,
+    owner_id: str,
+    operation: str,
+    key: str,
+    request: dict[str, object],
+    response: BaseModel,
+) -> None:
+    uow.evidence.add_idempotency(
+        EvidenceEvaluationIdempotencyRecord(
+            new_id(),
+            owner_id,
+            operation,
+            key,
+            hash_payload(request),
+            response.model_dump_json(),
+            now_text(SystemClock()),
+        )
+    )

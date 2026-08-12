@@ -5,6 +5,7 @@ import { isAppPageId, isInterviewMode, type InterviewMode, type InterviewSelecti
 import { LearningStateProvider } from '../shared/state'
 import { queryClient } from './query-client'
 import { useProfileGoals } from '../shared/use-profile-goals'
+import { JobEventsProvider } from '../shared/job-events'
 import './root.css'
 
 function MissingRoute() {
@@ -60,7 +61,7 @@ declare module '@tanstack/react-router' {
 export function AppRouter() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <JobEventsProvider><RouterProvider router={router} /></JobEventsProvider>
     </QueryClientProvider>
   )
 }

@@ -648,6 +648,7 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
                 },
             )
             uow.commit()
+            return uow.learning_content.get_artifact(owner_id, artifact.id)
     except Exception as exc:
         with uow_factory() as uow:
             artifact = uow.learning_content.get_artifact(owner_id, attempt.artifact_id)

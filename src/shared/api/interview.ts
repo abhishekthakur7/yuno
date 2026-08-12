@@ -35,7 +35,6 @@ export const mockRunQueryOptions = (runId: string | null) => queryOptions({
     if (error || !data || data.mode !== 'Mock') failure(error, response.status, 'The Mock run could not be loaded.')
     return data
   },
-  refetchInterval: query => ['follow-up', 'completing'].includes((query.state.data as MockRun | undefined)?.state ?? '') ? 500 : false,
 })
 
 export async function createMockRun(body: MockRunCreate) {
@@ -92,7 +91,6 @@ export const practiceRunQueryOptions = (runId: string | null) => queryOptions({
     if (error || !data || data.mode !== 'Practice') failure(error, response.status, 'The Practice run could not be loaded.')
     return data
   },
-  refetchInterval: query => ['submitted', 'evaluating'].includes(query.state.data?.state ?? '') ? 500 : false,
 })
 
 export async function createPracticeRun(body: PracticeRunCreate) {

@@ -66,7 +66,7 @@ from yuno.modules.roadmap.domain import (
     OverlayProposalType,
 )
 from yuno.modules.settings_data.domain import ProgressDisplay
-from yuno.shared.application.jobs import JobRef, JobStatus
+from yuno.shared.application.jobs import JobLane, JobRef, JobStatus
 
 
 class FieldError(BaseModel):
@@ -254,7 +254,12 @@ class MockRunResponse(BaseModel):
     bundle_item_id: str
     mode: Literal["Mock"]
     state: Literal[
-        "ready", "answering", "follow-up", "paused", "completing", "completed",
+        "ready",
+        "answering",
+        "follow-up",
+        "paused",
+        "completing",
+        "completed",
         "failed-recoverable",
     ]
     question: str
@@ -276,6 +281,60 @@ class JobRefResponse(BaseModel):
     status: JobStatus
     enqueued_at: str
     deduplicated: bool = False
+    lane: JobLane | None = None
+    retryable: bool = False
+    goal_id: str | None = None
+    schema_version: str = "1"
+    attempt: int = 0
+    diagnostic: str | None = None
+    started_at: str | None = None
+    terminal_at: str | None = None
+    substitution_ref: str | None = None
+    result_ref: str | None = None
+    result_hash: str | None = None
+
+
+class JobAttemptResponse(BaseModel):
+    attempt_number: int
+    process_identity: str | None
+    pid: int | None
+    pgid: int | None
+    temp_path: str | None
+    started_at: str
+    ended_at: str | None
+    outcome: str | None
+    diagnostic: str | None
+    substitution_ref: str | None
+    confirmation_ref: str | None
+
+
+class JobListResponse(BaseModel):
+    jobs: list[JobRefResponse]
+    pending_job_cap: int
+    background_age_promotion_seconds: int
+    janitor_retention_seconds: int
+
+
+class JobRetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    substitution_ref: str | None = None
+    confirmation_ref: str | None = None
+
+
+class JobEventResponse(BaseModel):
+    event_id: str
+    job_id: str
+    owner_id: str
+    goal_id: str | None
+    state: JobStatus
+    event_type: str
+    timestamp: str
+    progress: str | None
+    result_ref: str | None
+    retryable: bool
+    request_id: str
+    correlation_id: str
+    run_id: str | None
 
 
 class HealthResponse(BaseModel):
@@ -1104,5 +1163,16 @@ def accepted_job(job_ref: JobRef) -> JSONResponse:
         status=job_ref.status,
         enqueued_at=job_ref.enqueued_at,
         deduplicated=job_ref.deduplicated,
+        lane=job_ref.lane,
+        retryable=job_ref.retryable,
+        goal_id=job_ref.goal_id,
+        schema_version=job_ref.schema_version,
+        attempt=job_ref.attempt,
+        diagnostic=job_ref.diagnostic,
+        started_at=job_ref.started_at,
+        terminal_at=job_ref.terminal_at,
+        substitution_ref=job_ref.substitution_ref,
+        result_ref=job_ref.result_ref,
+        result_hash=job_ref.result_hash,
     )
     return JSONResponse(status_code=202, content=body.model_dump(mode="json"))

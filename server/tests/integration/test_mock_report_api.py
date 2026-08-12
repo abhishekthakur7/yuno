@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from tests.integration.test_mock_api import _arrange
+from tests.job_assertions import wait_for_job
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -136,6 +137,7 @@ def _complete(client, run_id: str, answer: str, key: str):
         json={"draft": answer},
     )
     assert response.status_code == 202, response.text
+    wait_for_job(client, response)
     report = client.get(f"/api/v1/interview-runs/{run_id}/report")
     assert report.status_code == 200, report.text
     return report.json()

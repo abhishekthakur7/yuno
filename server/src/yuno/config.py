@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./yuno.db"
     owner_display_name: str = "Local owner"
     overlay_proposal_pending_cap: int = 25
+    pending_job_cap: int = 100
+    background_job_age_promotion_seconds: int = 300
+    job_janitor_retention_seconds: int = 86400
 
 
 @lru_cache

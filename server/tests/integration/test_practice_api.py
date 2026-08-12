@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from tests.integration.test_interview_api import _create_goal
+from tests.job_assertions import wait_for_job
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -227,6 +228,7 @@ def test_practice_feedback_and_adaptive_follow_up_exist_only_after_explicit_acti
         json={"answer": "Fixture-v0 first answer."},
     )
     assert submitted.status_code == 202, submitted.text
+    wait_for_job(client, submitted)
     assert {"feedback", "facts", "trade_offs", "results"}.isdisjoint(
         set(_walk_keys(submitted.json()))
     )
@@ -274,6 +276,7 @@ def test_practice_repair_appends_byte_exact_answers_and_turns_are_db_immutable(
         json={"answer": first_text},
     )
     assert first.status_code == 202, first.text
+    wait_for_job(client, first)
     after_first = client.get(f"/api/v1/interview-runs/{run_id}").json()
     first_turn = _turns(after_first, "answer")[0]
     assert first_turn["body"] == first_text
@@ -284,6 +287,7 @@ def test_practice_repair_appends_byte_exact_answers_and_turns_are_db_immutable(
         json={"answer": second_text},
     )
     assert second.status_code == 202, second.text
+    wait_for_job(client, second)
     after_second = client.get(f"/api/v1/interview-runs/{run_id}").json()
     answers = _turns(after_second, "answer")
     assert len(answers) == 2
@@ -359,7 +363,7 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
         json={"answer": failed_body},
     )
     assert failed_job.status_code == 202, failed_job.text
-    assert failed_job.json()["status"] == "failed"
+    wait_for_job(client, failed_job, "failed")
     failed_run = client.get(f"/api/v1/interview-runs/{failed_run_id}").json()
     failed_attempt = _turns(failed_run, "answer")[0]
     assert failed_run["state"] == "failed-recoverable"
@@ -373,7 +377,7 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
         headers={"Idempotency-Key": "practice-fixture-v0-retry"},
     )
     assert retried.status_code == 202, retried.text
-    assert retried.json()["status"] == "succeeded"
+    wait_for_job(client, retried)
     recovered = client.get(f"/api/v1/interview-runs/{failed_run_id}").json()
     assert recovered["state"] == "feedback-ready"
     assert [(turn["id"], turn["body"]) for turn in _turns(recovered, "answer")] == [

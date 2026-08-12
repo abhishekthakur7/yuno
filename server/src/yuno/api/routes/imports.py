@@ -121,7 +121,9 @@ def post_import_parse(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
 ):
-    return _enqueue_import_job(uow, dispatcher, owner_id, import_id, "parse_import", key)
+    return _enqueue_import_job(
+        uow, dispatcher, owner_id, import_id, "parse_import", key
+    )
 
 
 @router.get(
@@ -139,7 +141,9 @@ def get_import_statements(
     ]
 
 
-@router.patch("/import-statements/{statement_id}", response_model=ImportStatementResponse)
+@router.patch(
+    "/import-statements/{statement_id}", response_model=ImportStatementResponse
+)
 def patch_import_statement(
     statement_id: str,
     body: ImportStatementPatchRequest,
@@ -182,19 +186,17 @@ def post_import_statement_map(
 
     operation = f"map_statement:{statement_id}"
     request = {**body.model_dump(mode="json"), "expected_version": expected}
-    prior = _prior(
-        uow, owner_id, operation, key, request, ImportStatementMapResponse
-    )
+    prior = _prior(uow, owner_id, operation, key, request, ImportStatementMapResponse)
     if prior is not None:
         return prior
     mapping, topic_hash = map_statement(
-            uow,
-            owner_id,
-            statement_id,
-            goal_id=body.goal_id,
-            topic_stable_id=body.topic_id,
-            expected_version=expected,
-        )
+        uow,
+        owner_id,
+        statement_id,
+        goal_id=body.goal_id,
+        topic_stable_id=body.topic_id,
+        expected_version=expected,
+    )
     statement = uow.imports.get_statement(owner_id, statement_id)
     assert statement is not None
     response = ImportStatementMapResponse(
@@ -274,13 +276,15 @@ def post_import_reprocess(
     )
 
 
-def run_import_parse_job(request: JobRequest, uow_factory: UnitOfWorkFactory) -> None:
-    """Run parsing in its own UoW and persist a retryable failed state."""
+def run_import_parse_job(request: JobRequest, uow_factory: UnitOfWorkFactory):
+    """Parse an import and persist a recoverable failure state."""
     import_id = str(request.payload["import_id"])
     try:
         with uow_factory() as uow:
             parse_import(uow, request.owner_id, import_id)
+            record = get_import(uow, request.owner_id, import_id)
             uow.commit()
+            return record
     except Exception:
         with uow_factory() as failure_uow:
             record = get_import(failure_uow, request.owner_id, import_id)
@@ -314,7 +318,6 @@ def _enqueue_import_job(
     if prior is not None:
         return accepted_job(_job_ref(prior))
 
-    # The durable state transition commits before crossing the job/external seam.
     mark_import_parsing(uow, owner_id, import_id)
     uow.commit()
     ref = dispatcher.enqueue(
@@ -324,6 +327,7 @@ def _enqueue_import_job(
             payload=request_data,
             dedupe_key=import_id,
             idempotency_key=key,
+            request_ref=f"ImportRecord:{import_id}",
         )
     )
     response = JobRefResponse(
@@ -456,11 +460,7 @@ def _statement_response(
         row_version=statement.row_version,
         created_at=statement.created_at,
         updated_at=statement.updated_at,
-        mapping=(
-            _mapping_response(mapping)
-            if mapping is not None
-            else None
-        ),
+        mapping=(_mapping_response(mapping) if mapping is not None else None),
     )
 
 

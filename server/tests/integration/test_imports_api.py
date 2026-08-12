@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
 from tests.integration.test_learning_content_api import _seed
+from tests.job_assertions import wait_for_job
 from yuno.api.routes import imports as imports_routes
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 
@@ -59,7 +60,7 @@ def test_import_api_preserves_original_lists_parses_and_guards_statement_writes(
     )
     assert parsed.status_code == 202, parsed.text
     assert parsed.json()["kind"] == "parse_import"
-    assert parsed.json()["status"] == "succeeded"
+    wait_for_job(client, parsed)
 
     parsed_replay = client.post(
         f"/api/v1/imports/{created['id']}/parse",
@@ -134,7 +135,7 @@ def test_failed_parse_preserves_original_and_can_retry(
         headers={"Idempotency-Key": "parse-fails"},
     )
     assert failed.status_code == 202
-    assert failed.json()["status"] == "failed"
+    wait_for_job(client, failed, "failed")
     after_failure = client.get(f"/api/v1/imports/{created['id']}").json()
     assert after_failure["status"] == "failed"
     assert after_failure["failure_code"] == "import_parse_failed"
@@ -146,7 +147,7 @@ def test_failed_parse_preserves_original_and_can_retry(
         headers={"Idempotency-Key": "parse-retry"},
     )
     assert retried.status_code == 202
-    assert retried.json()["status"] == "succeeded"
+    wait_for_job(client, retried)
     assert client.get(f"/api/v1/imports/{created['id']}").json()["status"] == (
         "parsed-untrusted"
     )
@@ -170,6 +171,7 @@ def test_map_response_exposes_atomic_topic_imports_hash(
         headers={"Idempotency-Key": "parse-mapped"},
     )
     assert parsed.status_code == 202
+    wait_for_job(client, parsed)
     statement = client.get(
         f"/api/v1/imports/{created['id']}/statements"
     ).json()[0]

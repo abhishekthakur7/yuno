@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import text
 
 from tests.integration.test_learning_content_api import _seed
+from tests.job_assertions import wait_for_job
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -36,16 +37,21 @@ class FakeEvaluationAdapter:
         del request
         unresolved = self.ambiguity
         return EvaluationResult(
-            state=AssessmentState.AMBIGUITY_UNRESOLVED if unresolved else AssessmentState.FEEDBACK_READY,
+            state=AssessmentState.AMBIGUITY_UNRESOLVED
+            if unresolved
+            else AssessmentState.FEEDBACK_READY,
             dimensions=(
                 EvaluationDimensionResult(
                     "reasoning",
-                    DimensionOutcome.AMBIGUITY_UNRESOLVED if unresolved else DimensionOutcome.PASS,
+                    DimensionOutcome.AMBIGUITY_UNRESOLVED
+                    if unresolved
+                    else DimensionOutcome.PASS,
                     "The stated assumptions support this outcome.",
                     ("evidence:answer",),
                 ),
                 EvaluationDimensionResult(
-                    "trade-offs", DimensionOutcome.TRADE_OFF,
+                    "trade-offs",
+                    DimensionOutcome.TRADE_OFF,
                     "The alternative is defensible and its consequence is explicit.",
                     ("evidence:answer",),
                 ),
@@ -53,7 +59,9 @@ class FakeEvaluationAdapter:
             facts=("The invariant is maintained.",),
             trade_offs=("This choice exchanges throughput for simpler ordering.",),
             citations=("source:fixture",),
-            ambiguities=("The workload distribution is unspecified.",) if unresolved else (),
+            ambiguities=("The workload distribution is unspecified.",)
+            if unresolved
+            else (),
             feedback="A defensible solution with assumptions and consequences separated from facts.",
             cross_question_candidate=None,
             revision_invitation="Clarify the workload if it becomes available.",
@@ -68,20 +76,65 @@ def _arrange(uow_factory: UnitOfWorkFactory):
         owner = uow.owners.get_local_owner()
         assert owner is not None
         timestamp = now_text(SystemClock())
-        rubric = Rubric(new_id(), owner.id, "fixture-task", "implement", "backend", "senior", "fixture-v0", RubricStatus.FIXTURE, "IDK-204 test fixture", timestamp)
+        rubric = Rubric(
+            new_id(),
+            owner.id,
+            "fixture-task",
+            "implement",
+            "backend",
+            "senior",
+            "fixture-v0",
+            RubricStatus.FIXTURE,
+            "IDK-204 test fixture",
+            timestamp,
+        )
         dimensions = (
-            RubricDimension(new_id(), rubric.id, "reasoning", "Reasoning", "Correct reasoning under stated assumptions.", 1, "Accept multiple defensible approaches."),
-            RubricDimension(new_id(), rubric.id, "trade-offs", "Trade-offs", "Consequences are explicit.", 2, "Separate trade-offs from factual corrections."),
+            RubricDimension(
+                new_id(),
+                rubric.id,
+                "reasoning",
+                "Reasoning",
+                "Correct reasoning under stated assumptions.",
+                1,
+                "Accept multiple defensible approaches.",
+            ),
+            RubricDimension(
+                new_id(),
+                rubric.id,
+                "trade-offs",
+                "Trade-offs",
+                "Consequences are explicit.",
+                2,
+                "Separate trade-offs from factual corrections.",
+            ),
         )
         uow.evidence.add_rubric(rubric, dimensions)
         evidence = create_evidence(
-            uow, owner.id, goal_id, topic_stable_id=topic_id,
-            evidence_type="answer", capability="implement", summary="Queue design",
-            origin="learner-submit", content="Use a ring buffer; assumes bounded capacity.",
+            uow,
+            owner.id,
+            goal_id,
+            topic_stable_id=topic_id,
+            evidence_type="answer",
+            capability="implement",
+            summary="Queue design",
+            origin="learner-submit",
+            content="Use a ring buffer; assumes bounded capacity.",
             content_version="v1",
         )
         uow.commit()
-    request = EvaluationRequest(evidence.id, "fixture-task", rubric.id, rubric.version, ("Capacity is bounded.",), "implement", ("source:fixture",), ("fixture:v0",), "backend", "senior", "static")
+    request = EvaluationRequest(
+        evidence.id,
+        "fixture-task",
+        rubric.id,
+        rubric.version,
+        ("Capacity is bounded.",),
+        "implement",
+        ("source:fixture",),
+        ("fixture:v0",),
+        "backend",
+        "senior",
+        "static",
+    )
     return owner.id, evidence, rubric, request
 
 
@@ -117,9 +170,7 @@ def test_evidence_requires_an_active_goal_and_nonblank_payload(
     )
     assert archived.status_code == 200, archived.text
 
-    with uow_factory() as uow, pytest.raises(
-        ConflictError, match="active goal"
-    ):
+    with uow_factory() as uow, pytest.raises(ConflictError, match="active goal"):
         create_evidence(
             uow,
             owner.id,
@@ -142,7 +193,9 @@ def test_reevaluation_creates_a_linear_successor_and_excludes_only_the_tip_atomi
     adapter = FakeEvaluationAdapter()
     with uow_factory() as uow:
         first = perform_assessment(uow, adapter, owner_id, evaluation_request)
-        dispute = create_dispute(uow, owner_id, first.id, "My bounded-capacity assumption was overlooked.")
+        dispute = create_dispute(
+            uow, owner_id, first.id, "My bounded-capacity assumption was overlooked."
+        )
         reevaluation = request_reevaluation(uow, owner_id, first.id, dispute.id)
         uow.commit()
 
@@ -153,19 +206,32 @@ def test_reevaluation_creates_a_linear_successor_and_excludes_only_the_tip_atomi
     with uow_factory() as uow:
         preserved_first = uow.evidence.get_assessment(owner_id, first.id)
         preserved_second = uow.evidence.get_assessment(owner_id, second.id)
-        assert preserved_first is not None and preserved_first.derivation_excluded is True
-        assert preserved_second is not None and preserved_second.derivation_excluded is False
+        assert (
+            preserved_first is not None and preserved_first.derivation_excluded is True
+        )
+        assert (
+            preserved_second is not None
+            and preserved_second.derivation_excluded is False
+        )
         assert preserved_second.predecessor_assessment_id == first.id
         assert preserved_first.feedback == first.feedback
-        assert uow.evidence.get_payload(owner_id, evidence.goal_id, evidence.id) is not None
+        assert (
+            uow.evidence.get_payload(owner_id, evidence.goal_id, evidence.id)
+            is not None
+        )
         with pytest.raises(ConflictError, match="active assessment tip"):
             request_reevaluation(uow, owner_id, first.id, dispute.id)
 
     with engine.begin() as connection:
         with pytest.raises(Exception, match="successor-backed derivation exclusion"):
-            connection.execute(text("UPDATE assessments SET feedback='rewritten' WHERE id=:id"), {"id": second.id})
+            connection.execute(
+                text("UPDATE assessments SET feedback='rewritten' WHERE id=:id"),
+                {"id": second.id},
+            )
         with pytest.raises(Exception, match="immutable"):
-            connection.execute(text("DELETE FROM assessments WHERE id=:id"), {"id": first.id})
+            connection.execute(
+                text("DELETE FROM assessments WHERE id=:id"), {"id": first.id}
+            )
 
 
 def test_invalid_or_incomplete_evaluation_result_is_never_persisted(
@@ -177,7 +243,9 @@ def test_invalid_or_incomplete_evaluation_result_is_never_persisted(
     class MissingDimensionAdapter(FakeEvaluationAdapter):
         def evaluate(self, request: EvaluationRequest) -> EvaluationResult:
             result = super().evaluate(request)
-            return EvaluationResult(**{**result.__dict__, "dimensions": result.dimensions[:1]})
+            return EvaluationResult(
+                **{**result.__dict__, "dimensions": result.dimensions[:1]}
+            )
 
     with (
         uow_factory() as uow,
@@ -186,7 +254,12 @@ def test_invalid_or_incomplete_evaluation_result_is_never_persisted(
         perform_assessment(uow, MissingDimensionAdapter(), owner_id, evaluation_request)
 
     with uow_factory() as uow:
-        assert uow.evidence.get_active_assessment_for_evidence(owner_id, evaluation_request.evidence_id) is None
+        assert (
+            uow.evidence.get_active_assessment_for_evidence(
+                owner_id, evaluation_request.evidence_id
+            )
+            is None
+        )
 
 
 def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
@@ -200,9 +273,13 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         f"/api/v1/goals/{goal_id}/evidence",
         headers={"Idempotency-Key": "evidence-api"},
         json={
-            "topic_stable_id": topic_id, "evidence_type": "answer", "capability": "implement",
-            "summary": "Alternative answer", "origin": "learner-submit",
-            "content": "Use two stacks; amortized dequeue is acceptable.", "content_version": "v1",
+            "topic_stable_id": topic_id,
+            "evidence_type": "answer",
+            "capability": "implement",
+            "summary": "Alternative answer",
+            "origin": "learner-submit",
+            "content": "Use two stacks; amortized dequeue is acceptable.",
+            "content_version": "v1",
         },
     )
     assert submitted.status_code == 201, submitted.text
@@ -211,9 +288,13 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         f"/api/v1/goals/{goal_id}/evidence",
         headers={"Idempotency-Key": "evidence-api"},
         json={
-            "topic_stable_id": topic_id, "evidence_type": "answer", "capability": "implement",
-            "summary": "Alternative answer", "origin": "learner-submit",
-            "content": "Use two stacks; amortized dequeue is acceptable.", "content_version": "v1",
+            "topic_stable_id": topic_id,
+            "evidence_type": "answer",
+            "capability": "implement",
+            "summary": "Alternative answer",
+            "origin": "learner-submit",
+            "content": "Use two stacks; amortized dequeue is acceptable.",
+            "content_version": "v1",
         },
     )
     assert submitted_replay.json() == submitted.json()
@@ -221,8 +302,12 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         f"/api/v1/goals/{goal_id}/evidence",
         headers={"Idempotency-Key": "evidence-api"},
         json={
-            "topic_stable_id": topic_id, "evidence_type": "answer", "capability": "implement",
-            "summary": "Changed", "origin": "learner-submit", "content": "Different",
+            "topic_stable_id": topic_id,
+            "evidence_type": "answer",
+            "capability": "implement",
+            "summary": "Changed",
+            "origin": "learner-submit",
+            "content": "Different",
             "content_version": "v1",
         },
     )
@@ -231,34 +316,50 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         f"/api/v1/evidence/{evidence_id}/assess",
         headers={"Idempotency-Key": "assess-api"},
         json={
-            "rubric_id": rubric.id, "rubric_version": rubric.version,
-            "task_ref": "fixture-task", "assumptions": ["Amortized cost is acceptable."],
-            "requested_capability": "implement", "source_refs": ["source:fixture"],
-            "provenance_refs": ["fixture:v0"], "role": "backend", "level": "senior",
+            "rubric_id": rubric.id,
+            "rubric_version": rubric.version,
+            "task_ref": "fixture-task",
+            "assumptions": ["Amortized cost is acceptable."],
+            "requested_capability": "implement",
+            "source_refs": ["source:fixture"],
+            "provenance_refs": ["fixture:v0"],
+            "role": "backend",
+            "level": "senior",
             "evaluation_method": "static",
         },
     )
     assert assessed.status_code == 202, assessed.text
-    assert assessed.json()["status"] == "succeeded"
+    assert assessed.json()["status"] == "queued"
+    wait_for_job(client, assessed)
     with uow_factory() as uow:
         owner = uow.owners.get_local_owner()
         assert owner is not None
-        assessment = uow.evidence.get_active_assessment_for_evidence(owner.id, evidence_id)
+        assessment = uow.evidence.get_active_assessment_for_evidence(
+            owner.id, evidence_id
+        )
         assert assessment is not None
     response = client.get(f"/api/v1/assessments/{assessment.id}")
     assert response.status_code == 200
     assert response.json()["state"] == "ambiguity-unresolved"
-    assert {item["dimension_id"] for item in response.json()["dimensions"]} == {"reasoning", "trade-offs"}
+    assert {item["dimension_id"] for item in response.json()["dimensions"]} == {
+        "reasoning",
+        "trade-offs",
+    }
 
     # Replay preserves the response; changed idempotency bodies conflict.
     replay = client.post(
         f"/api/v1/evidence/{evidence_id}/assess",
         headers={"Idempotency-Key": "assess-api"},
         json={
-            "rubric_id": rubric.id, "rubric_version": rubric.version,
-            "task_ref": "fixture-task", "assumptions": ["Amortized cost is acceptable."],
-            "requested_capability": "implement", "source_refs": ["source:fixture"],
-            "provenance_refs": ["fixture:v0"], "role": "backend", "level": "senior",
+            "rubric_id": rubric.id,
+            "rubric_version": rubric.version,
+            "task_ref": "fixture-task",
+            "assumptions": ["Amortized cost is acceptable."],
+            "requested_capability": "implement",
+            "source_refs": ["source:fixture"],
+            "provenance_refs": ["fixture:v0"],
+            "role": "backend",
+            "level": "senior",
             "evaluation_method": "static",
         },
     )
@@ -269,49 +370,66 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         f"/api/v1/evidence/{evidence_id}/assess",
         headers={"Idempotency-Key": "assess-api"},
         json={
-            "rubric_id": rubric.id, "rubric_version": rubric.version,
-            "task_ref": "changed", "assumptions": [], "requested_capability": "implement",
-            "source_refs": [], "provenance_refs": [], "evaluation_method": "static",
+            "rubric_id": rubric.id,
+            "rubric_version": rubric.version,
+            "task_ref": "changed",
+            "assumptions": [],
+            "requested_capability": "implement",
+            "source_refs": [],
+            "provenance_refs": [],
+            "evaluation_method": "static",
         },
     )
     assert conflict.status_code == 409
 
     dispute = client.post(
         f"/api/v1/assessments/{assessment.id}/disputes",
-        headers={"Idempotency-Key": "dispute-api"}, json={"reason": "Please revisit ambiguity."},
+        headers={"Idempotency-Key": "dispute-api"},
+        json={"reason": "Please revisit ambiguity."},
     )
     assert dispute.status_code == 201
     dispute_replay = client.post(
         f"/api/v1/assessments/{assessment.id}/disputes",
-        headers={"Idempotency-Key": "dispute-api"}, json={"reason": "Please revisit ambiguity."},
+        headers={"Idempotency-Key": "dispute-api"},
+        json={"reason": "Please revisit ambiguity."},
     )
     assert dispute_replay.json() == dispute.json()
     dispute_conflict = client.post(
         f"/api/v1/assessments/{assessment.id}/disputes",
-        headers={"Idempotency-Key": "dispute-api"}, json={"reason": "Different reason."},
+        headers={"Idempotency-Key": "dispute-api"},
+        json={"reason": "Different reason."},
     )
     assert dispute_conflict.status_code == 409
 
     reevaluated = client.post(
         f"/api/v1/assessments/{assessment.id}/reevaluate",
-        headers={"Idempotency-Key": "reevaluate-api"}, json={"dispute_id": dispute.json()["id"]},
+        headers={"Idempotency-Key": "reevaluate-api"},
+        json={"dispute_id": dispute.json()["id"]},
     )
     assert reevaluated.status_code == 202
+    wait_for_job(client, reevaluated)
     reevaluation_replay = client.post(
         f"/api/v1/assessments/{assessment.id}/reevaluate",
-        headers={"Idempotency-Key": "reevaluate-api"}, json={"dispute_id": dispute.json()["id"]},
+        headers={"Idempotency-Key": "reevaluate-api"},
+        json={"dispute_id": dispute.json()["id"]},
     )
-    assert reevaluation_replay.json() == reevaluated.json()
+    assert reevaluation_replay.json()["job_id"] == reevaluated.json()["job_id"]
     reevaluation_conflict = client.post(
         f"/api/v1/assessments/{assessment.id}/reevaluate",
-        headers={"Idempotency-Key": "reevaluate-api"}, json={"dispute_id": "different"},
+        headers={"Idempotency-Key": "reevaluate-api"},
+        json={"dispute_id": "different"},
     )
     assert reevaluation_conflict.status_code == 409
     with uow_factory() as uow:
         owner = uow.owners.get_local_owner()
         assert owner is not None
-        actions = {(event.entity_id, event.action) for event in uow.audit.list_for_owner(owner.id)}
-        request_row = uow.evidence.get_reevaluation_for_dispute(owner.id, dispute.json()["id"])
+        actions = {
+            (event.entity_id, event.action)
+            for event in uow.audit.list_for_owner(owner.id)
+        }
+        request_row = uow.evidence.get_reevaluation_for_dispute(
+            owner.id, dispute.json()["id"]
+        )
         assert request_row is not None
         assert request_row.job_id == reevaluated.json()["job_id"]
         assert (request_row.id, "requested") in actions
@@ -329,9 +447,7 @@ def test_evidence_reads_link_active_assessment_and_dispute_reevaluation_history(
         dispute = create_dispute(
             uow, owner_id, assessment.id, "The assumption needs another review."
         )
-        reevaluation = request_reevaluation(
-            uow, owner_id, assessment.id, dispute.id
-        )
+        reevaluation = request_reevaluation(uow, owner_id, assessment.id, dispute.id)
         uow.commit()
 
     evidence_list = client.get(f"/api/v1/goals/{evidence.goal_id}/evidence")
@@ -466,9 +582,7 @@ def test_reevaluation_retry_redispatches_a_durable_request_after_enqueue_failure
             uow, owner_id, assessment.id, "Changed request body."
         )
         uow.commit()
-    changed = client.post(
-        path, headers=headers, json={"dispute_id": second_dispute.id}
-    )
+    changed = client.post(path, headers=headers, json={"dispute_id": second_dispute.id})
     assert changed.status_code == 409
 
     recovered = client.post(path, headers=headers, json=body)
@@ -479,13 +593,18 @@ def test_reevaluation_retry_redispatches_a_durable_request_after_enqueue_failure
         durable_id,
     ]
     with uow_factory() as uow:
-        assert len(
-            [
-                item
-                for item in (uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id),)
-                if item is not None
-            ]
-        ) == 1
+        assert (
+            len(
+                [
+                    item
+                    for item in (
+                        uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id),
+                    )
+                    if item is not None
+                ]
+            )
+            == 1
+        )
 
 
 def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
@@ -501,17 +620,23 @@ def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
         uow.commit()
 
     with uow_factory() as uow:
+
         def fail_terminal(*_args, **_kwargs):
             raise RuntimeError("forced terminal write failure")
 
-        monkeypatch.setattr(type(uow.evidence), "update_reevaluation_request", fail_terminal)
+        monkeypatch.setattr(
+            type(uow.evidence), "update_reevaluation_request", fail_terminal
+        )
         with pytest.raises(RuntimeError, match="forced terminal"):
             complete_reevaluation(uow, adapter, owner_id, request.id)
 
     with uow_factory() as uow:
         preserved = uow.evidence.get_assessment(owner_id, first.id)
         assert preserved is not None and not preserved.derivation_excluded
-        assert uow.evidence.get_active_assessment_for_evidence(owner_id, evidence.id).id == first.id
+        assert (
+            uow.evidence.get_active_assessment_for_evidence(owner_id, evidence.id).id
+            == first.id
+        )
 
     monkeypatch.undo()
     with uow_factory() as uow:
@@ -520,8 +645,21 @@ def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
         uow.commit()
 
     with engine.begin() as connection:
-        connection.execute(text("INSERT INTO evidence_tombstones (evidence_id,owner_id,goal_id,delete_operation_id,reason,tombstoned_at) VALUES (:e,:o,:g,'fixture-delete','test',:at)"), {"e": evidence.id, "o": owner_id, "g": evidence.goal_id, "at": now_text(SystemClock())})
-        connection.execute(text("DELETE FROM evidence_payloads WHERE evidence_id=:e"), {"e": evidence.id})
+        connection.execute(
+            text(
+                "INSERT INTO evidence_tombstones (evidence_id,owner_id,goal_id,delete_operation_id,reason,tombstoned_at) VALUES (:e,:o,:g,'fixture-delete','test',:at)"
+            ),
+            {
+                "e": evidence.id,
+                "o": owner_id,
+                "g": evidence.goal_id,
+                "at": now_text(SystemClock()),
+            },
+        )
+        connection.execute(
+            text("DELETE FROM evidence_payloads WHERE evidence_id=:e"),
+            {"e": evidence.id},
+        )
     with uow_factory() as uow, pytest.raises(ConflictError, match="Tombstoned"):
         perform_assessment(uow, adapter, owner_id, evaluation_request)
 
@@ -529,7 +667,12 @@ def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
         engine.begin() as connection,
         pytest.raises(Exception, match="invalid reevaluation request mutation"),
     ):
-        connection.execute(text("UPDATE reevaluation_requests SET failure_reference='rewrite' WHERE id=:id"), {"id": request.id})
+        connection.execute(
+            text(
+                "UPDATE reevaluation_requests SET failure_reference='rewrite' WHERE id=:id"
+            ),
+            {"id": request.id},
+        )
 
     with (
         engine.begin() as connection,
@@ -541,5 +684,8 @@ def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
         )
 
     with uow_factory() as uow:
-        actions = {(event.entity_id, event.action) for event in uow.audit.list_for_owner(owner_id)}
+        actions = {
+            (event.entity_id, event.action)
+            for event in uow.audit.list_for_owner(owner_id)
+        }
         assert (request.id, "requested") in actions

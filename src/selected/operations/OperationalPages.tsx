@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import {
   AlertTriangle,
@@ -31,6 +31,8 @@ import { useReviewPreferences } from '../../shared/use-notebook-review'
 import { useEvidence } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
 import type { ReviewPreferencesPatch } from '../../shared/api/notebook-review'
+import { cancelJob, jobsQueryOptions, retryJob } from '../../shared/api/jobs'
+import { JobConnectionStatus } from '../../shared/job-events'
 import './operations.css'
 
 export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'search' | 'jobs' | 'settings'
@@ -220,6 +222,7 @@ export function ImportsPage() {
     {!currentGoal ? <div className="so-empty"><FileText size={28} /><h2>Select a current goal first</h2><p>Imports need a goal so every mapping can be checked against that goal’s approved graph.</p></div> : <>
       <section className="so-panel so-import-box"><label htmlFor="so-import-source"><span className="so-kicker">New original</span><strong>Paste Markdown or plain text</strong></label><label>Format<select value={importType} onChange={(event) => setImportType(event.target.value as 'markdown' | 'plain_text')}><option value="markdown">Markdown</option><option value="plain_text">Plain text</option></select></label><textarea id="so-import-source" value={source} onChange={(event) => setSource(event.target.value)} placeholder={'# Messaging notes\n- SQS may redeliver messages.'} /><div className="so-inline-actions"><span>The exact text is immutable after saving.</span><Button disabled={!source || workspace.create.isPending || workspace.parse.isPending} onClick={() => void saveAndParse()}><Import size={17} /> {workspace.create.isPending || workspace.parse.isPending ? 'Saving and queueing…' : 'Save and queue parse'}</Button></div>{(workspace.create.isError || workspace.parse.isError) && <p className="so-error" role="alert">The original or parse job could not be saved. Review the text and retry.</p>}</section>
       {job && <div className="so-decision-banner" aria-live="polite"><Clock3 size={18} /><div><strong>Parse job {job.status}</strong><p>Job {job.job_id} ({job.kind}) was accepted at {job.enqueued_at}{job.deduplicated ? ' and matched an existing active job' : ''}. This receipt does not claim parsing completed.</p></div><Button tone="secondary" onClick={() => void workspace.refreshSelected()}>Refresh import</Button></div>}
+      <JobConnectionStatus ids={[job?.job_id]} />
       {workspace.imports.isPending ? <div className="so-empty"><Clock3 size={28} /><h2>Loading imports…</h2></div> : workspace.imports.isError ? <div className="so-empty"><AlertTriangle size={28} /><h2>Imports unavailable</h2><p>No local fixture was substituted.</p><Button tone="secondary" onClick={() => void workspace.imports.refetch()}>Retry</Button></div> : imports.length === 0 ? <div className="so-empty"><FileText size={28} /><h2>No imports yet</h2><p>Save an exact original above to queue server-side parsing.</p></div> : <>
         <section className="so-panel so-import-picker"><label htmlFor="so-import-picker"><span className="so-kicker">Saved originals</span><strong>Choose an import to inspect</strong></label><select id="so-import-picker" value={selectedImportId ?? ''} onChange={(event) => { setSelectedImportId(event.target.value); setJob(null) }}>{imports.map(item => <option key={item.id} value={item.id}>{item.import_type} · {item.status} · {item.original_hash.slice(0, 12)}</option>)}</select></section>
         {workspace.selectedImport.isPending ? <div className="so-empty"><Clock3 size={28} /><h2>Loading preserved original…</h2></div> : workspace.selectedImport.isError || !selected ? <div className="so-empty"><AlertTriangle size={28} /><h2>Original unavailable</h2><Button tone="secondary" onClick={() => void workspace.selectedImport.refetch()}>Retry</Button></div> : <section className="so-panel so-import-original"><div className="so-panel-head"><div><FileText size={20} /><h2>Preserved original</h2></div><span className={`so-chip ${selected.status === 'failed' || selected.status === 'cancelled' ? 'so-chip--amber' : 'so-chip--gray'}`}>{selected.status}</span></div><textarea readOnly aria-label="Preserved original text" value={selected.original_content} /><dl className="so-facts"><dt>SHA-256</dt><dd>{selected.original_hash}</dd><dt>Parser</dt><dd>{selected.parser_version ?? 'Not parsed yet'}</dd><dt>Failure</dt><dd>{selected.failure_code ? `${selected.failure_code}${selected.failure_reference ? ` · ${selected.failure_reference}` : ''}` : 'None reported'}</dd></dl><div className="so-inline-actions"><span>Original content remains inspectable even if parsing fails.</span>{selected.status === 'failed' || selected.status === 'cancelled' ? <Button tone="secondary" disabled={workspace.parse.isPending} onClick={() => workspace.parse.mutate(selected.id, { onSuccess: setJob })}>Retry parse</Button> : <Button tone="secondary" disabled={workspace.reprocess.isPending} onClick={() => workspace.reprocess.mutate(selected.id, { onSuccess: setJob })}>Reprocess unmapped</Button>}</div></section>}
@@ -286,11 +289,25 @@ function SearchPage({ navigate }: { navigate: Navigate }) {
   </>
 }
 
-function JobsPage() {
+export function JobsPage() {
+  const queryClient = useQueryClient()
+  const jobs = useQuery(jobsQueryOptions())
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+  const cancel = useMutation({ mutationFn: cancelJob, onSuccess: refresh })
+  const retry = useMutation({ mutationFn: retryJob, onSuccess: refresh })
+  const [substitutionRef, setSubstitutionRef] = useState('')
+  const [confirmationRef, setConfirmationRef] = useState('')
+  const records = jobs.data?.jobs ?? []
+  const activeJobIds = records.filter(job => ['queued', 'running', 'cancel-requested'].includes(job.status)).map(job => job.job_id)
   return <>
-    <PageHead eyebrow="Operations" title="Jobs and local activity" description="There is no worker, durable queue, SSE stream, provider process, or runner connected to this application prototype." />
-    <div className="so-hard-disclosure"><ShieldAlert size={24} /><div><strong>No live job system is connected</strong><p>This page does not invent job records or imply that checking, generation, importing, or indexing ran outside the browser.</p></div></div>
-    <section className="so-panel"><div className="so-panel-head"><div><span className="so-kicker">Connection status</span><h2>Unavailable by design</h2></div><span>Local prototype boundary</span></div><div className="so-connection-grid"><article><span className="so-status-dot is-off" /><div><strong>Worker and durable queue</strong><p>Not connected; no job records are available.</p></div></article><article><span className="so-status-dot is-off" /><div><strong>SSE or polling</strong><p>Not connected; no status feed exists.</p></div></article><article><span className="so-status-dot is-off" /><div><strong>Model provider</strong><p>Not configured or invoked.</p></div></article><article><span className="so-status-dot is-off" /><div><strong>Java runner</strong><p>No compile or test process exists.</p></div></article></div></section>
+    <PageHead eyebrow="Operations" title="Jobs and local activity" description="Inspect the durable interactive and background lanes, retry recoverable failures, and cancel active work." />
+    <JobConnectionStatus ids={activeJobIds} always />
+    {jobs.isError && <RegionFailure label="Jobs" retry={() => void jobs.refetch()} />}
+    {jobs.data && <div className="so-hard-disclosure"><Clock3 size={24} /><div><strong>Durable worker connected</strong><p>Pending cap {jobs.data.pending_job_cap}; background work promotes after {jobs.data.background_age_promotion_seconds} seconds. Live updates reconcile against authoritative job reads.</p></div></div>}
+    <section className="so-panel"><div className="so-panel-head"><div><span className="so-kicker">Two reserved lanes</span><h2>{records.length} persisted job{records.length === 1 ? '' : 's'}</h2></div><span>Interactive + background</span></div>
+      {(cancel.isError || retry.isError) && <p className="so-error" role="alert">The job action failed. Review the diagnostic and required retry inputs, then try again.</p>}
+      {jobs.isLoading ? <p>Loading jobs…</p> : records.length === 0 ? <div className="so-empty"><Clock3 size={29} /><h2>No jobs yet</h2><p>Generation, evaluation, imports, and indexing appear here when queued.</p></div> : <div className="so-results">{records.map((job) => <article key={job.job_id}><span className="so-chip">{job.lane ?? 'background'}</span><strong>{job.kind}</strong><p><span aria-hidden="true">●</span> {job.status}</p><small>{job.job_id}</small><dl className="so-facts"><dt>Attempt</dt><dd>{job.attempt}</dd><dt>Started</dt><dd>{job.started_at ?? 'Not started'}</dd><dt>Terminal</dt><dd>{job.terminal_at ?? 'Not terminal'}</dd><dt>Result</dt><dd>{job.result_ref ?? 'None'}</dd><dt>Hash</dt><dd>{job.result_hash ?? 'None'}</dd><dt>Diagnostic</dt><dd>{job.diagnostic ?? 'None'}</dd></dl>{job.status === 'failed' && job.retryable && <><label>Substitution reference<input value={substitutionRef} onChange={(event) => setSubstitutionRef(event.target.value)} placeholder="Required for interview-turn retries" /></label><label>Fresh confirmation reference<input value={confirmationRef} onChange={(event) => setConfirmationRef(event.target.value)} placeholder="Required for runner retries" /></label></>}<div>{['queued', 'running', 'cancel-requested'].includes(job.status) && <Button tone="secondary" onClick={() => cancel.mutate(job.job_id)}>Cancel</Button>}{job.status === 'failed' && job.retryable && <Button tone="secondary" onClick={() => retry.mutate({ jobId: job.job_id, substitutionRef: substitutionRef || null, confirmationRef: confirmationRef || null })}>Retry</Button>}</div></article>)}</div>}
+    </section>
   </>
 }
 

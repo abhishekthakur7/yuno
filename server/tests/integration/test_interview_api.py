@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi.testclient import TestClient
 
+from tests.job_assertions import wait_for_job
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -220,7 +221,7 @@ def _generate_interview_refresher(
         headers={"Idempotency-Key": key},
     )
     assert response.status_code == 202, response.text
-    assert response.json()["status"] == "succeeded"
+    wait_for_job(client, response)
     layer = client.get(f"/api/v1/goals/{goal_id}/topics/{topic_id}/layers/Interview")
     assert layer.status_code == 200, layer.text
     artifact_id = layer.json()["artifact_id"]

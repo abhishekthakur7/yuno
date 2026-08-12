@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.job_assertions import wait_for_job
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -226,7 +227,7 @@ def test_ready_cache_hit_and_provenance_apis_retain_unavailable_sources(
 
     first = _generate(client, goal_id, topic_id, key="generate-ready-1")
     assert first.status_code == 202, first.text
-    assert first.json()["status"] == "succeeded"
+    wait_for_job(client, first)
     assert adapter.calls == 1
     completion_replay = _generate(client, goal_id, topic_id, key="generate-ready-1")
     assert completion_replay.status_code == 202
@@ -339,6 +340,7 @@ def test_personalization_and_provider_changes_surface_stale_without_swapping_bod
     client.app.state.generation_adapter = adapter
     generated = _generate(client, goal_id, topic_id, key="generate-stale")
     assert generated.status_code == 202
+    wait_for_job(client, generated)
     baseline = _essential_layer(client, goal_id, topic_id)
     artifact_id = baseline["artifact_id"]
 
@@ -396,12 +398,9 @@ def test_correction_and_learning_state_changes_mark_stale_without_swapping_body(
     )
     adapter = FakeGenerationAdapter("Body baked before correction.", source_id)
     client.app.state.generation_adapter = adapter
-    assert (
-        _generate(
-            client, goal_id, topic_id, key="generate-before-correction"
-        ).status_code
-        == 202
-    )
+    generated = _generate(client, goal_id, topic_id, key="generate-before-correction")
+    assert generated.status_code == 202
+    wait_for_job(client, generated)
     baseline = _essential_layer(client, goal_id, topic_id)
 
     correction = client.post(
@@ -440,9 +439,9 @@ def test_key_changing_generation_keeps_prior_body_visible_during_new_failure_and
     )
     original_adapter = FakeGenerationAdapter("Prior ready body.", source_id)
     client.app.state.generation_adapter = original_adapter
-    assert (
-        _generate(client, goal_id, topic_id, key="old-key-generate").status_code == 202
-    )
+    generated = _generate(client, goal_id, topic_id, key="old-key-generate")
+    assert generated.status_code == 202
+    wait_for_job(client, generated)
     prior = _essential_layer(client, goal_id, topic_id)
     prior_artifact_id = prior["artifact_id"]
 
@@ -484,7 +483,7 @@ def test_key_changing_generation_keeps_prior_body_visible_during_new_failure_and
         thread.join(timeout=5)
     assert not thread.is_alive()
     assert responses[0].status_code == 202
-    assert responses[0].json()["status"] == "failed"
+    wait_for_job(client, responses[0], "failed")
 
     after = _essential_layer(client, goal_id, topic_id)
     assert after["state"] == "stale"
@@ -520,9 +519,9 @@ def test_explicit_regeneration_swaps_only_after_success_and_failure_keeps_prior_
     )
     adapter = FakeGenerationAdapter("Original cached body.", source_id)
     client.app.state.generation_adapter = adapter
-    assert (
-        _generate(client, goal_id, topic_id, key="generate-original").status_code == 202
-    )
+    generated = _generate(client, goal_id, topic_id, key="generate-original")
+    assert generated.status_code == 202
+    wait_for_job(client, generated)
     original = _essential_layer(client, goal_id, topic_id)
 
     adapter.body = "Explicitly regenerated body."
@@ -531,7 +530,7 @@ def test_explicit_regeneration_swaps_only_after_success_and_failure_keeps_prior_
         headers={"Idempotency-Key": "regenerate-success"},
     )
     assert succeeded.status_code == 202
-    assert succeeded.json()["status"] == "succeeded"
+    wait_for_job(client, succeeded)
     regenerated = _essential_layer(client, goal_id, topic_id)
     assert regenerated["artifact_id"] == original["artifact_id"]
     assert regenerated["markdown"] == adapter.body
@@ -543,7 +542,7 @@ def test_explicit_regeneration_swaps_only_after_success_and_failure_keeps_prior_
         headers={"Idempotency-Key": "regenerate-failure"},
     )
     assert failed.status_code == 202
-    assert failed.json()["status"] == "failed"
+    wait_for_job(client, failed, "failed")
     preserved = _essential_layer(client, goal_id, topic_id)
     assert preserved["artifact_id"] == regenerated["artifact_id"]
     assert preserved["markdown"] == regenerated["markdown"]
@@ -590,6 +589,7 @@ def test_two_concurrent_generate_calls_single_flight_to_one_persisted_attempt(
     assert second.status_code == 202
     assert second.json()["job_id"] == first_response.json()["job_id"]
     assert second.json()["deduplicated"] is True
+    wait_for_job(client, first_response)
     assert adapter.calls == 1
 
     first_replay = _generate(client, goal_id, topic_id, key="concurrent-a")
@@ -641,6 +641,8 @@ def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
     )
     assert essential.status_code == production.status_code == 202
     assert essential.json()["job_id"] != production.json()["job_id"]
+    wait_for_job(client, essential)
+    wait_for_job(client, production)
     assert adapter.calls == 2
     with engine.connect() as connection:
         rows = connection.execute(
@@ -687,7 +689,7 @@ def test_invalid_generation_result_rolls_back_artifact_snapshot_claims_and_citat
     client.app.state.generation_adapter = adapter
     response = _generate(client, goal_id, topic_id, key="atomic-rollback")
     assert response.status_code == 202
-    assert response.json()["status"] == "failed"
+    wait_for_job(client, response, "failed")
     layer = _essential_layer(client, goal_id, topic_id)
     assert layer["markdown"] is None
     assert layer["state"] in {"absent", "unavailable"}
@@ -725,9 +727,9 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
     )
     valid = FakeGenerationAdapter("Prior validated body.", source_id)
     client.app.state.generation_adapter = valid
-    assert (
-        _generate(client, goal_id, topic_id, key="quarantine-valid").status_code == 202
-    )
+    generated = _generate(client, goal_id, topic_id, key="quarantine-valid")
+    assert generated.status_code == 202
+    wait_for_job(client, generated)
     prior = _essential_layer(client, goal_id, topic_id)
     with engine.connect() as connection:
         prior_counts = {
@@ -757,7 +759,7 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
         headers={"Idempotency-Key": "quarantine-invalid"},
     )
     assert response.status_code == 202
-    assert response.json()["status"] == "failed"
+    wait_for_job(client, response, "failed")
 
     visible = _essential_layer(client, goal_id, topic_id)
     assert visible["artifact_id"] == prior["artifact_id"]
@@ -835,12 +837,9 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
     )
     adapter = FakeGenerationAdapter("Citation guard fixture body.", source_id)
     client.app.state.generation_adapter = adapter
-    assert (
-        _generate(
-            client, goal_id, topic_id, key="citation-guard-generation"
-        ).status_code
-        == 202
-    )
+    generated = _generate(client, goal_id, topic_id, key="citation-guard-generation")
+    assert generated.status_code == 202
+    wait_for_job(client, generated)
     layer = _essential_layer(client, goal_id, topic_id)
     timestamp = "2026-08-12T12:00:00.000000Z"
     with engine.connect() as connection:

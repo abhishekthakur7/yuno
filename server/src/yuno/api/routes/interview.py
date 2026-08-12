@@ -120,8 +120,14 @@ def post_interview_run(
                     "The Mock capability must match its rubric."
                 )
         run = create_mock_run(
-            uow, owner_id, body.goal_id, body.bundle_id, body.bundle_item_id,
-            rubric_id, rubric_version, body.requested_capability,
+            uow,
+            owner_id,
+            body.goal_id,
+            body.bundle_id,
+            body.bundle_item_id,
+            rubric_id,
+            rubric_version,
+            body.requested_capability,
             clock=clock,
         )
         uow.commit()
@@ -200,9 +206,7 @@ def post_interview_answer(
 ):
     run = get_interview_run(uow, owner_id, run_id)
     if run.mode == "Mock":
-        return _post_mock_answer(
-            run, body, owner_id, uow, dispatcher, key, clock
-        )
+        return _post_mock_answer(run, body, owner_id, uow, dispatcher, key, clock)
     operation = f"practice_answer:{run_id}"
     request_data = body.model_dump(mode="json")
     prior = uow.interview.get_idempotency(owner_id, operation, key)
@@ -286,9 +290,7 @@ def post_interview_answer(
     return accepted_job(_dispatch_practice(dispatcher, owner_id, run, key, job_id))
 
 
-@router.post(
-    "/interview-runs/{run_id}/pause", response_model=MockRunResponse
-)
+@router.post("/interview-runs/{run_id}/pause", response_model=MockRunResponse)
 def post_mock_pause(
     run_id: str,
     body: MockDraftRequest,
@@ -301,9 +303,7 @@ def post_mock_pause(
     return _mock_run_response(run)
 
 
-@router.post(
-    "/interview-runs/{run_id}/resume", response_model=MockRunResponse
-)
+@router.post("/interview-runs/{run_id}/resume", response_model=MockRunResponse)
 def post_mock_resume(
     run_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
@@ -354,23 +354,23 @@ def post_mock_complete(
         assert run.active_job_id is not None
         current = dispatcher.get(owner_id, run.active_job_id)
         ref = current or JobRef(
-            run.active_job_id, "evaluate_mock_final", JobStatus.QUEUED,
-            run.updated_at, deduplicated=True,
+            run.active_job_id,
+            "evaluate_mock_final",
+            JobStatus.QUEUED,
+            run.updated_at,
+            deduplicated=True,
         )
         return accepted_job(ref)
     job_id = new_id()
     validate_mock_completion(uow, owner_id, run_id, body.draft)
     bundle = get_bundle(uow, owner_id, run.bundle_id)
-    item = next(
-        value for value in bundle.items if value.id == run.bundle_item_id
-    )
+    item = next(value for value in bundle.items if value.id == run.bundle_item_id)
     if item.topic_stable_id is None:
         raise DomainValidationError(
             "A Mock assessment must reference an approved topic."
         )
     transcript = [
-        {"kind": turn.kind.value, "body": turn.body}
-        for turn in run.turns
+        {"kind": turn.kind.value, "body": turn.body} for turn in run.turns
     ] + [{"kind": "answer", "body": body.draft}]
     evidence = create_evidence(
         uow,
@@ -389,23 +389,39 @@ def post_mock_complete(
         uow, owner_id, run_id, body.draft, job_id, evidence.id, clock=clock
     )
     reserved = JobRefResponse(
-        job_id=job_id, kind="evaluate_mock_final", status=JobStatus.QUEUED,
-        enqueued_at=now_text(clock), deduplicated=False,
+        job_id=job_id,
+        kind="evaluate_mock_final",
+        status=JobStatus.QUEUED,
+        enqueued_at=now_text(clock),
+        deduplicated=False,
     )
-    uow.interview.add_idempotency(InterviewIdempotencyRecord(
-        new_id(), owner_id, operation, key, hash_payload(request_data),
-        reserved.model_dump_json(), now_text(clock),
-    ))
+    uow.interview.add_idempotency(
+        InterviewIdempotencyRecord(
+            new_id(),
+            owner_id,
+            operation,
+            key,
+            hash_payload(request_data),
+            reserved.model_dump_json(),
+            now_text(clock),
+        )
+    )
     uow.commit()
-    return accepted_job(dispatcher.enqueue(JobRequest(
-        "evaluate_mock_final", owner_id, {"run_id": run.id},
-        dedupe_key=run.id, idempotency_key=key, requested_job_id=job_id,
-    )))
+    return accepted_job(
+        dispatcher.enqueue(
+            JobRequest(
+                "evaluate_mock_final",
+                owner_id,
+                {"run_id": run.id},
+                dedupe_key=run.id,
+                idempotency_key=key,
+                requested_job_id=job_id,
+            )
+        )
+    )
 
 
-@router.get(
-    "/interview-runs/{run_id}/report", response_model=MockReportResponse
-)
+@router.get("/interview-runs/{run_id}/report", response_model=MockReportResponse)
 def read_mock_report(
     run_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
@@ -461,21 +477,39 @@ def post_interview_retry(
         job_id = new_id()
         run, kind = reserve_mock_retry(uow, owner_id, run_id, job_id, clock=clock)
         reserved = JobRefResponse(
-            job_id=job_id, kind=kind, status=JobStatus.QUEUED,
-            enqueued_at=now_text(clock), deduplicated=False,
+            job_id=job_id,
+            kind=kind,
+            status=JobStatus.QUEUED,
+            enqueued_at=now_text(clock),
+            deduplicated=False,
         )
-        uow.interview.add_idempotency(InterviewIdempotencyRecord(
-            new_id(), owner_id, operation, key, hash_payload(request_data),
-            reserved.model_dump_json(), now_text(clock),
-        ))
+        uow.interview.add_idempotency(
+            InterviewIdempotencyRecord(
+                new_id(),
+                owner_id,
+                operation,
+                key,
+                hash_payload(request_data),
+                reserved.model_dump_json(),
+                now_text(clock),
+            )
+        )
         uow.commit()
         payload = {"run_id": run.id}
         if kind == "generate_mock_next_turn":
             payload["answer_turn_id"] = run.active_answer_turn_id
-        return accepted_job(dispatcher.enqueue(JobRequest(
-            kind, owner_id, payload, dedupe_key=run.active_answer_turn_id,
-            idempotency_key=key, requested_job_id=job_id,
-        )))
+        return accepted_job(
+            dispatcher.enqueue(
+                JobRequest(
+                    kind,
+                    owner_id,
+                    payload,
+                    dedupe_key=run.active_answer_turn_id,
+                    idempotency_key=key,
+                    requested_job_id=job_id,
+                )
+            )
+        )
     job_id = new_id()
     run = reserve_evaluation_retry(uow, owner_id, run_id, job_id, clock=clock)
     uow.commit()
@@ -769,20 +803,36 @@ def _post_mock_answer(
         uow, owner_id, run.id, body.answer, job_id, clock=clock
     )
     reserved = JobRefResponse(
-        job_id=job_id, kind="generate_mock_next_turn", status=JobStatus.QUEUED,
-        enqueued_at=now_text(clock), deduplicated=False,
+        job_id=job_id,
+        kind="generate_mock_next_turn",
+        status=JobStatus.QUEUED,
+        enqueued_at=now_text(clock),
+        deduplicated=False,
     )
-    uow.interview.add_idempotency(InterviewIdempotencyRecord(
-        new_id(), owner_id, operation, key, hash_payload(request_data),
-        reserved.model_dump_json(), now_text(clock),
-    ))
+    uow.interview.add_idempotency(
+        InterviewIdempotencyRecord(
+            new_id(),
+            owner_id,
+            operation,
+            key,
+            hash_payload(request_data),
+            reserved.model_dump_json(),
+            now_text(clock),
+        )
+    )
     uow.commit()
-    return accepted_job(dispatcher.enqueue(JobRequest(
-        "generate_mock_next_turn", owner_id,
-        {"run_id": updated.id, "answer_turn_id": updated.active_answer_turn_id},
-        dedupe_key=updated.active_answer_turn_id, idempotency_key=key,
-        requested_job_id=job_id,
-    )))
+    return accepted_job(
+        dispatcher.enqueue(
+            JobRequest(
+                "generate_mock_next_turn",
+                owner_id,
+                {"run_id": updated.id, "answer_turn_id": updated.active_answer_turn_id},
+                dedupe_key=updated.active_answer_turn_id,
+                idempotency_key=key,
+                requested_job_id=job_id,
+            )
+        )
+    )
 
 
 def run_mock_next_turn_job(
@@ -801,10 +851,14 @@ def run_mock_next_turn_job(
                 uow, request.owner_id, run_id, answer_turn_id, question
             )
             uow.commit()
+            return get_interview_run(uow, request.owner_id, run_id)
     except Exception as exc:
         with uow_factory() as uow:
             fail_mock_generation(
-                uow, request.owner_id, run_id, answer_turn_id,
+                uow,
+                request.owner_id,
+                run_id,
+                answer_turn_id,
                 f"{type(exc).__name__}:mock-next-turn",
             )
             uow.commit()
@@ -823,15 +877,11 @@ def run_mock_final_evaluation_job(
             if run.rubric_id is None or run.rubric_version is None:
                 raise RuntimeError("A reviewed Mock rubric is not configured.")
             answer = next(
-                turn
-                for turn in reversed(run.turns)
-                if turn.kind.value == "answer"
+                turn for turn in reversed(run.turns) if turn.kind.value == "answer"
             )
             if answer.evidence_id is None:
                 raise RuntimeError("The fixed Mock transcript has no evidence.")
-            rubric = uow.evidence.get_rubric(
-                request.owner_id, run.rubric_id
-            )
+            rubric = uow.evidence.get_rubric(request.owner_id, run.rubric_id)
             if rubric is None or rubric.version != run.rubric_version:
                 raise RuntimeError("The reviewed Mock rubric is unavailable.")
             evaluation_request = EvaluationRequest(
@@ -856,16 +906,18 @@ def run_mock_final_evaluation_job(
                 evaluation_request,
                 run_id=run_id,
             )
-            complete_mock_evaluation(
-                uow, request.owner_id, run_id, assessment.id
-            )
+            complete_mock_evaluation(uow, request.owner_id, run_id, assessment.id)
             uow.commit()
+            return assessment
     except Exception as exc:
         with uow_factory() as uow:
             run = get_interview_run(uow, request.owner_id, run_id)
             if run.active_answer_turn_id is not None:
                 fail_mock_generation(
-                    uow, request.owner_id, run_id, run.active_answer_turn_id,
+                    uow,
+                    request.owner_id,
+                    run_id,
+                    run.active_answer_turn_id,
                     f"{type(exc).__name__}:mock-final-evaluation",
                 )
                 uow.commit()
@@ -880,7 +932,6 @@ def run_practice_evaluation_job(
     run_id = str(request.payload["run_id"])
     answer_turn_id = str(request.payload["answer_turn_id"])
     try:
-        # Commit the observable evaluating state before provider execution.
         with uow_factory() as uow:
             run = begin_evaluation(uow, request.owner_id, run_id, answer_turn_id)
             answer = next(turn for turn in run.turns if turn.id == answer_turn_id)
@@ -904,9 +955,6 @@ def run_practice_evaluation_job(
             )
             uow.commit()
 
-        # `perform_assessment` calls the adapter after read validation and before
-        # its first write. The UoW transaction guard therefore guarantees the
-        # external provider is never called while a write transaction is open.
         with uow_factory() as uow:
             assessment = perform_assessment(
                 uow, adapter, request.owner_id, evaluation_request, run_id=run_id
@@ -941,6 +989,7 @@ def run_practice_evaluation_job(
                 cross_question_candidate=assessment.cross_question_candidate,
             )
             uow.commit()
+            return assessment
     except Exception as exc:
         with uow_factory() as uow:
             fail_evaluation(

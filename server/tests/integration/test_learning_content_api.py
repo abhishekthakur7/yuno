@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
+from tests.job_assertions import wait_for_job
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -164,4 +165,4 @@ def test_generation_contract_returns_job_ref_without_claiming_content(
     )
     assert response.status_code == 202, response.text
     assert response.json()["kind"] == "generate_topic_content"
-    assert response.json()["status"] == "failed"
+    wait_for_job(client, response, "failed")

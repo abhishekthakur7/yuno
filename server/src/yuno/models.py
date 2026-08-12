@@ -18,6 +18,7 @@ from yuno.modules.evidence_evaluation import models as evidence_evaluation_model
 from yuno.modules.identity import models as identity_models
 from yuno.modules.imports import models as imports_models
 from yuno.modules.interview import models as interview_models
+from yuno.modules.jobs_events import models as jobs_events_models
 from yuno.modules.learning_content import models as learning_content_models
 from yuno.modules.notebook_review import models as notebook_review_models
 from yuno.modules.profiles_goals import models as profiles_goals_models
@@ -33,6 +34,7 @@ __all__ = [
     "identity_models",
     "imports_models",
     "interview_models",
+    "jobs_events_models",
     "learning_content_models",
     "notebook_review_models",
     "profiles_goals_models",

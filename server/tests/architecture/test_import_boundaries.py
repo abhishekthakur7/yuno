@@ -60,6 +60,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.roadmap",
     "yuno.modules.imports",
     "yuno.modules.interview",
+    "yuno.modules.jobs_events",
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
@@ -103,6 +104,8 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.interview.domain",
     "yuno.modules.interview.ports",
     "yuno.modules.interview.service",
+    "yuno.modules.jobs_events.domain",
+    "yuno.modules.jobs_events.ports",
     "yuno.modules.notebook_review.domain",
     "yuno.modules.notebook_review.ports",
     "yuno.modules.notebook_review.service",
@@ -123,6 +126,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.roadmap",
     "yuno.modules.imports",
     "yuno.modules.interview",
+    "yuno.modules.jobs_events",
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
@@ -194,6 +198,7 @@ def test_pyproject_declares_the_required_contracts(user_options):
     # See pyproject.toml's comment on this contract for why these edges
     # are legitimate.
     assert set(independence_contract["ignore_imports"]) == {
+        "yuno.modules.jobs_events.service -> yuno.modules.audit.**",
         "yuno.modules.identity.service -> yuno.modules.audit.**",
         "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
         "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
