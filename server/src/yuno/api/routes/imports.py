@@ -46,6 +46,7 @@ from yuno.modules.imports.service import (
     map_statement,
     mark_import_parsing,
     parse_import,
+    reprocess_import,
     verify_statement,
 )
 from yuno.shared.application.jobs import JobDispatcher, JobRequest
@@ -281,7 +282,10 @@ def run_import_parse_job(request: JobRequest, uow_factory: UnitOfWorkFactory):
     import_id = str(request.payload["import_id"])
     try:
         with uow_factory() as uow:
-            parse_import(uow, request.owner_id, import_id)
+            if request.kind == "reprocess_import":
+                reprocess_import(uow, request.owner_id, import_id)
+            else:
+                parse_import(uow, request.owner_id, import_id)
             record = get_import(uow, request.owner_id, import_id)
             uow.commit()
             return record

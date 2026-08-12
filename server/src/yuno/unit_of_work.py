@@ -13,12 +13,20 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from yuno.modules.audit.ports import AuditRepository
 from yuno.modules.audit.repository import SqlAlchemyAuditRepository
-from yuno.modules.canonical.ports import CanonicalGraphRepository
-from yuno.modules.canonical.repository import SqlAlchemyCanonicalRepository
+from yuno.modules.canonical.ports import (
+    CanonicalGraphRepository,
+    CanonicalMergeRepository,
+)
+from yuno.modules.canonical.repository import (
+    SqlAlchemyCanonicalMergeRepository,
+    SqlAlchemyCanonicalRepository,
+)
 from yuno.modules.diagnostics.ports import DiagnosticsRepository
 from yuno.modules.diagnostics.repository import SqlAlchemyDiagnosticsRepository
 from yuno.modules.evidence_evaluation.ports import EvidenceRepository
 from yuno.modules.evidence_evaluation.repository import SqlAlchemyEvidenceRepository
+from yuno.modules.hands_on.ports import HandsOnRepository
+from yuno.modules.hands_on.repository import SqlAlchemyHandsOnRepository
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
 from yuno.modules.imports.ports import ImportRepository
@@ -53,12 +61,13 @@ def _mark_write_closed(session: Session) -> None:
 
 
 class SqlAlchemyUnitOfWork:
-
     owners: OwnerRepository
     audit: AuditRepository
     canonical: CanonicalGraphRepository
+    canonical_merges: CanonicalMergeRepository
     diagnostics: DiagnosticsRepository
     evidence: EvidenceRepository
+    hands_on: HandsOnRepository
     imports: ImportRepository
     interview: SqlAlchemyInterviewRepository
     learning_content: LearningContentRepository
@@ -98,8 +107,10 @@ class SqlAlchemyUnitOfWork:
         self.owners = SqlAlchemyOwnerRepository(self._session)
         self.audit = SqlAlchemyAuditRepository(self._session)
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
+        self.canonical_merges = SqlAlchemyCanonicalMergeRepository(self._session)
         self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
         self.evidence = SqlAlchemyEvidenceRepository(self._session)
+        self.hands_on = SqlAlchemyHandsOnRepository(self._session)
         self.imports = SqlAlchemyImportRepository(self._session)
         self.interview = SqlAlchemyInterviewRepository(self._session)
         self.learning_content = SqlAlchemyLearningContentRepository(self._session)

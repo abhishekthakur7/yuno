@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from yuno.modules.evidence_evaluation.domain import (
@@ -159,6 +159,12 @@ class SqlAlchemyEvidenceRepository(SqlAlchemyRepository):
             owner_scoped_select(RubricRow, owner_id).where(RubricRow.id == rubric_id)
         ).one_or_none()
         return _rubric(row) if row else None
+
+    def list_rubrics(self, owner_id: str):
+        rows = self._session.scalars(
+            owner_scoped_select(RubricRow, owner_id).order_by(RubricRow.created_at)
+        ).all()
+        return tuple(_rubric(row) for row in rows)
 
     def list_rubric_dimensions(
         self, owner_id: str, rubric_id: str
@@ -351,6 +357,34 @@ class SqlAlchemyEvidenceRepository(SqlAlchemyRepository):
         if result.rowcount != 1:
             raise RuntimeError("The idempotency reservation was not found.")
         self._session.flush()
+
+    def list_pending_idempotency(
+        self, operation_prefix: str
+    ) -> Sequence[EvidenceEvaluationIdempotencyRecord]:
+        rows = self._session.scalars(
+            select(EvidenceEvaluationIdempotencyRow)
+            .where(
+                EvidenceEvaluationIdempotencyRow.operation.startswith(
+                    operation_prefix
+                ),
+                EvidenceEvaluationIdempotencyRow.completed == 0,
+            )
+            .order_by(EvidenceEvaluationIdempotencyRow.created_at)
+        ).all()
+        return tuple(
+            EvidenceEvaluationIdempotencyRecord(
+                row.id,
+                row.owner_id,
+                row.operation,
+                row.idempotency_key,
+                row.request_hash,
+                row.response_json,
+                row.created_at,
+                row.request_ref,
+                bool(row.completed),
+            )
+            for row in rows
+        )
 
     def list_progress_evidence(
         self, owner_id: str, goal_id: str

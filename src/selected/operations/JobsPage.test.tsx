@@ -22,12 +22,13 @@ const failed = {
 }
 
 function renderPage() {
+  const navigate = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   client.setQueryData(['jobs'], {
-    jobs: [failed, { ...failed, job_id: 'job-ok', status: 'succeeded', retryable: false, result_ref: 'Assessment:abc', result_hash: 'hash-abc' }],
+    jobs: [failed, { ...failed, job_id: 'job-runner', kind: 'java_runner', status: 'failed', retryable: true }, { ...failed, job_id: 'job-ok', status: 'succeeded', retryable: false, result_ref: 'Assessment:abc', result_hash: 'hash-abc' }],
     pending_job_cap: 100, background_age_promotion_seconds: 60, janitor_retention_seconds: 60,
   })
-  return render(<QueryClientProvider client={client}><JobsPage /></QueryClientProvider>)
+  return { navigate, ...render(<QueryClientProvider client={client}><JobsPage navigate={navigate} /></QueryClientProvider>) }
 }
 
 describe('JobsPage', () => {
@@ -36,14 +37,22 @@ describe('JobsPage', () => {
   it('shows persisted diagnostics/results and supplies retry recovery inputs', async () => {
     vi.mocked(jobsApi.retryJob).mockResolvedValue(failed)
     renderPage()
-    expect(screen.getAllByText('provider unavailable')).toHaveLength(2)
+    expect(screen.getAllByText('provider unavailable')).toHaveLength(3)
     expect(screen.getByText('Assessment:abc')).toBeInTheDocument()
     expect(screen.getByText('hash-abc')).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText('Required for interview-turn retries'), { target: { value: 'turn:replacement' } })
-    fireEvent.change(screen.getByPlaceholderText('Required for runner retries'), { target: { value: 'confirm:fresh' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(screen.queryByPlaceholderText('Required for runner retries')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Retry$/ }))
     await waitFor(() => expect(jobsApi.retryJob).toHaveBeenCalled())
-    expect(vi.mocked(jobsApi.retryJob).mock.calls[0]?.[0]).toEqual({ jobId: 'job-failed', substitutionRef: 'turn:replacement', confirmationRef: 'confirm:fresh' })
+    expect(vi.mocked(jobsApi.retryJob).mock.calls[0]?.[0]).toEqual({ jobId: 'job-failed', substitutionRef: 'turn:replacement', confirmationRef: null })
+  })
+
+  it('routes a runner retry to a fresh Topic Studio confirmation without calling generic retry', () => {
+    const { navigate } = renderPage()
+    expect(screen.getByText(/Controlled subprocess execution only/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and run again in Topic Studio' }))
+    expect(navigate).toHaveBeenCalledWith('topic-studio')
+    expect(jobsApi.retryJob).not.toHaveBeenCalled()
   })
 
   it('renders mutation errors without hiding persisted job state', async () => {
@@ -51,6 +60,6 @@ describe('JobsPage', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('job action failed')
-    expect(screen.getAllByText('provider unavailable')).toHaveLength(2)
+    expect(screen.getAllByText('provider unavailable')).toHaveLength(3)
   })
 })

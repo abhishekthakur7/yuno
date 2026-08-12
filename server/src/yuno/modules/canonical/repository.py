@@ -25,13 +25,20 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
+    CanonicalMergeFollowup,
+    CanonicalMergeProposal,
     CanonicalVersionStatus,
     ContentRevision,
     EditorialApproval,
+    MergeChangeType,
+    MergeEntityType,
+    MergeItem,
+    MergeProposalStatus,
+    MergeResolution,
     RelationType,
     Topic,
     TopicIdentity,
@@ -39,8 +46,11 @@ from yuno.modules.canonical.domain import (
 )
 from yuno.modules.canonical.models import (
     CanonicalGraphVersionRow,
+    CanonicalMergeFollowupRow,
+    CanonicalMergeProposalRow,
     ContentRevisionRow,
     EditorialApprovalRow,
+    MergeItemRow,
     TopicIdentityRow,
     TopicRelationRow,
     TopicRow,
@@ -170,7 +180,10 @@ class SqlAlchemyCanonicalRepository(SqlAlchemyRepository):
                 EditorialApprovalRow,
                 EditorialApprovalRow.graph_version_id == CanonicalGraphVersionRow.id,
             )
-            .order_by(CanonicalGraphVersionRow.created_at.desc())
+            .order_by(
+                CanonicalGraphVersionRow.created_at.desc(),
+                CanonicalGraphVersionRow.id.desc(),
+            )
         )
         rows = self._session.scalars(stmt).all()
         return [_version_to_domain(row) for row in rows]
@@ -192,7 +205,8 @@ class SqlAlchemyCanonicalRepository(SqlAlchemyRepository):
             select(TopicRelationRow)
             .join(
                 EditorialApprovalRow,
-                EditorialApprovalRow.graph_version_id == TopicRelationRow.graph_version_id,
+                EditorialApprovalRow.graph_version_id
+                == TopicRelationRow.graph_version_id,
             )
             .where(TopicRelationRow.graph_version_id == version_id)
         )
@@ -248,8 +262,227 @@ class SqlAlchemyCanonicalRepository(SqlAlchemyRepository):
         return self._session.scalars(stmt).first() is not None
 
     def topic_identity_exists(self, stable_id: str) -> bool:
-        stmt = select(TopicIdentityRow.stable_id).where(TopicIdentityRow.stable_id == stable_id)
+        stmt = select(TopicIdentityRow.stable_id).where(
+            TopicIdentityRow.stable_id == stable_id
+        )
         return self._session.scalars(stmt).first() is not None
+
+
+class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
+    def add_merge_proposal(
+        self, proposal: CanonicalMergeProposal, items: Sequence[MergeItem]
+    ) -> None:
+        self._session.add(
+            CanonicalMergeProposalRow(
+                id=proposal.id,
+                owner_id=proposal.owner_id,
+                goal_id=proposal.goal_id,
+                base_version_id=proposal.base_version_id,
+                target_version_id=proposal.target_version_id,
+                goal_row_version=proposal.goal_row_version,
+                diff_hash=proposal.diff_hash,
+                local_state_hash=proposal.local_state_hash,
+                status=proposal.status.value,
+                created_at=proposal.created_at,
+                decided_at=proposal.decided_at,
+            )
+        )
+        self._session.flush()
+        for item in items:
+            self._session.add(
+                MergeItemRow(
+                    id=item.id,
+                    owner_id=proposal.owner_id,
+                    goal_id=proposal.goal_id,
+                    proposal_id=item.proposal_id,
+                    entity_type=item.entity_type.value,
+                    change_type=item.change_type.value,
+                    topic_id=item.topic_id,
+                    title=item.title,
+                    summary=item.summary,
+                    impact=item.impact,
+                    conflict_type=item.conflict_type,
+                    selected=int(item.selected),
+                    recommended_resolution=item.recommended_resolution.value,
+                    chosen_resolution=item.chosen_resolution.value
+                    if item.chosen_resolution
+                    else None,
+                    resolution_explanation=item.resolution_explanation,
+                    payload_json=json.dumps(
+                        item.payload, sort_keys=True, separators=(",", ":")
+                    ),
+                )
+            )
+        self._session.flush()
+
+    def get_merge_proposal(
+        self, owner_id: str, proposal_id: str
+    ) -> CanonicalMergeProposal | None:
+        row = self._session.scalars(
+            select(CanonicalMergeProposalRow).where(
+                CanonicalMergeProposalRow.owner_id == owner_id,
+                CanonicalMergeProposalRow.id == proposal_id,
+            )
+        ).one_or_none()
+        return _merge_proposal(row) if row else None
+
+    def get_current_merge_proposal(
+        self, owner_id: str, goal_id: str, base_version_id: str, target_version_id: str
+    ) -> CanonicalMergeProposal | None:
+        row = self._session.scalars(
+            select(CanonicalMergeProposalRow)
+            .where(
+                CanonicalMergeProposalRow.owner_id == owner_id,
+                CanonicalMergeProposalRow.goal_id == goal_id,
+                CanonicalMergeProposalRow.base_version_id == base_version_id,
+                CanonicalMergeProposalRow.target_version_id == target_version_id,
+            )
+            .order_by(
+                CanonicalMergeProposalRow.created_at.desc(),
+                CanonicalMergeProposalRow.id.desc(),
+            )
+        ).first()
+        return _merge_proposal(row) if row else None
+
+    def list_merge_items(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[MergeItem]:
+        return tuple(
+            _merge_item(row)
+            for row in self._session.scalars(
+                select(MergeItemRow)
+                .where(
+                    MergeItemRow.owner_id == owner_id,
+                    MergeItemRow.proposal_id == proposal_id,
+                )
+                .order_by(MergeItemRow.id)
+            ).all()
+        )
+
+    def close_merge_proposal(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        expected_status: str,
+        status: str,
+        decided_at: str,
+    ) -> bool:
+        result = self._session.execute(
+            update(CanonicalMergeProposalRow)
+            .where(
+                CanonicalMergeProposalRow.owner_id == owner_id,
+                CanonicalMergeProposalRow.id == proposal_id,
+                CanonicalMergeProposalRow.status == expected_status,
+            )
+            .values(status=status, decided_at=decided_at)
+        )
+        self._session.flush()
+        return result.rowcount == 1
+
+    def update_merge_item(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        item_id: str,
+        *,
+        selected: bool,
+        resolution: str,
+    ) -> None:
+        self._session.execute(
+            update(MergeItemRow)
+            .where(
+                MergeItemRow.owner_id == owner_id,
+                MergeItemRow.proposal_id == proposal_id,
+                MergeItemRow.id == item_id,
+            )
+            .values(selected=int(selected), chosen_resolution=resolution)
+        )
+        self._session.flush()
+
+    def add_merge_followup(self, followup: CanonicalMergeFollowup) -> None:
+        payload_json = json.dumps(
+            followup.payload, sort_keys=True, separators=(",", ":")
+        )
+        from yuno.shared.domain.hashing import hash_payload
+
+        self._session.add(
+            CanonicalMergeFollowupRow(
+                id=followup.id,
+                owner_id=followup.owner_id,
+                goal_id=followup.goal_id,
+                proposal_id=followup.proposal_id,
+                kind=followup.kind,
+                payload_json=payload_json,
+                payload_hash=hash_payload(followup.payload),
+                status=followup.status,
+                job_id=followup.job_id,
+                created_at=followup.created_at,
+            )
+        )
+        self._session.flush()
+
+    def list_merge_followups(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[CanonicalMergeFollowup]:
+        rows = self._session.scalars(
+            select(CanonicalMergeFollowupRow)
+            .where(
+                CanonicalMergeFollowupRow.owner_id == owner_id,
+                CanonicalMergeFollowupRow.proposal_id == proposal_id,
+            )
+            .order_by(CanonicalMergeFollowupRow.id)
+        ).all()
+        return tuple(
+            CanonicalMergeFollowup(
+                row.id,
+                row.owner_id,
+                row.goal_id,
+                row.proposal_id,
+                row.kind,
+                json.loads(row.payload_json),
+                row.status,
+                row.job_id,
+                row.created_at,
+            )
+            for row in rows
+        )
+
+    def mark_followup_dispatched(
+        self, owner_id: str, followup_id: str, job_id: str
+    ) -> None:
+        self._session.execute(
+            update(CanonicalMergeFollowupRow)
+            .where(
+                CanonicalMergeFollowupRow.owner_id == owner_id,
+                CanonicalMergeFollowupRow.id == followup_id,
+                CanonicalMergeFollowupRow.status == "pending-dispatch",
+            )
+            .values(status="dispatched", job_id=job_id)
+        )
+        self._session.flush()
+
+    def list_pending_merge_followups(self) -> Sequence[CanonicalMergeFollowup]:
+        rows = self._session.scalars(
+            select(CanonicalMergeFollowupRow)
+            .where(CanonicalMergeFollowupRow.status == "pending-dispatch")
+            .order_by(
+                CanonicalMergeFollowupRow.created_at, CanonicalMergeFollowupRow.id
+            )
+        ).all()
+        return tuple(
+            CanonicalMergeFollowup(
+                row.id,
+                row.owner_id,
+                row.goal_id,
+                row.proposal_id,
+                row.kind,
+                json.loads(row.payload_json),
+                row.status,
+                row.job_id,
+                row.created_at,
+            )
+            for row in rows
+        )
 
 
 def _version_to_domain(row: CanonicalGraphVersionRow) -> CanonicalGraphVersion:
@@ -289,4 +522,39 @@ def _relation_to_domain(row: TopicRelationRow) -> TopicRelation:
         to_stable_id=row.to_stable_id,
         relation_type=RelationType(row.relation_type),
         rationale=row.rationale,
+    )
+
+
+def _merge_proposal(row: CanonicalMergeProposalRow) -> CanonicalMergeProposal:
+    return CanonicalMergeProposal(
+        row.id,
+        row.owner_id,
+        row.goal_id,
+        row.base_version_id,
+        row.target_version_id,
+        row.goal_row_version,
+        row.diff_hash,
+        row.local_state_hash,
+        MergeProposalStatus(row.status),
+        row.created_at,
+        row.decided_at,
+    )
+
+
+def _merge_item(row: MergeItemRow) -> MergeItem:
+    return MergeItem(
+        row.id,
+        row.proposal_id,
+        MergeEntityType(row.entity_type),
+        MergeChangeType(row.change_type),
+        row.topic_id,
+        row.title,
+        row.summary,
+        row.impact,
+        row.conflict_type,
+        bool(row.selected),
+        MergeResolution(row.recommended_resolution),
+        MergeResolution(row.chosen_resolution) if row.chosen_resolution else None,
+        row.resolution_explanation,
+        json.loads(row.payload_json),
     )

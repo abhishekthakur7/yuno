@@ -15,6 +15,7 @@ from yuno.modules.audit import models as audit_models
 from yuno.modules.canonical import models as canonical_models
 from yuno.modules.diagnostics import models as diagnostics_models
 from yuno.modules.evidence_evaluation import models as evidence_evaluation_models
+from yuno.modules.hands_on import models as hands_on_models
 from yuno.modules.identity import models as identity_models
 from yuno.modules.imports import models as imports_models
 from yuno.modules.interview import models as interview_models
@@ -25,6 +26,7 @@ from yuno.modules.profiles_goals import models as profiles_goals_models
 from yuno.modules.provenance import models as provenance_models
 from yuno.modules.provider import models as provider_models
 from yuno.modules.roadmap import models as roadmap_models
+from yuno.modules.runner import models as runner_models
 from yuno.modules.settings_data import models as settings_data_models
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
     "canonical_models",
     "diagnostics_models",
     "evidence_evaluation_models",
+    "hands_on_models",
     "identity_models",
     "imports_models",
     "interview_models",
@@ -42,5 +45,6 @@ __all__ = [
     "provenance_models",
     "provider_models",
     "roadmap_models",
+    "runner_models",
     "settings_data_models",
 ]

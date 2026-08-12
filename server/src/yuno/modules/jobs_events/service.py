@@ -49,6 +49,7 @@ _INTERACTIVE_KINDS = {
     "generate_mock_next_turn",
     "evaluate_mock_final",
     "tutor_turn",
+    "review_hands_on_artifact",
 }
 
 _RETRY_POLICIES = {
@@ -62,6 +63,7 @@ _RETRY_POLICIES = {
     "generate_mock_next_turn": "interview",
     "evaluate_mock_final": "interview",
     "tutor_turn": "idempotent",
+    "review_hands_on_artifact": "idempotent",
     "retrieve_source_snapshot": "idempotent",
     "java_runner": "runner",
 }
@@ -270,10 +272,10 @@ class DurableJobDispatcher:
                 session.commit()
                 return as_ref(row, deduplicated=True)
             strategy = _retry_policy(row.kind)
-            if strategy == "runner" and not confirmation_ref:
+            if strategy == "runner":
                 raise ConflictError(
-                    "Runner retry requires fresh user confirmation.",
-                    recovery_action="Confirm a fresh run before retrying.",
+                    "Runner jobs cannot use generic retry; create a freshly confirmed run.",
+                    recovery_action="Confirm exact current inputs and create a new runner run.",
                 )
             if strategy == "interview" and not substitution_ref:
                 raise ConflictError(

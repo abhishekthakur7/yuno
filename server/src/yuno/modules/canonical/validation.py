@@ -47,7 +47,9 @@ ALLOWED_SUBJECTS: frozenset[str] = frozenset(
 
 _GO_TOKENS: frozenset[str] = frozenset({"go", "golang", "go_aws"})
 
-RELATION_TYPES_ALLOWED_TO_CYCLE: frozenset[RelationType] = frozenset({RelationType.RELATED})
+RELATION_TYPES_ALLOWED_TO_CYCLE: frozenset[RelationType] = frozenset(
+    {RelationType.RELATED}
+)
 """spec §4.3: "only explicitly configured non-prerequisite relation types
 may cycle". `RELATED` is the one type this module configures as such --
 every other relation type (including `SCENARIO`, which is not an
@@ -123,7 +125,11 @@ def compute_manifest_hash(manifest: CanonicalGraphManifest) -> str:
                 }
                 for relation in manifest.relations
             ),
-            key=lambda item: (item["from_stable_id"], item["to_stable_id"], item["relation_type"]),
+            key=lambda item: (
+                item["from_stable_id"],
+                item["to_stable_id"],
+                item["relation_type"],
+            ),
         ),
     }
     return hash_payload(payload)
@@ -156,7 +162,10 @@ def _validate_manifest_identity(manifest: CanonicalGraphManifest) -> list[Violat
     violations: list[Violation] = []
     if not manifest.manifest_version.strip():
         violations.append(
-            Violation(ViolationCode.EMPTY_MANIFEST_VERSION, "manifest_version must not be blank.")
+            Violation(
+                ViolationCode.EMPTY_MANIFEST_VERSION,
+                "manifest_version must not be blank.",
+            )
         )
     expected_hash = compute_manifest_hash(manifest)
     if manifest.manifest_hash != expected_hash:
@@ -217,7 +226,11 @@ def _validate_relation_references(manifest: CanonicalGraphManifest) -> list[Viol
                     relation_id=relation.id,
                 )
             )
-        tuple_key = (relation.from_stable_id, relation.to_stable_id, relation.relation_type.value)
+        tuple_key = (
+            relation.from_stable_id,
+            relation.to_stable_id,
+            relation.relation_type.value,
+        )
         if tuple_key in seen_tuples:
             violations.append(
                 Violation(
@@ -243,7 +256,10 @@ def _validate_relation_cycles(manifest: CanonicalGraphManifest) -> list[Violatio
     for relation in manifest.relations:
         if relation.relation_type in RELATION_TYPES_ALLOWED_TO_CYCLE:
             continue
-        if relation.from_stable_id not in known_stable_ids or relation.to_stable_id not in known_stable_ids:
+        if (
+            relation.from_stable_id not in known_stable_ids
+            or relation.to_stable_id not in known_stable_ids
+        ):
             continue
         edges[relation.from_stable_id].append(relation)
 
@@ -311,7 +327,9 @@ def _validate_no_go_nodes(topics: tuple[Topic, ...]) -> list[Violation]:
     return violations
 
 
-def _validate_dsa_scenario_relations(manifest: CanonicalGraphManifest) -> list[Violation]:
+def _validate_dsa_scenario_relations(
+    manifest: CanonicalGraphManifest,
+) -> list[Violation]:
     """CUR-02: a DSA topic (`subject == "dsa"`) requires at least one
     `SCENARIO` relation touching it, in either direction."""
     scenario_linked: set[str] = set()

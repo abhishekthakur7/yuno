@@ -17,6 +17,8 @@ class OverlayEntryType(StrEnum):
     DEPTH = "depth"
     BRIDGE = "bridge"
     RECOMMENDATION = "recommendation"
+    MERGE_RESOLUTION = "merge_resolution"
+    ARCHIVED_LOCAL_TOPIC = "archived_local_topic"
 
 
 class OverlayProposalType(StrEnum):
@@ -184,6 +186,7 @@ class ProjectedTopic:
     classification: LearningClassification
     explanation: str
     has_transferred_evidence: bool
+    is_archived_local: bool = False
     pending_proposals: tuple[dict[str, object], ...] = ()
     conflicts: tuple[dict[str, object], ...] = ()
 
@@ -256,6 +259,71 @@ def project_roadmap(
     correction_items = tuple(corrections)
     proposal_items = tuple(dict(item) for item in pending_proposals)
     conflict_items = tuple(dict(item) for item in conflicts)
+    # Only entries expressed against the current graph participate. A merge
+    # carries retained choices forward explicitly, so old-version overlays
+    # cannot silently leak into the new projection.
+    entry_items = tuple(
+        entry for entry in entry_items if entry.graph_version_id == graph_version_id
+    )
+    canonical_topic_ids = {topic.stable_id for topic in topic_items}
+    archived = [
+        entry
+        for entry in entry_items
+        if entry.entry_type is OverlayEntryType.ARCHIVED_LOCAL_TOPIC
+        and entry.topic_stable_id not in canonical_topic_ids
+    ]
+    archived_topic_ids = {entry.topic_stable_id for entry in archived}
+    retained_topic_values = {
+        entry.topic_stable_id: entry.value.get("before")
+        for entry in entry_items
+        if entry.entry_type is OverlayEntryType.MERGE_RESOLUTION
+        and entry.value.get("retained") is True
+        and entry.value.get("entity_type") == "topic"
+        and isinstance(entry.value.get("before"), Mapping)
+    }
+    topic_items = tuple(
+        RoadmapTopic(
+            stable_id=topic.stable_id,
+            title=str(retained_topic_values[topic.stable_id].get("title", topic.title)),
+            subject=str(
+                retained_topic_values[topic.stable_id].get("subject", topic.subject)
+            ),
+            scope_tags=tuple(
+                retained_topic_values[topic.stable_id].get(
+                    "scope_tags", topic.scope_tags
+                )
+            ),
+            level_tag=str(
+                retained_topic_values[topic.stable_id].get("level_tag", topic.level_tag)
+            ),
+            target_capability=str(
+                retained_topic_values[topic.stable_id].get(
+                    "target_capability", topic.target_capability
+                )
+            ),
+            recommended_depth=str(
+                retained_topic_values[topic.stable_id].get(
+                    "recommended_layer", topic.recommended_depth
+                )
+            ),
+        )
+        if topic.stable_id in retained_topic_values
+        else topic
+        for topic in topic_items
+    )
+    topic_items = topic_items + tuple(
+        RoadmapTopic(
+            stable_id=entry.topic_stable_id or "",
+            title=str(entry.value.get("title", "Archived local topic")),
+            subject=str(entry.value.get("subject", "archived")),
+            scope_tags=tuple(str(v) for v in entry.value.get("scope_tags", [])),
+            level_tag=str(entry.value.get("level_tag", "archived")),
+            target_capability=str(entry.value.get("target_capability", "understand")),
+            recommended_depth=str(entry.value.get("recommended_layer", "Essential")),
+        )
+        for entry in archived
+        if entry.topic_stable_id
+    )
     topic_by_id = {topic.stable_id: topic for topic in topic_items}
     if len(topic_by_id) == 0:
         return RoadmapProjection(
@@ -345,6 +413,7 @@ def project_roadmap(
                 classification=classification,
                 explanation=explanation,
                 has_transferred_evidence=stable_id in evidence_topics,
+                is_archived_local=stable_id in archived_topic_ids,
                 pending_proposals=tuple(proposals_by_topic.get(stable_id, ())),
                 conflicts=tuple(conflicts_by_topic.get(stable_id, ())),
             )

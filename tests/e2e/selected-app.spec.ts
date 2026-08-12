@@ -2,6 +2,7 @@ import { expect, test as base, type Page, type Request } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { DiagnosticPreviewEdit, DiagnosticSession, DiagnosticSetup } from '../../src/shared/api/diagnostics'
 import type { Assessment, EvidenceDetail, GoalProgress, Source } from '../../src/shared/api/evidence'
+import type { HandsOnWorkspace } from '../../src/shared/api/hands-on'
 import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
 import type { InterviewBundle, InterviewQuestion, InterviewRefresher, MockRun, PracticeRun } from '../../src/shared/api/interview'
 import type { OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
@@ -115,10 +116,43 @@ test.beforeEach(async ({ page }) => {
   let notebookEntries: Array<Record<string, unknown>> = []
   let evidenceRecords: EvidenceDetail[] = []
   let assessments: Assessment[] = []
+  let handsOnWorkspace: HandsOnWorkspace = {
+    work_id: null,
+    goal_id: 'goal-default',
+    topic_id: 'idempotency-retry',
+    scenario: {
+      title: 'Idempotency boundary hands-on scenario',
+      prompt: 'Create and defend a solution for the approved idempotency boundary topic.',
+      role: 'Software Engineer',
+      level: 'Senior',
+      constraints: ['Address the approved topic boundary.', 'State assumptions and trade-offs explicitly.'],
+      status: 'fixture',
+      source: 'fixture-pending-idk-009',
+    },
+    artifacts: [],
+    reviews: [],
+    cross_questions: [],
+  }
+  let canonicalDecision: 'postponed' | 'dismissed' | null = null
+  let canonicalAccepted = false
+  const canonicalItems = [
+    { id: 'visibility', entity_type: 'content', change_type: 'modified', topic_id: 'visibility', title: 'Visibility timeout and retry budgets', summary: 'Choose a timeout longer than expected processing.', impact: 'Refines the production checklist and adds an explicit failure case.', conflict_type: null, selected: true, recommended_resolution: 'accept-canonical', chosen_resolution: 'accept-canonical', resolution_explanation: 'Choose from measured processing latency, then bound renewal and retry behavior.' },
+    { id: 'idempotency', entity_type: 'content', change_type: 'modified', topic_id: 'idempotency', title: 'Idempotency boundary', summary: 'Store the message ID before applying the business write.', impact: 'Conflicts with your “unique constraint wins” overlay; choose which wording this goal keeps.', conflict_type: 'overlay-conflict', selected: true, recommended_resolution: 'overlay-wins', chosen_resolution: 'overlay-wins', resolution_explanation: 'Make the business decision and duplicate marker atomic; treat a prior read as an optimization.' },
+    { id: 'dlq', entity_type: 'content', change_type: 'modified', topic_id: 'dlq', title: 'Dead-letter recovery', summary: 'Inspect and replay poison messages.', impact: 'Adds one review prompt; does not mark the topic complete.', conflict_type: null, selected: true, recommended_resolution: 'accept-canonical', chosen_resolution: 'accept-canonical', resolution_explanation: 'Quarantine, diagnose, and replay with the duplicate boundary intact.' },
+    { id: 'legacy-retry', entity_type: 'topic', change_type: 'deleted', topic_id: 'legacy-retry', title: 'Legacy retry loop', summary: 'A locally annotated retry topic existed in the base graph.', impact: 'Carries learner evidence and must not silently disappear.', conflict_type: 'local-state-on-deleted-topic', selected: true, recommended_resolution: 'overlay-wins', chosen_resolution: 'overlay-wins', resolution_explanation: 'Retain personal state as an archived local topic.' },
+  ]
   let ownerSettings: OwnerSettings = {
     progress_display: 'detailed',
     row_version: 1,
   }
+  await page.route('**/api/v1/runner/capabilities', route => route.fulfill({ json: {
+    enabled: false,
+    disabled_reason: 'Runner posture is awaiting approval.',
+    environment_policy_version: 'blocked-unapproved',
+    limits_config_version: null,
+    limitation: 'Controlled subprocess execution only. This is not a sandbox or hostile-code isolation, and it is not proof of production or AWS behavior.',
+    capabilities: [],
+  } }))
   const evidenceSources: Source[] = [
     {
       id: 'source-e2e-withdrawn', origin: 'synthetic-fixture', source_type: 'documentation',
@@ -407,6 +441,38 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: practiceRun })
   })
   await page.route('**/api/v1/canonical/versions', route => route.fulfill({ json: [{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }] }))
+  await page.route('**/api/v1/canonical-update-proposals/**', async route => {
+    const request = route.request()
+    const idempotencyKey = request.headers()['idempotency-key']
+    if (!idempotencyKey) {
+      await route.fulfill({ status: 400, json: { code: 'missing_idempotency_key', message: 'Idempotency-Key is required.' } })
+      return
+    }
+    if (request.url().endsWith('/decision')) {
+      const body = request.postDataJSON() as { decision?: string; reason?: unknown }
+      if (!['postpone', 'dismiss'].includes(body.decision ?? '') || body.reason !== null || Object.keys(body).sort().join(',') !== 'decision,reason') {
+        await route.fulfill({ status: 422, json: { code: 'invalid_decision', message: 'Decision body must be exact.' } })
+        return
+      }
+      canonicalDecision = body.decision === 'postpone' ? 'postponed' : 'dismissed'
+      await route.fulfill({ json: { proposal_id: 'canonical-proposal-e2e', status: canonicalDecision, decided_at: '2026-08-13T00:00:00Z' } })
+      return
+    }
+    const body = request.postDataJSON() as { confirmed?: unknown; items?: Array<{ item_id?: unknown; selected?: unknown; resolution?: unknown }> }
+    const submittedIds = body.items?.map(item => item.item_id) ?? []
+    const expectedIds = canonicalItems.map(item => item.id)
+    const legalResolutions = new Set(['accept-canonical', 'overlay-wins', 'retain-local'])
+    const exactItems = body.items?.length === canonicalItems.length && [...submittedIds].sort().join(',') === [...expectedIds].sort().join(',') && new Set(submittedIds).size === expectedIds.length
+    const completeItems = body.items?.every(item => typeof item.selected === 'boolean' && typeof item.resolution === 'string' && legalResolutions.has(item.resolution) && Object.keys(item).sort().join(',') === 'item_id,resolution,selected')
+    if (body.confirmed !== true || !exactItems || !completeItems || Object.keys(body).sort().join(',') !== 'confirmed,items') {
+      await route.fulfill({ status: 422, json: { code: 'invalid_acceptance', message: 'Acceptance must be confirmed and submit every merge item exactly once with a legal resolution.' } })
+      return
+    }
+    canonicalAccepted = true
+    canonicalDecision = null
+    goals = goals.map(goal => goal.id === 'goal-default' ? { ...goal, graph_version_id: 'graph-2', row_version: goal.row_version + 1 } : goal)
+    await route.fulfill({ json: { proposal_id: 'canonical-proposal-e2e', status: 'accepted', goal_id: 'goal-default', base_version_id: 'graph-1', target_version_id: 'graph-2', goal_graph_version_id: 'graph-2', accepted_at: '2026-08-13T00:01:00Z', invalidation_state: 'dispatched', reprocess_job: null } })
+  })
   await page.route('**/api/v1/goals', async route => {
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON() as GoalCreate
@@ -426,6 +492,71 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'canonical-update') {
+      await route.fulfill({ json: canonicalAccepted ? { state: 'empty', goal_id: 'goal-default', base_version: { id: 'graph-2', version_label: '2026.08' }, target_version: null, proposal: null } : { state: canonicalDecision ?? 'conflict-needs-resolution', goal_id: 'goal-default', base_version: { id: 'graph-1', version_label: '2026.07' }, target_version: { id: 'graph-2', version_label: '2026.08' }, proposal: { id: 'canonical-proposal-e2e', status: canonicalDecision ?? 'awaiting', diff_hash: 'direct-graph-1-graph-2', items: canonicalItems } } })
+      return
+    }
+    if (path.at(-1) === 'hands-on' && path.includes('topics')) {
+      await route.fulfill({ json: handsOnWorkspace })
+      return
+    }
+    if (path.at(-1) === 'submit' && path.at(-2) === 'hands-on') {
+      const body = route.request().postDataJSON() as { artifact: string; cross_question_response?: { question_id: string; response: string } }
+      const revisionNumber = handsOnWorkspace.artifacts.length + 1
+      const artifactId = `hands-on-artifact-e2e-${revisionNumber}`
+      const evidenceId = `hands-on-evidence-e2e-${revisionNumber}`
+      const assessmentId = `hands-on-assessment-e2e-${revisionNumber}`
+      const reviewId = `hands-on-review-e2e-${revisionNumber}`
+      const questionId = `hands-on-question-e2e-${revisionNumber}`
+      const createdAt = `2026-08-12T00:${String(10 + revisionNumber).padStart(2, '0')}:00Z`
+      const evidence: EvidenceDetail = {
+        id: evidenceId, goal_id: 'goal-default', topic_stable_id: 'idempotency-retry',
+        evidence_type: 'hands-on-artifact', capability: 'implement',
+        summary: `Idempotency boundary hands-on revision ${revisionNumber}`, origin: 'hands-on-submit',
+        payload_hash: `hands-on-payload-e2e-${revisionNumber}`, active_assessment_id: assessmentId,
+        content: body.artifact, content_version: `revision-${revisionNumber}`,
+        tombstoned: false, transfers: [], created_at: createdAt,
+      }
+      const assessment = assessmentFixture(assessmentId, evidence, {
+        rubric_id: 'hands-on-rubric-e2e', rubric_version: 'fixture-hands-on-v1',
+        task_ref: `hands-on:work-e2e:revision:${revisionNumber}`,
+        assumptions: handsOnWorkspace.scenario.constraints, requested_capability: 'implement',
+        role: handsOnWorkspace.scenario.role, level: handsOnWorkspace.scenario.level,
+        evaluation_method: 'static',
+      })
+      evidenceRecords.push(evidence)
+      assessments.push(assessment)
+      handsOnWorkspace = {
+        ...handsOnWorkspace,
+        work_id: 'hands-on-work-e2e',
+        artifacts: [...handsOnWorkspace.artifacts, {
+          id: artifactId, revision_number: revisionNumber, content: body.artifact,
+          content_hash: `hands-on-content-hash-e2e-${revisionNumber}`,
+          response_to_question_id: body.cross_question_response?.question_id ?? null,
+          cross_question_response: body.cross_question_response?.response ?? null,
+          evidence_id: evidenceId, created_at: createdAt,
+        }],
+        reviews: [...handsOnWorkspace.reviews, {
+          id: reviewId, artifact_id: artifactId, assessment_id: assessmentId,
+          rubric_id: 'hands-on-rubric-e2e', rubric_version: 'fixture-hands-on-v1',
+          rubric_status: 'fixture', review_mode: 'static',
+          limitation: `Static review of revision ${revisionNumber} cannot compile or execute this artifact.`,
+          feedback: assessment.feedback, created_at: createdAt,
+        }],
+        cross_questions: [...handsOnWorkspace.cross_questions, {
+          id: questionId, review_id: reviewId, artifact_id: artifactId,
+          question: 'Which assumption breaks after a committed write is redelivered?',
+          target_gap: 'post-commit redelivery', created_at: createdAt,
+        }],
+      }
+      await route.fulfill({ status: 202, json: {
+        job_id: `hands-on-review-job-e2e-${revisionNumber}`,
+        kind: 'review_hands_on_artifact', status: 'succeeded', enqueued_at: createdAt,
+        deduplicated: false, lane: 'interactive', retryable: false,
+        failure_reference: null, result_ref: `HandsOnReview:${reviewId}`, result_hash: `review-hash-${revisionNumber}`,
+      } })
+      return
+    }
     if (path.at(-1) === 'conversation' && path.includes('topics')) {
       await route.fulfill({ json: [] })
       return
@@ -560,6 +691,15 @@ test.beforeEach(async ({ page }) => {
     goals[index] = { ...current, ...(body.resume_position !== undefined ? { resume_position: body.resume_position, resume_destination: body.resume_destination } : {}), dismissed_recommendation_keys: body.dismiss_recommendation_key ? [...current.dismissed_recommendation_keys, body.dismiss_recommendation_key] : current.dismissed_recommendation_keys, status: archived ? 'archived' : current.status, row_version: current.row_version + 1 }
     if (archived && profile.current_goal_id === id) profile = { ...profile, current_goal_id: null }
     await route.fulfill({ json: goals[index] })
+  })
+  await page.route('**/api/v1/jobs/hands-on-review-job-e2e-*', async route => {
+    const jobId = new URL(route.request().url()).pathname.split('/').at(-1)!
+    await route.fulfill({ json: {
+      job_id: jobId, kind: 'review_hands_on_artifact', status: 'succeeded',
+      enqueued_at: '2026-08-12T00:11:00Z', deduplicated: false, lane: 'interactive',
+      retryable: false, failure_reference: null, result_ref: 'HandsOnReview:hands-on-review-e2e-1',
+      result_hash: 'hands-on-review-hash-e2e',
+    } })
   })
   await page.route('**/api/v1/diagnostics', async route => {
     if (route.request().method() !== 'POST') {
@@ -885,7 +1025,6 @@ test('malformed operations storage falls back field by field without runtime err
       owner: null,
       review: { duration: 'forever', retrieval: 'yes' },
       importStatements: [null, { id: 4, decision: 'trusted' }],
-      acceptedUpdates: {},
     }))
   })
   await page.reload()
@@ -893,12 +1032,11 @@ test('malformed operations storage falls back field by field without runtime err
   await expect(page.getByRole('heading', { level: 1, name: /^Settings$/i })).toBeVisible()
   await expect.poll(async () => {
     const operations = await operationsState(page)
-    return { owner: operations?.owner, hasReviewState: 'review' in operations, hasImportState: 'importSource' in operations || 'importStatements' in operations, updates: operations?.acceptedUpdates }
+    return { owner: operations?.owner, hasReviewState: 'review' in operations, hasImportState: 'importSource' in operations || 'importStatements' in operations }
   }).toEqual({
     owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
     hasReviewState: false,
     hasImportState: false,
-    updates: [],
   })
 })
 
@@ -1144,7 +1282,7 @@ test('Topic Studio keeps a stale body through explicit regeneration and exposes 
   await expect(page.getByText('Regenerated body after explicit action.')).toBeVisible({ timeout: 5_000 })
 })
 
-test('Topic Studio static checks do not create client-side evidence', async ({ page, diagnostics }) => {
+test('Topic Studio keeps Submit usable while controlled runner posture is disabled', async ({ page, diagnostics }) => {
   void diagnostics
   await page.setViewportSize({ width: 1366, height: 768 })
   await open(page, '/app/topic-studio')
@@ -1153,11 +1291,60 @@ test('Topic Studio static checks do not create client-side evidence', async ({ p
   expect(openLabBox).not.toBeNull()
   expect((openLabBox?.y ?? 0) + (openLabBox?.height ?? 0), 'primary lesson action is in the first viewport').toBeLessThanOrEqual(768)
   await openLab.click()
-  await expect(page.getByRole('textbox', { name: /Java code/i })).toBeInViewport()
+  await expect(page.getByRole('textbox', { name: /Java artifact/i })).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
+  await expect(page.getByText(/Submit remains available for static review/i)).toBeVisible()
   await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
-  await page.getByRole('button', { name: 'Run static checks', exact: true }).click()
-  await expect(page.getByText(/Carries a stable request key/i)).toBeVisible()
-  await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
+  await page.getByRole('button', { name: 'Submit artifact', exact: true }).click()
+  await expect(page.getByText('Revision 1', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Static-review limitation/i)).toBeVisible()
+  await expect.poll(async () => (await apiEvidence(page)).length).toBe(1)
+})
+
+test('Topic Studio confirms a hashed input, separates runtime phases, and cancels a run', async ({ page, diagnostics }) => {
+  void diagnostics
+  let cancelled = false
+  await page.route('**/api/v1/runner/**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path.endsWith('/capabilities')) {
+      await route.fulfill({ json: { enabled: true, disabled_reason: null, environment_policy_version: 'runner-env-e2e', limits_config_version: 'runner-limits-e2e', limitation: 'Controlled subprocess execution only.', capabilities: [{ language: 'java', capability: 'compile-test', state: 'supported', detail: 'Configured.' }] } })
+      return
+    }
+    if (path.endsWith('/confirmations')) {
+      const body = request.postDataJSON() as { inputs: unknown[] }
+      await route.fulfill({ status: 201, json: { id: 'runner-confirmation-e2e', language: 'java', capability: 'compile-test', inputs: body.inputs, confirmed_at: '2026-08-13T02:00:00Z' } })
+      return
+    }
+    await route.fallback()
+  })
+  await page.route('**/api/v1/runner-runs**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path.endsWith('/cancel')) {
+      cancelled = true
+      await route.fulfill({ json: { id: 'runner-e2e', state: 'cancel-requested', inputs: [], output_chunks: [], compile_phase: { state: 'running' }, test_phase: { state: 'queued' }, cleanup_state: 'cleanup-pending', limitation: 'Controlled subprocess execution only.' } })
+      return
+    }
+    if (request.method() === 'POST') {
+      await route.fulfill({ status: 202, json: { job_id: 'runner-e2e' } })
+      return
+    }
+    await route.fulfill({ json: { id: 'runner-e2e', state: cancelled ? 'cancelled' : 'running', inputs: [], output_chunks: [{ phase: 'compile', stream: 'stdout', sequence: 1, content: 'Compilation started', truncated: false }, { phase: 'test', stream: 'stdout', sequence: 2, content: 'Tests queued', truncated: false }], compile_phase: { state: 'running' }, test_phase: { state: 'queued' }, cleanup_state: cancelled ? 'cleanup-complete' : 'cleanup-pending', limitation: 'Controlled subprocess execution only.' } })
+  })
+  await open(page, '/app/topic-studio')
+  await page.getByRole('button', { name: /Open implementation lab/i }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  const confirmation = page.getByRole('alertdialog')
+  await expect(confirmation.getByRole('heading', { name: 'Confirm controlled Java run' })).toBeVisible()
+  await expect(confirmation.getByText(/^[a-f0-9]{64}$/)).toBeVisible()
+  await expect(confirmation).toContainText('not a sandbox or hostile-code isolation')
+  await confirmation.getByRole('button', { name: 'Confirm and run' }).click()
+  const runtime = page.locator('[data-result-region="runtime"]')
+  await expect(runtime.getByText('Compilation started')).toBeVisible()
+  await expect(runtime.getByText('Tests queued')).toBeVisible()
+  await runtime.getByRole('button', { name: 'Cancel run' }).click()
+  await expect(runtime.getByText(/Cancel requested/)).toBeVisible()
 })
 
 test('Practice reveals a requested hint, then feedback, repair, and append-only history', async ({ page, diagnostics }) => {
@@ -1314,39 +1501,36 @@ test('server-parsed imports stay exact and untrusted while learner decisions rem
   }).toBe(false)
 })
 
-test('canonical curriculum updates stay pending until an explicit acceptance action', async ({ page, diagnostics }) => {
+test('canonical curriculum updates mutate the server pin only after explicit acceptance', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/canonical-updates')
-  await expect.poll(async () => (await operationsState(page))?.updateDecision).toBe('pending')
-  await expect.poll(async () => (await operationsState(page))?.goalVersion).toBe('2026.07')
-  await expect(page.getByLabel(/Local goal pinned to 2026\.07/i)).toBeVisible()
+  await expect(page.getByLabel(/Goal pinned to 2026\.07/i)).toBeVisible()
   await expect(page.getByText(/nothing changes until you explicitly accept a selection/i)).toBeVisible()
-  await page.evaluate(() => {
-    const value = JSON.parse(localStorage.getItem('yuno.operations.state.v1') || '{}')
-    delete value.goalVersion
-    localStorage.setItem('yuno.operations.state.v1', JSON.stringify(value))
-  })
-  await page.reload()
-  await expect.poll(async () => (await operationsState(page))?.updateDecision).toBe('pending')
-  await expect.poll(async () => (await operationsState(page))?.goalVersion).toBe('2026.07')
+  await expect(page.getByText('Archived local topic', { exact: true })).toBeVisible()
   await page.getByRole('checkbox', { name: /Select Dead-letter recovery/i }).uncheck()
-  await page.getByRole('radio', { name: /Adopt the new canonical wording/i }).check()
+  await page.getByRole('radio', { name: /Adopt the new canonical wording/i }).first().check()
   await page.getByRole('checkbox', { name: /Approve this exact local selection/i }).check()
   await page.getByRole('button', { name: /Accept selected/i }).click()
-  await expect(page.getByText(/2 selected changes accepted locally/i)).toBeVisible()
-  await expect(page.getByText(/No server or canonical source was mutated/i)).toBeVisible()
-  await expect.poll(async () => {
-    const state = await operationsState(page)
-    return { decision: state?.updateDecision, goalVersion: state?.goalVersion, updates: state?.acceptedUpdates, conflict: state?.acceptedConflictResolution }
-  }).toEqual({ decision: 'accepted', goalVersion: '2026.08', updates: ['visibility', 'idempotency'], conflict: 'canonical-adopted' })
-  await expect(page.getByLabel(/Local goal pinned to 2026\.08/i)).toBeVisible()
+  await expect(page.getByText(/3 selected changes accepted/i)).toBeVisible()
+  await expect.poll(async () => page.evaluate(() => Promise.all([
+    fetch('/api/v1/goals/goal-default/canonical-update').then(response => response.json()),
+    fetch('/api/v1/goals').then(response => response.json()),
+  ]).then(([update, goals]) => ({ state: update.state, pin: goals[0].graph_version_id })))).toEqual({ state: 'empty', pin: 'graph-2' })
   await page.reload()
-  await expect.poll(async () => {
-    const state = await operationsState(page)
-    return { goalVersion: state?.goalVersion, updates: state?.acceptedUpdates, conflict: state?.acceptedConflictResolution }
-  }).toEqual({ goalVersion: '2026.08', updates: ['visibility', 'idempotency'], conflict: 'canonical-adopted' })
-  await expect(page.getByRole('checkbox', { name: /Select Dead-letter recovery/i })).not.toBeChecked()
-  await expect(page.getByRole('radio', { name: /Adopt the new canonical wording/i })).toBeChecked()
+  await expect(page.getByLabel(/Goal pinned to 2026\.08/i)).toBeVisible()
+  await expect(page.getByText(/already uses the latest approved curriculum graph/i)).toBeVisible()
+})
+
+test('postponing a canonical update persists the decision without moving the pin', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/canonical-updates')
+  await page.getByRole('button', { name: 'Postpone' }).click()
+  await expect.poll(async () => page.evaluate(() => fetch('/api/v1/goals').then(response => response.json()).then(goals => goals[0].graph_version_id))).toBe('graph-1')
+  await page.reload()
+  await expect(page.getByText('Update postponed')).toBeVisible()
+  await expect(page.getByText(/decision is persisted and the proposal is closed/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Accept selected' })).toBeDisabled()
+  await expect(page.getByLabel(/Goal pinned to 2026\.07/i)).toBeVisible()
 })
 
 test('essential selected-app flows are operable from the keyboard', async ({ page, diagnostics }) => {

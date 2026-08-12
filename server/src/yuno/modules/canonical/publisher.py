@@ -149,6 +149,9 @@ def publish_canonical_graph(
         version = _build_version(
             manifest, actor_owner_id=actor_owner_id, published_at=published_at
         )
+        previous = uow.canonical.list_published_versions()
+        if previous:
+            version = replace(version, supersedes_version_id=previous[0].id)
         uow.canonical.create_version(version)
 
         for topic in manifest.topics:
@@ -156,7 +159,9 @@ def publish_canonical_graph(
                 uow.canonical.create_topic_identity(
                     TopicIdentity(
                         stable_id=topic.stable_id,
-                        stable_slug=resolved_slugs.get(topic.stable_id, topic.stable_id),
+                        stable_slug=resolved_slugs.get(
+                            topic.stable_id, topic.stable_id
+                        ),
                         created_at=published_at,
                         retired_at=None,
                     )

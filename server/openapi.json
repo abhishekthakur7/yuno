@@ -617,6 +617,191 @@
         "title": "BundleSubject",
         "type": "string"
       },
+      "CanonicalMergeItemResponse": {
+        "properties": {
+          "change_type": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted"
+            ],
+            "title": "Change Type",
+            "type": "string"
+          },
+          "chosen_resolution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accept-canonical",
+                  "overlay-wins",
+                  "retain-local"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen Resolution"
+          },
+          "conflict_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "overlay-conflict",
+                  "local-state-on-deleted-topic"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Type"
+          },
+          "entity_type": {
+            "enum": [
+              "topic",
+              "relation",
+              "content"
+            ],
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "string"
+          },
+          "recommended_resolution": {
+            "enum": [
+              "accept-canonical",
+              "overlay-wins",
+              "retain-local"
+            ],
+            "title": "Recommended Resolution",
+            "type": "string"
+          },
+          "resolution_explanation": {
+            "title": "Resolution Explanation",
+            "type": "string"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Id"
+          }
+        },
+        "required": [
+          "id",
+          "entity_type",
+          "change_type",
+          "topic_id",
+          "title",
+          "summary",
+          "impact",
+          "conflict_type",
+          "selected",
+          "recommended_resolution",
+          "chosen_resolution",
+          "resolution_explanation"
+        ],
+        "title": "CanonicalMergeItemResponse",
+        "type": "object"
+      },
+      "CanonicalMergeProposalResponse": {
+        "properties": {
+          "diff_hash": {
+            "title": "Diff Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CanonicalMergeItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "awaiting",
+              "postponed",
+              "dismissed",
+              "accepted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "diff_hash",
+          "items"
+        ],
+        "title": "CanonicalMergeProposalResponse",
+        "type": "object"
+      },
+      "CanonicalMergeSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accept-canonical",
+                  "overlay-wins",
+                  "retain-local"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item_id",
+          "selected"
+        ],
+        "title": "CanonicalMergeSelectionRequest",
+        "type": "object"
+      },
       "CanonicalTopicRelationResponse": {
         "description": "One `TopicRelation` row nested in\n`CanonicalVersionDetailResponse.relations`.",
         "properties": {
@@ -713,6 +898,218 @@
           "checkpoint_end"
         ],
         "title": "CanonicalTopicResponse",
+        "type": "object"
+      },
+      "CanonicalUpdateAcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "const": true,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CanonicalMergeSelectionRequest"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmed",
+          "items"
+        ],
+        "title": "CanonicalUpdateAcceptRequest",
+        "type": "object"
+      },
+      "CanonicalUpdateAcceptResponse": {
+        "properties": {
+          "accepted_at": {
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "base_version_id": {
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "goal_graph_version_id": {
+            "title": "Goal Graph Version Id",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "invalidation_state": {
+            "enum": [
+              "pending-dispatch",
+              "dispatched"
+            ],
+            "title": "Invalidation State",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "reprocess_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "const": "accepted",
+            "title": "Status",
+            "type": "string"
+          },
+          "target_version_id": {
+            "title": "Target Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "status",
+          "goal_id",
+          "base_version_id",
+          "target_version_id",
+          "goal_graph_version_id",
+          "accepted_at",
+          "invalidation_state",
+          "reprocess_job"
+        ],
+        "title": "CanonicalUpdateAcceptResponse",
+        "type": "object"
+      },
+      "CanonicalUpdateDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "postpone",
+              "dismiss"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "CanonicalUpdateDecisionRequest",
+        "type": "object"
+      },
+      "CanonicalUpdateDecisionResponse": {
+        "properties": {
+          "decided_at": {
+            "title": "Decided At",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "postponed",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "status",
+          "decided_at"
+        ],
+        "title": "CanonicalUpdateDecisionResponse",
+        "type": "object"
+      },
+      "CanonicalUpdateResponse": {
+        "properties": {
+          "base_version": {
+            "$ref": "#/components/schemas/CanonicalUpdateVersionResponse"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalMergeProposalResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "empty",
+              "proposed",
+              "conflict-needs-resolution",
+              "postponed",
+              "dismissed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalUpdateVersionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "goal_id",
+          "base_version",
+          "target_version",
+          "proposal"
+        ],
+        "title": "CanonicalUpdateResponse",
+        "type": "object"
+      },
+      "CanonicalUpdateVersionResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version_label"
+        ],
+        "title": "CanonicalUpdateVersionResponse",
         "type": "object"
       },
       "CanonicalVersionDetailResponse": {
@@ -2371,6 +2768,316 @@
         ],
         "title": "GoalStatus",
         "type": "string"
+      },
+      "HandsOnArtifactResponse": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "cross_question_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Question Response"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "response_to_question_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response To Question Id"
+          },
+          "revision_number": {
+            "title": "Revision Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision_number",
+          "content",
+          "content_hash",
+          "response_to_question_id",
+          "cross_question_response",
+          "evidence_id",
+          "created_at"
+        ],
+        "title": "HandsOnArtifactResponse",
+        "type": "object"
+      },
+      "HandsOnCrossQuestionAnswerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "question_id": {
+            "minLength": 1,
+            "title": "Question Id",
+            "type": "string"
+          },
+          "response": {
+            "minLength": 1,
+            "title": "Response",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "response"
+        ],
+        "title": "HandsOnCrossQuestionAnswerRequest",
+        "type": "object"
+      },
+      "HandsOnCrossQuestionResponse": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "review_id": {
+            "title": "Review Id",
+            "type": "string"
+          },
+          "target_gap": {
+            "title": "Target Gap",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "review_id",
+          "artifact_id",
+          "question",
+          "target_gap",
+          "created_at"
+        ],
+        "title": "HandsOnCrossQuestionResponse",
+        "type": "object"
+      },
+      "HandsOnLifecycleResponse": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/HandsOnArtifactResponse"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "cross_questions": {
+            "items": {
+              "$ref": "#/components/schemas/HandsOnCrossQuestionResponse"
+            },
+            "title": "Cross Questions",
+            "type": "array"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/HandsOnReviewResponse"
+            },
+            "title": "Reviews",
+            "type": "array"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/HandsOnScenarioResponse"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          },
+          "work_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Id"
+          }
+        },
+        "required": [
+          "work_id",
+          "goal_id",
+          "topic_id",
+          "scenario",
+          "artifacts",
+          "reviews",
+          "cross_questions"
+        ],
+        "title": "HandsOnLifecycleResponse",
+        "type": "object"
+      },
+      "HandsOnReviewResponse": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "limitation": {
+            "title": "Limitation",
+            "type": "string"
+          },
+          "review_mode": {
+            "const": "static",
+            "title": "Review Mode",
+            "type": "string"
+          },
+          "rubric_id": {
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "rubric_status": {
+            "title": "Rubric Status",
+            "type": "string"
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "artifact_id",
+          "assessment_id",
+          "rubric_id",
+          "rubric_version",
+          "rubric_status",
+          "review_mode",
+          "limitation",
+          "feedback",
+          "created_at"
+        ],
+        "title": "HandsOnReviewResponse",
+        "type": "object"
+      },
+      "HandsOnScenarioResponse": {
+        "properties": {
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "const": "fixture",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "prompt",
+          "role",
+          "level",
+          "constraints",
+          "status",
+          "source"
+        ],
+        "title": "HandsOnScenarioResponse",
+        "type": "object"
+      },
+      "HandsOnSubmitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "minLength": 1,
+            "title": "Artifact",
+            "type": "string"
+          },
+          "cross_question_response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandsOnCrossQuestionAnswerRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifact"
+        ],
+        "title": "HandsOnSubmitRequest",
+        "type": "object"
       },
       "HealthResponse": {
         "properties": {
@@ -5763,6 +6470,11 @@
             "title": "Has Transferred Evidence",
             "type": "boolean"
           },
+          "is_archived_local": {
+            "default": false,
+            "title": "Is Archived Local",
+            "type": "boolean"
+          },
           "is_skipped": {
             "title": "Is Skipped",
             "type": "boolean"
@@ -5824,6 +6536,367 @@
           "conflicts"
         ],
         "title": "RoadmapTopicResponse",
+        "type": "object"
+      },
+      "RunnerCapabilitiesResponse": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerCapabilityItemResponse"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "environment_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Policy Version"
+          },
+          "limitation": {
+            "title": "Limitation",
+            "type": "string"
+          },
+          "limits_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits Config Version"
+          }
+        },
+        "required": [
+          "enabled",
+          "disabled_reason",
+          "environment_policy_version",
+          "limits_config_version",
+          "limitation",
+          "capabilities"
+        ],
+        "title": "RunnerCapabilitiesResponse",
+        "type": "object"
+      },
+      "RunnerCapabilityItemResponse": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "language": {
+            "$ref": "#/components/schemas/RunnerLanguage"
+          },
+          "state": {
+            "enum": [
+              "supported",
+              "missing",
+              "incompatible"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "capability",
+          "state",
+          "detail"
+        ],
+        "title": "RunnerCapabilityItemResponse",
+        "type": "object"
+      },
+      "RunnerConfirmationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgement_version": {
+            "minLength": 1,
+            "title": "Acknowledgement Version",
+            "type": "string"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "capability": {
+            "minLength": 1,
+            "title": "Capability",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerInputRequest"
+            },
+            "minItems": 1,
+            "title": "Inputs",
+            "type": "array"
+          },
+          "language": {
+            "$ref": "#/components/schemas/RunnerLanguage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/RunnerOperation"
+          }
+        },
+        "required": [
+          "language",
+          "capability",
+          "operation",
+          "inputs",
+          "acknowledgement_version"
+        ],
+        "title": "RunnerConfirmationRequest",
+        "type": "object"
+      },
+      "RunnerConfirmationResponse": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "language": {
+            "$ref": "#/components/schemas/RunnerLanguage"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/RunnerOperation"
+          }
+        },
+        "required": [
+          "id",
+          "language",
+          "capability",
+          "operation",
+          "inputs",
+          "confirmed_at",
+          "expires_at",
+          "consumed_at"
+        ],
+        "title": "RunnerConfirmationResponse",
+        "type": "object"
+      },
+      "RunnerInputRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "content_ref": {
+            "minLength": 1,
+            "title": "Content Ref",
+            "type": "string"
+          },
+          "declared_type": {
+            "minLength": 1,
+            "title": "Declared Type",
+            "type": "string"
+          },
+          "logical_path": {
+            "minLength": 1,
+            "title": "Logical Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logical_path",
+          "declared_type",
+          "content_ref",
+          "content_hash"
+        ],
+        "title": "RunnerInputRequest",
+        "type": "object"
+      },
+      "RunnerLanguage": {
+        "enum": [
+          "java",
+          "python",
+          "relational"
+        ],
+        "title": "RunnerLanguage",
+        "type": "string"
+      },
+      "RunnerOperation": {
+        "enum": [
+          "compile",
+          "test"
+        ],
+        "title": "RunnerOperation",
+        "type": "string"
+      },
+      "RunnerRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation_id": {
+            "minLength": 1,
+            "title": "Confirmation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_id"
+        ],
+        "title": "RunnerRunRequest",
+        "type": "object"
+      },
+      "RunnerRunResponse": {
+        "properties": {
+          "cleanup_diagnostic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleanup Diagnostic"
+          },
+          "cleanup_state": {
+            "title": "Cleanup State",
+            "type": "string"
+          },
+          "compile_phase": {
+            "additionalProperties": true,
+            "title": "Compile Phase",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "limitation": {
+            "title": "Limitation",
+            "type": "string"
+          },
+          "output_chunks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Output Chunks",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "static_phase": {
+            "additionalProperties": true,
+            "title": "Static Phase",
+            "type": "object"
+          },
+          "test_phase": {
+            "additionalProperties": true,
+            "title": "Test Phase",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "state",
+          "inputs",
+          "output_chunks",
+          "compile_phase",
+          "test_phase",
+          "static_phase",
+          "cleanup_state",
+          "cleanup_diagnostic",
+          "limitation"
+        ],
+        "title": "RunnerRunResponse",
         "type": "object"
       },
       "SkipDecisionRequest": {
@@ -6774,6 +7847,142 @@
         "summary": "Post Bridge Decision",
         "tags": [
           "roadmap"
+        ]
+      }
+    },
+    "/api/v1/canonical-update-proposals/{proposal_id}/accept": {
+      "post": {
+        "operationId": "accept_api_v1_canonical_update_proposals__proposal_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanonicalUpdateAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalUpdateAcceptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Accept",
+        "tags": [
+          "canonical"
+        ]
+      }
+    },
+    "/api/v1/canonical-update-proposals/{proposal_id}/decision": {
+      "post": {
+        "operationId": "decide_api_v1_canonical_update_proposals__proposal_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanonicalUpdateDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalUpdateDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Decide",
+        "tags": [
+          "canonical"
         ]
       }
     },
@@ -7882,6 +9091,48 @@
         "summary": "Post Archive Goal",
         "tags": [
           "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/canonical-update": {
+      "get": {
+        "operationId": "get_update_api_v1_goals__goal_id__canonical_update_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Update",
+        "tags": [
+          "canonical"
         ]
       }
     },
@@ -9245,6 +10496,134 @@
         "summary": "Generate Topic Layer",
         "tags": [
           "learning-content"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on": {
+      "get": {
+        "operationId": "read_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandsOnLifecycleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read Hands On",
+        "tags": [
+          "hands-on"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on/submit": {
+      "post": {
+        "operationId": "submit_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandsOnSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Submit Hands On",
+        "tags": [
+          "hands-on"
         ]
       }
     },
@@ -11581,6 +12960,237 @@
         "summary": "Post Review Dismiss",
         "tags": [
           "notebook-review"
+        ]
+      }
+    },
+    "/api/v1/runner-runs": {
+      "post": {
+        "operationId": "start_runner_api_v1_runner_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Start Runner",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/v1/runner-runs/{run_id}": {
+      "get": {
+        "operationId": "get_runner_run_api_v1_runner_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Runner Run",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/v1/runner-runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_runner_run_api_v1_runner_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Cancel Runner Run",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/v1/runner/capabilities": {
+      "get": {
+        "operationId": "get_capabilities_api_v1_runner_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Capabilities",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/v1/runner/confirmations": {
+      "post": {
+        "operationId": "confirm_runner_api_v1_runner_confirmations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerConfirmationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Confirm Runner",
+        "tags": [
+          "runner"
         ]
       }
     },

@@ -6,14 +6,12 @@ import * as Tabs from '@radix-ui/react-tabs'
 import {
   AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, Circle,
   Clock3, Code2, FileText, HelpCircle, History, Lightbulb, ListTree, MessageSquareText,
-  LockKeyhole, NotebookPen, Pause, Play, RefreshCcw, RotateCcw, Settings2, ShieldCheck, X,
+  LockKeyhole, NotebookPen, Pause, Play, RefreshCcw, Settings2, ShieldCheck, X,
 } from 'lucide-react'
 import {
   CURRENT_LESSON_ID,
-  SIMULATION_LIMITATION,
   type Depth,
 } from '../../shared/model'
-import { useLearningState } from '../../shared/state'
 import { ApiError, canonicalVersionsQueryOptions } from '../../shared/api/queries'
 import { goalDestination, resumePage, useProfileGoals } from '../../shared/use-profile-goals'
 import type { GoalCreate, GoalWorkspace } from '../../shared/api/profile-goals'
@@ -33,6 +31,7 @@ import { useOwnerSettings } from '../../shared/use-settings'
 import { useInterview, useMockReport, useMockRun, usePracticeRun } from '../../shared/use-interview'
 import type { InterviewBundle, InterviewLevel, InterviewQuestion, InterviewRefresher } from '../../shared/api/interview'
 import type { ReviewAttempt, ReviewItem } from '../../shared/api/notebook-review'
+import { HandsOnLab } from './HandsOnLab'
 import { roadmapQueryOptions, type LearnerCorrection, type OverlayProposal, type OverlayProposalDecision } from '../../shared/api/roadmap'
 import { JobConnectionStatus } from '../../shared/job-events'
 import type { InterviewMode, InterviewSelection } from '../app-model'
@@ -605,7 +604,6 @@ export function TopicLayerPanel({
 }
 
 function Topic({ navigate }: PageProps) {
-  const { state, dispatch } = useLearningState()
   const workspace = useProfileGoals()
   const goal = workspace.currentGoal
   const roadmap = useRoadmap(goal?.id ?? null)
@@ -635,10 +633,7 @@ function Topic({ navigate }: PageProps) {
     <JobConnectionStatus ids={(topicContent.data?.layers ?? []).map(layer => layer.generation?.job_id)} />
     <TopicLayerTabs selected={selectedLayer} onSelect={setSelectedLayer} />
     <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} onGenerate={() => topicContent.generate.mutate(selectedLayer)} onRegenerate={(artifactId) => topicContent.regenerate.mutate(artifactId)} actionPending={topicContent.generate.isPending || topicContent.regenerate.isPending} actionError={topicContent.generate.isError || topicContent.regenerate.isError} provenance={provenance.data} provenancePending={provenance.isPending} provenanceError={provenance.isError} onRetryProvenance={() => void provenance.refetch()} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
-    {currentLessonId === CURRENT_LESSON_ID ? <section className="sb-code" id="sb-lesson-artifact"><header><span><Code2 size={17} /> ReservationService.java</span><Button tone="quiet" onClick={() => dispatch({ type: 'RESET_CODE' })}><RotateCcw size={15} /> Reset</Button></header><label className="sb-sr-only" htmlFor="sb-code">Java code</label><textarea id="sb-code" value={state.codeDraft} onChange={e => dispatch({ type: 'SET_CODE', value: e.target.value })} spellCheck={false} />
-      <footer><p>{SIMULATION_LIMITATION}</p><div><Button tone="secondary" onClick={() => dispatch({ type: 'RUN_CHECKS' })}><Play size={16} /> Run static checks</Button></div></footer>
-      <div className="sb-output" aria-live="polite"><header><strong>Static check output</strong><span>{state.runResult?.status ?? 'Not run'}</span></header>{state.runResult ? state.runResult.checks.map(check => <div key={check.label}><span className={check.passed ? 'is-pass' : 'is-fail'}>{check.passed ? <Check size={14} /> : <X size={14} />}</span><p><strong>{check.label}</strong><small>{check.detail}</small></p></div>) : <p>No process will run. These deterministic browser checks inspect text patterns only.</p>}</div>
-    </section> : null}
+    <HandsOnLab goalId={goal?.id ?? null} topicId={currentLessonId} />
   </article><TopicTools goalId={goal?.id ?? null} topicId={currentLessonId} conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
 }
 

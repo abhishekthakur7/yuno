@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import os
+import resource
+import selectors
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from math import ceil
+from pathlib import Path
+from tempfile import gettempdir, mkdtemp
+
+from yuno.modules.runner.domain import OutputChunk, RunnerProcessOutcome
+from yuno.modules.runner.ports import RunnerProcessSpec
+from yuno.shared.infrastructure.processes import process_identity
+
+
+def memory_limit_enforced() -> bool:
+    return sys.platform != "darwin"
+
+
+def detect_command(
+    language: str, capability: str, command: str | None, prefix: str | None
+) -> dict[str, str]:
+    path = shutil.which(command) if command else None
+    if path is None:
+        return {
+            "language": language,
+            "capability": capability,
+            "state": "missing",
+            "detail": "Configured toolchain command is not present.",
+        }
+    if prefix:
+        probe = subprocess.run(
+            [path, "-version"],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        version = (probe.stderr or probe.stdout).strip()
+        if probe.returncode or not version.startswith(prefix):
+            return {
+                "language": language,
+                "capability": capability,
+                "state": "incompatible",
+                "detail": "Detected toolchain does not match the approved version prefix.",
+            }
+    return {
+        "language": language,
+        "capability": capability,
+        "state": "supported",
+        "detail": "Configured toolchain detected at request time.",
+    }
+
+
+class LocalTempWorkspace:
+    def create(self) -> Path:
+        return Path(mkdtemp(prefix="yuno-runner-"))
+
+    def cleanup(self, path: Path) -> None:
+        if (
+            not path.name.startswith("yuno-runner-")
+            or path.parent.resolve() != Path(gettempdir()).resolve()
+        ):
+            raise ValueError("Refusing to clean a path outside a runner workspace.")
+        shutil.rmtree(path)
+
+
+class LocalRunnerProcessPort:
+    """Runner-specific direct-argv process policy; never invokes a shell."""
+
+    def run(self, spec: RunnerProcessSpec, *, on_spawn, cancelled):
+        def apply_limits() -> None:
+            cpu_seconds = max(1, ceil(spec.limits.cpu_seconds))
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds,) * 2)
+            if memory_limit_enforced():
+                resource.setrlimit(
+                    resource.RLIMIT_AS, (spec.limits.memory_bytes,) * 2
+                )
+            resource.setrlimit(resource.RLIMIT_NPROC, (spec.limits.process_count,) * 2)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (spec.limits.file_bytes,) * 2)
+
+        started = time.monotonic()
+        process = subprocess.Popen(
+            list(spec.argv),
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=spec.working_directory,
+            env=dict(spec.environment),
+            start_new_session=True,
+            preexec_fn=apply_limits,  # noqa: PLW1509 -- required local rlimits; runner is gated to approved platform
+        )
+        pgid = os.getpgid(process.pid)
+        identity = process_identity(process.pid)
+        on_spawn(process.pid, pgid, identity)
+        selector = selectors.DefaultSelector()
+        assert process.stdout is not None and process.stderr is not None
+        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+        chunks: list[OutputChunk] = []
+        sizes = {"stdout": 0, "stderr": 0}
+        sequences = {"stdout": 0, "stderr": 0}
+        limited = was_cancelled = False
+        child_usage = None
+        termination_started = None
+        killed = False
+
+        def request_termination() -> None:
+            nonlocal termination_started
+            if termination_started is not None:
+                return
+            termination_started = time.monotonic()
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+        while True:
+            if child_usage is None:
+                waited_pid, status, usage = os.wait4(process.pid, os.WNOHANG)
+                if waited_pid:
+                    process.returncode = os.waitstatus_to_exitcode(status)
+                    child_usage = usage
+            if cancelled():
+                was_cancelled = True
+                request_termination()
+            elif time.monotonic() - started >= spec.limits.wall_seconds:
+                limited = True
+                request_termination()
+            if (
+                termination_started is not None
+                and not killed
+                and time.monotonic() - termination_started >= 0.5
+            ):
+                killed = True
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            ready = selector.select(timeout=0.02 if child_usage is None else 0)
+            for key, _ in ready:
+                data = os.read(key.fileobj.fileno(), 65536)
+                if not data:
+                    selector.unregister(key.fileobj)
+                    continue
+                stream = str(key.data)
+                remaining = max(0, spec.limits.output_bytes - sum(sizes.values()))
+                kept = data[:remaining]
+                sizes[stream] += len(kept)
+                sequences[stream] += 1
+                chunks.append(
+                    OutputChunk(
+                        spec.phase,
+                        stream,
+                        sequences[stream],
+                        kept.decode("utf-8", errors="replace"),
+                        len(kept) < len(data),
+                    )
+                )
+                if len(kept) < len(data):
+                    limited = True
+                    request_termination()
+            if child_usage is not None and not selector.get_map():
+                break
+        selector.close()
+        assert process.returncode is not None and child_usage is not None
+        code = process.returncode
+        cpu_ms = int(
+            max(0.0, child_usage.ru_utime + child_usage.ru_stime) * 1000
+        )
+        return RunnerProcessOutcome(
+            process.pid,
+            pgid,
+            code,
+            -code if code is not None and code < 0 else None,
+            limited,
+            was_cancelled,
+            tuple(chunks),
+            int((time.monotonic() - started) * 1000),
+            cpu_ms,
+        )

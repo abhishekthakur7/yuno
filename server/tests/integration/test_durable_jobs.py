@@ -273,15 +273,12 @@ def test_retry_strategies_are_behaviorally_distinct(
     assert interview_attempts[-1].substitution_ref == "turn:replacement"
     runner = dispatcher.enqueue(JobRequest("java_runner", owner, {}))
     _wait(dispatcher, owner, runner.job_id, JobStatus.FAILED)
-    with pytest.raises(ConflictError, match="confirmation"):
+    with pytest.raises(ConflictError, match="freshly confirmed"):
         dispatcher.retry(owner, runner.job_id)
-    fresh = dispatcher.retry(
-        owner, runner.job_id, confirmation_ref="confirmation:fresh"
-    )
-    assert fresh.status is JobStatus.QUEUED
-    _wait(dispatcher, owner, runner.job_id, JobStatus.FAILED)
-    runner_attempts = dispatcher.attempts(owner, runner.job_id)
-    assert runner_attempts[-1].confirmation_ref == "confirmation:fresh"
+    with pytest.raises(ConflictError, match="freshly confirmed"):
+        dispatcher.retry(
+            owner, runner.job_id, confirmation_ref="confirmation:untrusted"
+        )
     dispatcher.register(
         "generate_topic_content",
         lambda execution: JobCompletion(
@@ -466,7 +463,9 @@ def test_terminal_transaction_serializes_concurrent_http_writes(
 ) -> None:
     owner = _owner(uow_factory)
     with session_factory.begin() as session:
-        session.execute(text("CREATE TABLE completion_lock_probe (id TEXT PRIMARY KEY)"))
+        session.execute(
+            text("CREATE TABLE completion_lock_probe (id TEXT PRIMARY KEY)")
+        )
 
     apply_started = threading.Event()
     release_apply = threading.Event()

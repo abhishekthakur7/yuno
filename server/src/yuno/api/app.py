@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from yuno.api.contracts import ErrorResponse
+from yuno.api.contracts import ErrorResponse, JobRefResponse
 from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
 from yuno.api.provider_runtime import (
@@ -18,10 +18,13 @@ from yuno.api.provider_runtime import (
     UnavailableProviderPort,
 )
 from yuno.api.routes.canonical import router as canonical_router
+from yuno.api.routes.canonical_updates import router as canonical_updates_router
 from yuno.api.routes.diagnostics import router as diagnostics_router
 from yuno.api.routes.events import router as events_router
 from yuno.api.routes.evidence import router as evidence_router
 from yuno.api.routes.evidence import run_assessment_job, run_reevaluation_job
+from yuno.api.routes.hands_on import router as hands_on_router
+from yuno.api.routes.hands_on import run_hands_on_review_job
 from yuno.api.routes.imports import router as imports_router
 from yuno.api.routes.imports import run_import_parse_job
 from yuno.api.routes.interview import (
@@ -39,6 +42,7 @@ from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.provenance import router as provenance_router
 from yuno.api.routes.provider import router as provider_router
 from yuno.api.routes.roadmap import router as roadmap_router
+from yuno.api.routes.runner import router as runner_router
 from yuno.api.routes.settings_data import router as settings_data_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
@@ -49,11 +53,17 @@ from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
 from yuno.modules.provenance.adapters import HttpSourceRetrievalAdapter
 from yuno.modules.provenance.service import run_source_retrieval_job
+from yuno.modules.provider.service import require_disclosure
+from yuno.modules.runner.adapters import LocalRunnerProcessPort, LocalTempWorkspace
+from yuno.modules.runner.repository import RunnerRepository
+from yuno.modules.runner.service import execute_runner_job
 from yuno.modules.settings_data.service import ensure_owner_settings
 from yuno.shared.application.jobs import (
     JobCompletion,
     JobExecution,
+    JobLane,
     JobPreparedFailure,
+    JobRequest,
     JobResult,
 )
 from yuno.shared.domain.clock import SystemClock
@@ -325,6 +335,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             )
             dispatcher.register(
+                "review_hands_on_artifact",
+                external_job_handler(
+                    "review_hands_on_artifact",
+                    lambda request, completion_uow_factory, adapter: (
+                        run_hands_on_review_job(
+                            request, completion_uow_factory, adapter
+                        )
+                    ),
+                    lambda execution: ProviderEvaluationAdapter(app, execution),
+                    "evaluate",
+                ),
+            )
+            dispatcher.register(
                 "generate_mock_next_turn",
                 external_job_handler(
                     "generate_mock_next_turn",
@@ -378,7 +401,133 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "retrieve",
                 ),
             )
+            app.state.runner_process_port = LocalRunnerProcessPort()
+            app.state.runner_workspace_port = LocalTempWorkspace()
+            dispatcher.register(
+                "java_runner",
+                lambda execution: execute_runner_job(
+                    execution,
+                    session_factory,
+                    resolved_settings,
+                    app.state.runner_process_port,
+                    app.state.runner_workspace_port,
+                ),
+            )
+
+            with uow_factory() as reservation_uow:
+                pending_hands_on = (
+                    reservation_uow.evidence.list_pending_idempotency(
+                        "submit_hands_on:"
+                    )
+                )
+            for reservation in pending_hands_on:
+                try:
+                    saved = JobRefResponse.model_validate_json(
+                        reservation.response_json
+                    )
+                    if reservation.request_ref is None or saved.result_ref is None:
+                        continue
+                    with uow_factory() as reservation_uow:
+                        artifact = reservation_uow.hands_on.get_artifact_by_evidence(
+                            reservation.owner_id, reservation.request_ref
+                        )
+                        disclosure = require_disclosure(
+                            reservation_uow, reservation.owner_id
+                        )
+                    if artifact is None:
+                        continue
+                    dispatcher.enqueue(
+                        JobRequest(
+                            "review_hands_on_artifact",
+                            reservation.owner_id,
+                            {
+                                "artifact_id": artifact.id,
+                                "rubric_id": saved.result_ref,
+                            },
+                            artifact.id,
+                            reservation.idempotency_key,
+                            requested_job_id=saved.job_id,
+                            goal_id=artifact.goal_id,
+                            lane=JobLane.INTERACTIVE,
+                            schema_version="hands-on-review-v1",
+                            request_ref=f"HandsOnArtifact:{artifact.id}",
+                            disclosure_ref=disclosure.id,
+                        )
+                    )
+                    with uow_factory() as reservation_uow:
+                        reservation_uow.evidence.complete_idempotency(
+                            reservation.owner_id,
+                            reservation.operation,
+                            reservation.idempotency_key,
+                            saved.model_copy(
+                                update={"deduplicated": True}
+                            ).model_dump_json(),
+                        )
+                        reservation_uow.commit()
+                except Exception:  # noqa: BLE001,S112 - durable reservation remains pending
+                    continue
+
+            with session_factory() as runner_session:
+                runner_repo = RunnerRepository(runner_session)
+                pending_runner = tuple(
+                    (
+                        record,
+                        runner_repo.confirmation(
+                            record.owner_id, record.confirmation_id
+                        ),
+                    )
+                    for record in runner_repo.pending_dispatch_records()
+                )
+            for record, confirmation in pending_runner:
+                if confirmation is None or confirmation.idempotency_key is None:
+                    continue
+                try:
+                    dispatcher.enqueue(
+                        JobRequest(
+                            "java_runner",
+                            record.owner_id,
+                            {"run_id": record.id},
+                            record.id,
+                            confirmation.idempotency_key,
+                            requested_job_id=record.id,
+                            goal_id=record.goal_id,
+                            lane=JobLane.INTERACTIVE,
+                            schema_version="runner-v1",
+                            request_ref=f"RunnerRun:{record.id}",
+                            confirmation_ref=confirmation.id,
+                            run_id=record.id,
+                        )
+                    )
+                except Exception:  # noqa: BLE001,S112 - durable reservation remains queued
+                    continue
             dispatcher.start()
+
+            with uow_factory() as followup_uow:
+                pending_followups = (
+                    followup_uow.canonical_merges.list_pending_merge_followups()
+                )
+            for followup in pending_followups:
+                if followup.kind != "reprocess_import":
+                    continue
+                try:
+                    ref = dispatcher.enqueue(
+                        JobRequest(
+                            kind="reprocess_import",
+                            owner_id=followup.owner_id,
+                            goal_id=followup.goal_id,
+                            payload=followup.payload,
+                            dedupe_key=str(followup.payload["import_id"]),
+                            idempotency_key=f"canonical-merge:{followup.proposal_id}:{followup.id}",
+                            request_ref=f"ImportRecord:{followup.payload['import_id']}",
+                        )
+                    )
+                except Exception:  # noqa: BLE001,S112 - durable intent remains pending
+                    continue
+                with uow_factory() as followup_uow:
+                    followup_uow.canonical_merges.mark_followup_dispatched(
+                        followup.owner_id, followup.id, ref.job_id
+                    )
+                    followup_uow.commit()
 
             app.state.engine = engine
             app.state.session_factory = session_factory
@@ -410,6 +559,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     api_router.include_router(system_router)
     api_router.include_router(canonical_router)
+    api_router.include_router(canonical_updates_router)
     api_router.include_router(profiles_goals_router)
     api_router.include_router(diagnostics_router)
     api_router.include_router(learning_content_router)
@@ -417,11 +567,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(interview_router)
     api_router.include_router(roadmap_router)
     api_router.include_router(evidence_router)
+    api_router.include_router(hands_on_router)
     api_router.include_router(notebook_review_router)
     api_router.include_router(provenance_router)
     api_router.include_router(provider_router)
     api_router.include_router(settings_data_router)
     api_router.include_router(jobs_router)
+    api_router.include_router(runner_router)
     api_router.include_router(events_router)
     app.include_router(api_router)
 

@@ -67,6 +67,7 @@ from yuno.modules.roadmap.domain import (
     OverlayProposalState,
     OverlayProposalType,
 )
+from yuno.modules.runner.domain import RunnerLanguage, RunnerOperation
 from yuno.modules.settings_data.domain import ProgressDisplay
 from yuno.shared.application.jobs import JobLane, JobRef, JobStatus
 
@@ -318,6 +319,136 @@ class JobRefResponse(BaseModel):
     substitution_ref: str | None = None
     result_ref: str | None = None
     result_hash: str | None = None
+
+
+class RunnerInputRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    logical_path: str = Field(min_length=1)
+    declared_type: str = Field(min_length=1)
+    content_ref: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class RunnerConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str | None = None
+    artifact_id: str | None = None
+    language: RunnerLanguage
+    capability: str = Field(min_length=1)
+    operation: RunnerOperation
+    inputs: list[RunnerInputRequest] = Field(min_length=1)
+    acknowledgement_version: str = Field(min_length=1)
+
+
+class RunnerConfirmationResponse(BaseModel):
+    id: str
+    language: RunnerLanguage
+    capability: str
+    operation: RunnerOperation
+    inputs: list[dict[str, str]]
+    confirmed_at: str
+    expires_at: str
+    consumed_at: str | None
+
+
+class RunnerRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation_id: str = Field(min_length=1)
+
+
+class RunnerCapabilityItemResponse(BaseModel):
+    language: RunnerLanguage
+    capability: str
+    state: Literal["supported", "missing", "incompatible"]
+    detail: str
+
+
+class RunnerCapabilitiesResponse(BaseModel):
+    enabled: bool
+    disabled_reason: str | None
+    environment_policy_version: str | None
+    limits_config_version: str | None
+    limitation: str
+    capabilities: list[RunnerCapabilityItemResponse]
+
+
+class RunnerRunResponse(BaseModel):
+    id: str
+    job_id: str
+    state: str
+    inputs: list[dict[str, str]]
+    output_chunks: list[dict[str, object]]
+    compile_phase: dict[str, object]
+    test_phase: dict[str, object]
+    static_phase: dict[str, object]
+    cleanup_state: str
+    cleanup_diagnostic: str | None
+    limitation: str
+
+
+class HandsOnCrossQuestionAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: str = Field(min_length=1)
+    response: str = Field(min_length=1)
+
+
+class HandsOnSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    artifact: str = Field(min_length=1)
+    cross_question_response: HandsOnCrossQuestionAnswerRequest | None = None
+
+
+class HandsOnScenarioResponse(BaseModel):
+    title: str
+    prompt: str
+    role: str
+    level: str
+    constraints: list[str]
+    status: Literal["fixture"]
+    source: str
+
+
+class HandsOnArtifactResponse(BaseModel):
+    id: str
+    revision_number: int
+    content: str
+    content_hash: str
+    response_to_question_id: str | None
+    cross_question_response: str | None
+    evidence_id: str
+    created_at: str
+
+
+class HandsOnReviewResponse(BaseModel):
+    id: str
+    artifact_id: str
+    assessment_id: str
+    rubric_id: str
+    rubric_version: str
+    rubric_status: str
+    review_mode: Literal["static"]
+    limitation: str
+    feedback: str
+    created_at: str
+
+
+class HandsOnCrossQuestionResponse(BaseModel):
+    id: str
+    review_id: str
+    artifact_id: str
+    question: str
+    target_gap: str
+    created_at: str
+
+
+class HandsOnLifecycleResponse(BaseModel):
+    work_id: str | None
+    goal_id: str
+    topic_id: str
+    scenario: HandsOnScenarioResponse
+    artifacts: list[HandsOnArtifactResponse]
+    reviews: list[HandsOnReviewResponse]
+    cross_questions: list[HandsOnCrossQuestionResponse]
 
 
 class JobAttemptResponse(BaseModel):
@@ -1047,6 +1178,7 @@ class RoadmapTopicResponse(BaseModel):
     classification: LearningClassification
     explanation: str
     has_transferred_evidence: bool
+    is_archived_local: bool = False
     pending_proposals: list[dict[str, object]]
     conflicts: list[dict[str, object]]
 
@@ -1071,6 +1203,84 @@ class LearningStateResponse(BaseModel):
 class RoadmapMutationResponse(BaseModel):
     projection: RoadmapResponse
     checkpoint_saved: bool = True
+
+
+class CanonicalUpdateVersionResponse(BaseModel):
+    id: str
+    version_label: str
+
+
+class CanonicalMergeItemResponse(BaseModel):
+    id: str
+    entity_type: Literal["topic", "relation", "content"]
+    change_type: Literal["added", "modified", "deleted"]
+    topic_id: str | None
+    title: str
+    summary: str
+    impact: str
+    conflict_type: Literal["overlay-conflict", "local-state-on-deleted-topic"] | None
+    selected: bool
+    recommended_resolution: Literal["accept-canonical", "overlay-wins", "retain-local"]
+    chosen_resolution: (
+        Literal["accept-canonical", "overlay-wins", "retain-local"] | None
+    )
+    resolution_explanation: str
+
+
+class CanonicalMergeProposalResponse(BaseModel):
+    id: str
+    status: Literal["awaiting", "postponed", "dismissed", "accepted"]
+    diff_hash: str
+    items: list[CanonicalMergeItemResponse]
+
+
+class CanonicalUpdateResponse(BaseModel):
+    state: Literal[
+        "empty", "proposed", "conflict-needs-resolution", "postponed", "dismissed"
+    ]
+    goal_id: str
+    base_version: CanonicalUpdateVersionResponse
+    target_version: CanonicalUpdateVersionResponse | None
+    proposal: CanonicalMergeProposalResponse | None
+
+
+class CanonicalUpdateDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["postpone", "dismiss"]
+    reason: str | None = None
+
+
+class CanonicalUpdateDecisionResponse(BaseModel):
+    proposal_id: str
+    status: Literal["postponed", "dismissed"]
+    decided_at: str
+
+
+class CanonicalMergeSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_id: str
+    selected: bool
+    resolution: Literal["accept-canonical", "overlay-wins", "retain-local"] | None = (
+        None
+    )
+
+
+class CanonicalUpdateAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmed: Literal[True]
+    items: list[CanonicalMergeSelectionRequest]
+
+
+class CanonicalUpdateAcceptResponse(BaseModel):
+    proposal_id: str
+    status: Literal["accepted"]
+    goal_id: str
+    base_version_id: str
+    target_version_id: str
+    goal_graph_version_id: str
+    accepted_at: str
+    invalidation_state: Literal["pending-dispatch", "dispatched"]
+    reprocess_job: JobRefResponse | None
 
 
 class LearnerCorrectionRequest(BaseModel):

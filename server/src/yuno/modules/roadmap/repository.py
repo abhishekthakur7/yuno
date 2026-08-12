@@ -81,6 +81,25 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
         ).one_or_none()
         return _overlay(row) if row else None
 
+    def advance_overlay_base(
+        self, owner_id: str, goal_id: str, expected_version: int, graph_version_id: str
+    ) -> PersonalOverlay | None:
+        result = self._session.execute(
+            update(PersonalOverlayRow)
+            .where(
+                PersonalOverlayRow.owner_id == owner_id,
+                PersonalOverlayRow.goal_id == goal_id,
+                PersonalOverlayRow.row_version == expected_version,
+            )
+            .values(
+                base_graph_version_id=graph_version_id, row_version=expected_version + 1
+            )
+        )
+        if result.rowcount != 1:
+            return None
+        self._session.flush()
+        return self.get_overlay(owner_id, goal_id)
+
     def append_overlay_entry(self, entry: OverlayEntry) -> OverlayEntry:
         self._session.add(
             OverlayEntryRow(
@@ -320,14 +339,26 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 LearningStateRow.topic_stable_id,
                 LearningStateRow.classification,
             )
-            .join(LearningStateRow, LearningStateRow.id == TransferredEvidenceRefRow.learning_state_id)
-            .where(TransferredEvidenceRefRow.owner_id == owner_id, TransferredEvidenceRefRow.goal_id == goal_id)
+            .join(
+                LearningStateRow,
+                LearningStateRow.id == TransferredEvidenceRefRow.learning_state_id,
+            )
+            .where(
+                TransferredEvidenceRefRow.owner_id == owner_id,
+                TransferredEvidenceRefRow.goal_id == goal_id,
+            )
             .order_by(TransferredEvidenceRefRow.id)
         )
         return tuple(
             ProgressTransferView(
-                row.id, row.owner_id, row.goal_id, topic, row.source_evidence_id,
-                classification, row.rationale, row.created_at,
+                row.id,
+                row.owner_id,
+                row.goal_id,
+                topic,
+                row.source_evidence_id,
+                classification,
+                row.rationale,
+                row.created_at,
             )
             for row, topic, classification in self._session.execute(stmt)
         )
@@ -338,7 +369,9 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
         rows = self._session.scalars(
             owner_scoped_select(TransferredEvidenceRefRow, owner_id)
             .where(TransferredEvidenceRefRow.source_evidence_id == evidence_id)
-            .order_by(TransferredEvidenceRefRow.created_at, TransferredEvidenceRefRow.id)
+            .order_by(
+                TransferredEvidenceRefRow.created_at, TransferredEvidenceRefRow.id
+            )
         ).all()
         return tuple(
             EvidenceTransferView(

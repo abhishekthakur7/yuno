@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 
 class CanonicalVersionStatus(StrEnum):
@@ -185,3 +186,74 @@ class CanonicalGraphManifest:
     topics: tuple[Topic, ...]
     relations: tuple[TopicRelation, ...] = ()
     content_revisions: tuple[ContentRevision, ...] = ()
+
+
+class MergeProposalStatus(StrEnum):
+    AWAITING = "awaiting"
+    POSTPONED = "postponed"
+    DISMISSED = "dismissed"
+    ACCEPTED = "accepted"
+
+
+class MergeEntityType(StrEnum):
+    TOPIC = "topic"
+    RELATION = "relation"
+    CONTENT = "content"
+
+
+class MergeChangeType(StrEnum):
+    ADDED = "added"
+    MODIFIED = "modified"
+    DELETED = "deleted"
+
+
+class MergeResolution(StrEnum):
+    ACCEPT_CANONICAL = "accept-canonical"
+    OVERLAY_WINS = "overlay-wins"
+    RETAIN_LOCAL = "retain-local"
+
+
+@dataclass(frozen=True)
+class CanonicalMergeProposal:
+    id: str
+    owner_id: str
+    goal_id: str
+    base_version_id: str
+    target_version_id: str
+    goal_row_version: int
+    diff_hash: str
+    local_state_hash: str
+    status: MergeProposalStatus
+    created_at: str
+    decided_at: str | None = None
+
+
+@dataclass(frozen=True)
+class MergeItem:
+    id: str
+    proposal_id: str
+    entity_type: MergeEntityType
+    change_type: MergeChangeType
+    topic_id: str | None
+    title: str
+    summary: str
+    impact: str
+    conflict_type: str | None
+    selected: bool
+    recommended_resolution: MergeResolution
+    chosen_resolution: MergeResolution | None
+    resolution_explanation: str
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class CanonicalMergeFollowup:
+    id: str
+    owner_id: str
+    goal_id: str
+    proposal_id: str
+    kind: str
+    payload: dict[str, Any]
+    status: str
+    job_id: str | None
+    created_at: str

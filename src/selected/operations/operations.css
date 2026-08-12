@@ -20,6 +20,7 @@
 .so-conflict label,.so-approval label{min-height:52px;display:flex;align-items:center;gap:10px;cursor:pointer}
 .so-conflict span,.so-approval span{display:flex;min-width:0;flex-direction:column}
 .so-conflict small,.so-approval small{margin-top:2px;color:var(--so-muted);line-height:1.45}
+.so-archived-topic{margin:12px 0 0;padding:10px 12px;border-left:3px solid var(--so-amber);background:#fffaf1;color:var(--so-muted);font-size:12px;line-height:1.5}
 .so-approval{margin-top:18px;padding:14px 18px;border:1px solid #b9cbc0;background:#f2f8f4}
 .so-approval input,.so-conflict input{width:20px;height:20px;flex:none;accent-color:var(--so-green)}
 .so-toggle-row,.so-switch{min-height:44px}

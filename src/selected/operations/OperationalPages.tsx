@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import {
@@ -32,6 +32,8 @@ import { useEvidence } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
 import type { ReviewPreferencesPatch } from '../../shared/api/notebook-review'
 import { cancelJob, jobsQueryOptions, retryJob } from '../../shared/api/jobs'
+import { acceptCanonicalUpdate, canonicalUpdateQueryOptions, decideCanonicalUpdate, type CanonicalUpdateItem, type CanonicalUpdateResolution } from '../../shared/api/canonical-updates'
+import { ApiError } from '../../shared/api/queries'
 import { JobConnectionStatus } from '../../shared/job-events'
 import './operations.css'
 
@@ -40,32 +42,20 @@ export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'se
 type Navigate = (page: string) => void
 interface OperationsState {
   version: 1
-  goalVersion: '2026.07' | '2026.08'
   owner: { name: string; role: string }
   reducedMotion: boolean
-  updateDecision: 'pending' | 'accepted' | 'postponed' | 'dismissed'
-  acceptedUpdates: string[]
-  acceptedConflictResolution: 'overlay-kept' | 'canonical-adopted' | null
 }
 
 const STORAGE_KEY = 'yuno.operations.state.v1'
 
 const DEFAULT_STATE: OperationsState = {
   version: 1,
-  goalVersion: '2026.07',
   owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
   reducedMotion: false,
-  updateDecision: 'pending',
-  acceptedUpdates: [],
-  acceptedConflictResolution: null,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
 function hydrateOperationsState(value: unknown): OperationsState | null {
@@ -73,23 +63,13 @@ function hydrateOperationsState(value: unknown): OperationsState | null {
   const owner = isRecord(value.owner) ? value.owner : {}
   return {
     version: 1,
-    goalVersion: value.goalVersion === '2026.08' ? '2026.08' : DEFAULT_STATE.goalVersion,
     owner: {
       name: typeof owner.name === 'string' ? owner.name : DEFAULT_STATE.owner.name,
       role: typeof owner.role === 'string' ? owner.role : DEFAULT_STATE.owner.role,
     },
     reducedMotion: typeof value.reducedMotion === 'boolean' ? value.reducedMotion : DEFAULT_STATE.reducedMotion,
-    updateDecision: value.updateDecision === 'accepted' || value.updateDecision === 'postponed' || value.updateDecision === 'dismissed' || value.updateDecision === 'pending' ? value.updateDecision : DEFAULT_STATE.updateDecision,
-    acceptedUpdates: isStringArray(value.acceptedUpdates) ? value.acceptedUpdates : DEFAULT_STATE.acceptedUpdates,
-    acceptedConflictResolution: value.acceptedConflictResolution === 'overlay-kept' || value.acceptedConflictResolution === 'canonical-adopted' || value.acceptedConflictResolution === null ? value.acceptedConflictResolution : DEFAULT_STATE.acceptedConflictResolution,
   }
 }
-
-const UPDATE_ROWS = [
-  { id: 'visibility', topic: 'Visibility timeout and retry budgets', before: 'Choose a timeout longer than expected processing.', after: 'Choose from measured processing latency, then bound renewal and retry behavior.', impact: 'Refines the production checklist and adds an explicit failure case.', conflict: false },
-  { id: 'idempotency', topic: 'Idempotency boundary', before: 'Store the message ID before applying the business write.', after: 'Make the business decision and duplicate marker atomic; treat a prior read as an optimization.', impact: 'Conflicts with your “unique constraint wins” overlay; choose which wording this local goal keeps.', conflict: true },
-  { id: 'dlq', topic: 'Dead-letter recovery', before: 'Inspect and replay poison messages.', after: 'Quarantine, diagnose, and replay with the duplicate boundary intact.', impact: 'Adds one review prompt; does not mark the topic complete.', conflict: false },
-] as const
 
 const SEARCH_ITEMS = [
   { kind: 'Lesson', title: 'Implement an idempotency boundary under concurrent retries', path: 'Section 2 · Control duplicates and ordering', text: 'atomic write unique constraint duplicate retry Spring Boot', lessonId: 'idempotency-retry' },
@@ -232,35 +212,100 @@ export function ImportsPage() {
   </>
 }
 
-function CanonicalUpdatesPage({ state, setState }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>> }) {
-  const [selected, setSelected] = useState<string[]>(state.updateDecision === 'accepted' ? state.acceptedUpdates : UPDATE_ROWS.map((row) => row.id))
-  const [overlayWins, setOverlayWins] = useState(state.acceptedConflictResolution !== 'canonical-adopted')
+export function CanonicalUpdatesPage() {
+  const { currentGoal } = useProfileGoals()
+  const queryClient = useQueryClient()
+  const update = useQuery(canonicalUpdateQueryOptions(currentGoal?.id ?? null))
+  const proposal = update.data?.proposal ?? null
+  const [selected, setSelected] = useState<string[]>([])
+  const [resolutions, setResolutions] = useState<Record<string, CanonicalUpdateResolution>>({})
   const [approvalConfirmed, setApprovalConfirmed] = useState(false)
-  const decided = state.updateDecision !== 'pending'
-  const selectedTopics = state.acceptedUpdates.map((id) => UPDATE_ROWS.find((row) => row.id === id)?.topic).filter(Boolean)
+  const [transition, setTransition] = useState<'accepted' | 'postponed' | 'dismissed' | 'stale' | null>(null)
+  const [acceptedTopics, setAcceptedTopics] = useState<string[]>([])
+  const [acceptedVersion, setAcceptedVersion] = useState<string | null>(null)
+  const idempotencyKeys = useRef(new Map<string, string>())
+  const idempotencyKeyFor = (intent: string) => {
+    const existing = idempotencyKeys.current.get(intent)
+    if (existing) return existing
+    const created = crypto.randomUUID()
+    idempotencyKeys.current.set(intent, created)
+    return created
+  }
+  useEffect(() => {
+    if (!proposal) return
+    setSelected(proposal.items.filter(item => item.selected).map(item => item.id))
+    setResolutions(Object.fromEntries(proposal.items.map(item => [item.id, item.chosen_resolution ?? item.recommended_resolution])))
+    setApprovalConfirmed(false)
+  }, [proposal?.id, proposal?.diff_hash])
   const changeSelection = (id: string, checked: boolean) => {
     setApprovalConfirmed(false)
     setSelected((current) => checked ? [...current, id] : current.filter((item) => item !== id))
   }
-  const accept = () => {
-    if (!approvalConfirmed || selected.length === 0) return
-    setState((s) => ({
-      ...s,
-      goalVersion: '2026.08',
-      updateDecision: 'accepted',
-      acceptedUpdates: selected,
-      acceptedConflictResolution: selected.includes('idempotency') ? (overlayWins ? 'overlay-kept' : 'canonical-adopted') : null,
-    }))
-  }
-  const recordNonAcceptance = (decision: 'postponed' | 'dismissed') => setState((s) => ({ ...s, updateDecision: decision, acceptedUpdates: [], acceptedConflictResolution: null }))
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const body = {
+        confirmed: true as const,
+        items: proposal!.items.map(item => ({
+        item_id: item.id,
+        selected: selected.includes(item.id),
+        resolution: selected.includes(item.id) ? (resolutions[item.id] ?? item.recommended_resolution) : 'retain-local',
+      })),
+      }
+      const intent = `accept:${proposal!.id}:${JSON.stringify(body)}`
+      return acceptCanonicalUpdate(proposal!.id, body, idempotencyKeyFor(intent))
+    },
+    onSuccess: async response => {
+      setAcceptedTopics(proposal!.items.filter(item => selected.includes(item.id)).map(item => item.title))
+      setAcceptedVersion(update.data?.target_version?.version_label ?? response.goal_graph_version_id)
+      setTransition('accepted')
+      setApprovalConfirmed(false)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['goals'] }),
+        queryClient.invalidateQueries({ queryKey: ['goals', currentGoal?.id, 'roadmap'] }),
+        queryClient.invalidateQueries({ queryKey: ['goals', currentGoal?.id, 'topics'] }),
+        queryClient.invalidateQueries({ queryKey: ['imports'] }),
+        queryClient.invalidateQueries({ queryKey: ['search'] }),
+      ])
+    },
+    onError: async (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        setTransition('stale')
+        setApprovalConfirmed(false)
+        await update.refetch()
+      }
+    },
+  })
+  const decisionMutation = useMutation({
+    mutationFn: (decision: 'postpone' | 'dismiss') => {
+      const intent = `decision:${proposal!.id}:${decision}`
+      return decideCanonicalUpdate(proposal!.id, decision, idempotencyKeyFor(intent))
+    },
+    onSuccess: response => { setTransition(response.status); setApprovalConfirmed(false) },
+  })
+  const recordNonAcceptance = (decision: 'postpone' | 'dismiss') => decisionMutation.mutate(decision)
+  const items = proposal?.items ?? []
+  const state = transition ?? update.data?.state
+  const decisionClosed = state === 'accepted' || state === 'postponed' || state === 'dismissed' || proposal?.status === 'accepted'
+  const pinLabel = transition === 'accepted' ? acceptedVersion : update.data?.base_version.version_label
+  if (!currentGoal) return <><PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description="Select a current goal to inspect its canonical update." /><div className="so-empty"><FileDiff size={28} /><h2>No current goal selected</h2><p>Select a goal before reviewing published curriculum changes.</p></div></>
+  if (update.isPending) return <><PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description="Loading the current base-to-latest diff." /><div className="so-empty"><Clock3 size={28} /><h2>Loading canonical update…</h2></div></>
+  if (update.isError || !update.data) return <><PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description="The current update could not be loaded." /><div className="so-empty"><AlertTriangle size={28} /><h2>Canonical update unavailable</h2><p>No local fixture was substituted.</p><Button tone="secondary" onClick={() => void update.refetch()}>Retry</Button></div></>
+  if (update.data.state === 'empty' && transition !== 'accepted') return <><PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description={`This goal is pinned to ${update.data.base_version.version_label}, the latest approved version.`} action={<div className="so-version" aria-label={`Goal pinned to ${update.data.base_version.version_label}`}><span>Pinned</span><ArrowRight size={17} /><strong>{update.data.base_version.version_label}</strong></div>} /><div className="so-empty"><Check size={28} /><h2>No canonical update available</h2><p>This goal already uses the latest approved curriculum graph.</p><Button tone="secondary" onClick={() => void update.refetch()}>Refresh</Button></div></>
   return <>
-    <PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description={`This browser’s local goal is pinned to ${state.goalVersion}. ${state.goalVersion === '2026.07' ? 'Version 2026.08 is available, but nothing changes until you explicitly accept a selection.' : 'The accepted local version choice is stored only in this browser; no server or canonical source was changed.'}`} action={<div className="so-version" aria-label={`Local goal pinned to ${state.goalVersion}`}><span>Pinned locally</span><ArrowRight size={17} /><strong>{state.goalVersion}</strong></div>} />
-    {decided && <div className="so-decision-banner"><Check size={18} /><div><strong>{state.updateDecision === 'accepted' ? `${state.acceptedUpdates.length} selected change${state.acceptedUpdates.length === 1 ? '' : 's'} accepted locally` : `Update ${state.updateDecision}`}</strong>{state.updateDecision === 'accepted' ? <><p>Accepted: {selectedTopics.join(', ') || 'none'}.</p><p>{state.acceptedConflictResolution === 'overlay-kept' ? 'Conflict resolution: learner overlay kept.' : state.acceptedConflictResolution === 'canonical-adopted' ? 'Conflict resolution: new canonical wording adopted for this local goal.' : 'No selected change required conflict resolution.'} No server or canonical source was mutated.</p></> : <p>The current goal version remains unchanged.</p>}</div><Button tone="quiet" onClick={() => { setApprovalConfirmed(false); setState((s) => ({ ...s, updateDecision: 'pending' })) }}>Review again</Button></div>}
-    <section className="so-update-summary"><article><strong>3</strong><span>topic changes</span></article><article><strong>1</strong><span>overlay conflict</span></article><article><strong>0</strong><span>topics hidden</span></article><p>Acceptance moves this browser’s persisted local goal version pin; it does not publish, edit canonical content, or persist to a server.</p></section>
-    <div className="so-diff-list">{UPDATE_ROWS.map((row) => <article key={row.id}><label className="so-select-change"><input type="checkbox" checked={selected.includes(row.id)} onChange={(event) => changeSelection(row.id, event.target.checked)} /><span className="so-sr-only">Select {row.topic}</span></label><div><span className="so-kicker">{row.topic}</span><div className="so-diff"><div><span>2026.07</span><p>{row.before}</p></div><div><span>2026.08</span><p>{row.after}</p></div></div><p className="so-impact"><Info size={15} /> {row.impact}</p>{row.conflict && selected.includes(row.id) && <fieldset className="so-conflict"><legend>Resolve wording conflict</legend><label><input type="radio" name="overlay-resolution" checked={overlayWins} onChange={() => { setOverlayWins(true); setApprovalConfirmed(false) }} /><span><strong>Keep my overlay wording</strong><small>The local goal retains your wording for this topic.</small></span></label><label><input type="radio" name="overlay-resolution" checked={!overlayWins} onChange={() => { setOverlayWins(false); setApprovalConfirmed(false) }} /><span><strong>Adopt the new canonical wording</strong><small>The overlay wording is replaced for this local goal only.</small></span></label></fieldset>}</div></article>)}</div>
-    <div className="so-approval"><label><input type="checkbox" checked={approvalConfirmed} disabled={selected.length === 0} onChange={(event) => setApprovalConfirmed(event.target.checked)} /><span><strong>Approve this exact local selection</strong><small>I reviewed the selected changes{selected.includes('idempotency') ? ` and chose to ${overlayWins ? 'keep my overlay' : 'adopt the new wording'}` : ''}. Nothing updates until I press “Accept selected.”</small></span></label></div>
-    <div className="so-sticky-actions"><span>{selected.length} of {UPDATE_ROWS.length} selected{selected.includes('idempotency') ? ` · ${overlayWins ? 'overlay kept' : 'canonical wording adopted'}` : ' · no conflict selected'}</span><div><Button tone="quiet" onClick={() => recordNonAcceptance('dismissed')}>Dismiss</Button><Button tone="secondary" onClick={() => recordNonAcceptance('postponed')}>Postpone</Button><Button tone="secondary" onClick={() => { setSelected(UPDATE_ROWS.map((row) => row.id)); setApprovalConfirmed(false) }}>Select all</Button><Button disabled={selected.length === 0 || !approvalConfirmed} onClick={accept}>Accept selected</Button></div></div>
+    <PageHead eyebrow="Published curriculum update" title="Review changes before they reach this goal" description={`This goal is pinned to ${update.data.base_version.version_label}. Version ${update.data.target_version?.version_label ?? pinLabel} is available, but nothing changes until you explicitly accept a selection.`} action={<div className="so-version" aria-label={`Goal pinned to ${pinLabel}`}><span>Pinned</span><ArrowRight size={17} /><strong>{pinLabel}</strong></div>} />
+    {(state === 'accepted' || state === 'postponed' || state === 'dismissed') && <div className="so-decision-banner"><Check size={18} /><div><strong>{state === 'accepted' ? `${acceptedTopics.length} selected change${acceptedTopics.length === 1 ? '' : 's'} accepted` : `Update ${state}`}</strong>{state === 'accepted' ? <><p>Accepted: {acceptedTopics.join(', ') || 'none'}.</p><p>The goal now uses the target canonical version; retained personal wording was recorded as target-version overlay state.</p></> : <p>This decision is persisted and the proposal is closed. The current goal version and personal overlay remain unchanged.</p>}</div></div>}
+    {state === 'stale' && <div className="so-warning" role="alert"><AlertTriangle size={19} /><div><strong>The proposal changed before acceptance</strong><p>The current base-to-latest diff was recomputed. Review it again before confirming.</p></div><Button tone="secondary" onClick={() => void update.refetch()}>Refresh</Button></div>}
+    {(acceptMutation.isError && state !== 'stale' || decisionMutation.isError) && <div className="so-warning" role="alert"><AlertTriangle size={19} /><div><strong>The decision was not saved</strong><p>The goal pin and overlay remain unchanged. Review the current proposal and try again.</p></div></div>}
+    <section className="so-update-summary"><article><strong>{items.length}</strong><span>changes</span></article><article><strong>{items.filter(item => item.conflict_type).length}</strong><span>overlay conflicts</span></article><article><strong>{items.filter(item => item.conflict_type === 'local-state-on-deleted-topic').length}</strong><span>archived local topics</span></article><p>Acceptance atomically moves this goal’s server version pin and records retained selections. It never edits or publishes canonical content.</p></section>
+    <div className="so-diff-list">{items.map((item) => <CanonicalUpdateRow key={item.id} item={item} base={update.data.base_version.version_label} target={update.data.target_version?.version_label ?? ''} selected={selected.includes(item.id)} resolution={resolutions[item.id] ?? item.recommended_resolution} disabled={decisionClosed} onSelect={checked => changeSelection(item.id, checked)} onResolve={resolution => { setResolutions(current => ({ ...current, [item.id]: resolution })); setApprovalConfirmed(false) }} />)}</div>
+    <div className="so-approval"><label><input type="checkbox" checked={approvalConfirmed} disabled={items.length === 0 || decisionClosed} onChange={(event) => setApprovalConfirmed(event.target.checked)} /><span><strong>Approve this exact local selection</strong><small>I reviewed every selected change, conflict resolution, and unselected retention. Nothing updates until I press “Accept selected.”</small></span></label></div>
+    <div className="so-sticky-actions"><span>{decisionClosed ? 'Decision persisted · proposal closed' : `${selected.length} of ${items.length} selected · ${selected.filter(id => items.find(item => item.id === id)?.conflict_type).length} conflicts selected`}</span><div><Button tone="quiet" disabled={decisionMutation.isPending || decisionClosed} onClick={() => recordNonAcceptance('dismiss')}>Dismiss</Button><Button tone="secondary" disabled={decisionMutation.isPending || decisionClosed} onClick={() => recordNonAcceptance('postpone')}>Postpone</Button><Button tone="secondary" disabled={decisionClosed} onClick={() => { setSelected(items.map(item => item.id)); setApprovalConfirmed(false) }}>Select all</Button><Button disabled={items.length === 0 || !approvalConfirmed || acceptMutation.isPending || decisionClosed} onClick={() => acceptMutation.mutate()}>{acceptMutation.isPending ? 'Accepting…' : 'Accept selected'}</Button></div></div>
   </>
+}
+
+function CanonicalUpdateRow({ item, base, target, selected, resolution, disabled, onSelect, onResolve }: { item: CanonicalUpdateItem; base: string; target: string; selected: boolean; resolution: CanonicalUpdateResolution; disabled: boolean; onSelect: (checked: boolean) => void; onResolve: (resolution: CanonicalUpdateResolution) => void }) {
+  const archived = item.conflict_type === 'local-state-on-deleted-topic'
+  return <article><label className="so-select-change"><input type="checkbox" disabled={disabled} checked={selected} onChange={event => onSelect(event.target.checked)} /><span className="so-sr-only">Select {item.title}</span></label><div><span className="so-kicker">{item.title}</span><div className="so-diff"><div><span>{base}</span><p>{item.summary}</p></div><div><span>{target}</span><p>{item.change_type === 'deleted' ? 'Removed from the published canonical graph.' : item.resolution_explanation}</p></div></div><p className="so-impact"><Info size={15} /> {item.impact}</p>{archived && <p className="so-archived-topic"><strong>Archived local topic</strong> — acceptance keeps this topic and its evidence/overlay history explicitly archived instead of silently hiding it.</p>}{item.conflict_type && selected && <fieldset className="so-conflict" disabled={disabled}><legend>{archived ? 'Resolve removed topic conflict' : 'Resolve wording conflict'}</legend><label><input type="radio" name={`resolution-${item.id}`} checked={resolution === 'overlay-wins'} onChange={() => onResolve('overlay-wins')} /><span><strong>{archived ? 'Keep as an archived local topic' : 'Keep my overlay wording'}</strong><small>{archived ? 'The published topic remains removed while its learner evidence and personal state stay available in an explicit local archive.' : 'The goal retains your wording for this topic against the target version.'}</small></span></label>{!archived && <label><input type="radio" name={`resolution-${item.id}`} checked={resolution === 'accept-canonical'} onChange={() => onResolve('accept-canonical')} /><span><strong>Adopt the new canonical wording</strong><small>Your overlay wording is replaced for this goal by the target canonical wording.</small></span></label>}</fieldset>}</div></article>
 }
 
 function SearchPage({ navigate }: { navigate: Navigate }) {
@@ -289,14 +334,13 @@ function SearchPage({ navigate }: { navigate: Navigate }) {
   </>
 }
 
-export function JobsPage() {
+export function JobsPage({ navigate = () => undefined }: { navigate?: Navigate }) {
   const queryClient = useQueryClient()
   const jobs = useQuery(jobsQueryOptions())
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ['jobs'] })
   const cancel = useMutation({ mutationFn: cancelJob, onSuccess: refresh })
   const retry = useMutation({ mutationFn: retryJob, onSuccess: refresh })
   const [substitutionRef, setSubstitutionRef] = useState('')
-  const [confirmationRef, setConfirmationRef] = useState('')
   const records = jobs.data?.jobs ?? []
   const activeJobIds = records.filter(job => ['queued', 'running', 'cancel-requested'].includes(job.status)).map(job => job.job_id)
   return <>
@@ -306,7 +350,7 @@ export function JobsPage() {
     {jobs.data && <div className="so-hard-disclosure"><Clock3 size={24} /><div><strong>Durable worker connected</strong><p>Pending cap {jobs.data.pending_job_cap}; background work promotes after {jobs.data.background_age_promotion_seconds} seconds. Live updates reconcile against authoritative job reads.</p></div></div>}
     <section className="so-panel"><div className="so-panel-head"><div><span className="so-kicker">Two reserved lanes</span><h2>{records.length} persisted job{records.length === 1 ? '' : 's'}</h2></div><span>Interactive + background</span></div>
       {(cancel.isError || retry.isError) && <p className="so-error" role="alert">The job action failed. Review the diagnostic and required retry inputs, then try again.</p>}
-      {jobs.isLoading ? <p>Loading jobs…</p> : records.length === 0 ? <div className="so-empty"><Clock3 size={29} /><h2>No jobs yet</h2><p>Generation, evaluation, imports, and indexing appear here when queued.</p></div> : <div className="so-results">{records.map((job) => <article key={job.job_id}><span className="so-chip">{job.lane ?? 'background'}</span><strong>{job.kind}</strong><p><span aria-hidden="true">●</span> {job.status}</p><small>{job.job_id}</small><dl className="so-facts"><dt>Attempt</dt><dd>{job.attempt}</dd><dt>Started</dt><dd>{job.started_at ?? 'Not started'}</dd><dt>Terminal</dt><dd>{job.terminal_at ?? 'Not terminal'}</dd><dt>Result</dt><dd>{job.result_ref ?? 'None'}</dd><dt>Hash</dt><dd>{job.result_hash ?? 'None'}</dd><dt>Diagnostic</dt><dd>{job.diagnostic ?? 'None'}</dd></dl>{job.status === 'failed' && job.retryable && <><label>Substitution reference<input value={substitutionRef} onChange={(event) => setSubstitutionRef(event.target.value)} placeholder="Required for interview-turn retries" /></label><label>Fresh confirmation reference<input value={confirmationRef} onChange={(event) => setConfirmationRef(event.target.value)} placeholder="Required for runner retries" /></label></>}<div>{['queued', 'running', 'cancel-requested'].includes(job.status) && <Button tone="secondary" onClick={() => cancel.mutate(job.job_id)}>Cancel</Button>}{job.status === 'failed' && job.retryable && <Button tone="secondary" onClick={() => retry.mutate({ jobId: job.job_id, substitutionRef: substitutionRef || null, confirmationRef: confirmationRef || null })}>Retry</Button>}</div></article>)}</div>}
+      {jobs.isLoading ? <p>Loading jobs…</p> : records.length === 0 ? <div className="so-empty"><Clock3 size={29} /><h2>No jobs yet</h2><p>Generation, evaluation, imports, and indexing appear here when queued.</p></div> : <div className="so-results">{records.map((job) => { const isRunner = job.kind === 'java_runner'; return <article key={job.job_id}><span className="so-chip">{job.lane ?? 'background'}</span><strong>{job.kind}</strong><p><span aria-hidden="true">●</span> {job.status}</p><small>{job.job_id}</small><dl className="so-facts"><dt>Attempt</dt><dd>{job.attempt}</dd><dt>Started</dt><dd>{job.started_at ?? 'Not started'}</dd><dt>Terminal</dt><dd>{job.terminal_at ?? 'Not terminal'}</dd><dt>Result</dt><dd>{job.result_ref ?? 'None'}</dd><dt>Hash</dt><dd>{job.result_hash ?? 'None'}</dd><dt>Diagnostic</dt><dd>{job.diagnostic ?? 'None'}</dd></dl>{isRunner && <p>Controlled subprocess execution only. This is not a sandbox or hostile-code isolation, and it is not proof of production or AWS behavior.</p>}{job.status === 'failed' && job.retryable && !isRunner && <label>Substitution reference<input value={substitutionRef} onChange={(event) => setSubstitutionRef(event.target.value)} placeholder="Required for interview-turn retries" /></label>}<div>{['queued', 'running', 'cancel-requested'].includes(job.status) && <Button tone="secondary" onClick={() => cancel.mutate(job.job_id)}>Cancel</Button>}{job.status === 'failed' && job.retryable && (isRunner ? <Button tone="secondary" onClick={() => navigate('topic-studio')}>Confirm and run again in Topic Studio</Button> : <Button tone="secondary" onClick={() => retry.mutate({ jobId: job.job_id, substitutionRef: substitutionRef || null, confirmationRef: null })}>Retry</Button>)}</div></article> })}</div>}
     </section>
   </>
 }
@@ -366,7 +410,7 @@ function SettingsPage({ state, setState, navigate }: { state: OperationsState; s
       <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>
       <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div>{!currentGoal ? <p>Select a current goal to review its imports.</p> : imports.isPending ? <p>Loading the current goal’s server imports…</p> : imports.isError ? <><p role="alert">The imports summary is unavailable. No browser count was substituted.</p><Button tone="secondary" onClick={() => void imports.refetch()}>Retry summary</Button></> : <p>{imports.data?.length ?? 0} preserved import{imports.data?.length === 1 ? '' : 's'} for {currentGoal.name}; {(imports.data ?? []).filter(item => item.status === 'failed' || item.status === 'cancelled').length} need attention.</p>}<Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Not connected</span></div><div className="so-network-grid"><article><strong>Model providers</strong><p>No Codex, Claude, or other provider adapter is configured or invoked by these pages.</p></article><article><strong>Source retrieval</strong><p>No external documentation or citation source is fetched.</p></article><article><strong>Local runner</strong><p>No Java process, subprocess sandbox, or execution service is present.</p></article></div><p className="so-help">This prototype makes no strict-offline guarantee for the wider application; these operational pages themselves use bundled data and localStorage.</p></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads local accessibility and update-decision state. Server settings, evidence, imports, and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local accessibility and update-decision state to initial defaults. Server settings, evidence, imports, and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local accessibility and canonical update choices will return to their initial defaults. Server settings, evidence, imports, and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
+      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads the local accessibility state. Server settings, evidence, imports, canonical-update decisions, and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local accessibility state to its initial default. Server settings, evidence, imports, canonical-update decisions, and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local accessibility state will return to its initial default. Server settings, evidence, imports, canonical-update decisions, and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
     </div>
   </>
 }
@@ -376,9 +420,9 @@ export function OperationalPageView({ page, navigate }: { page: OperationalPage;
   const pages: Record<OperationalPage, React.ReactNode> = {
     evidence: <EvidencePage navigate={navigate} />,
     imports: <ImportsPage />,
-    'canonical-updates': <CanonicalUpdatesPage state={state} setState={setState} />,
+    'canonical-updates': <CanonicalUpdatesPage />,
     search: <SearchPage navigate={navigate} />,
-    jobs: <JobsPage />,
+    jobs: <JobsPage navigate={navigate} />,
     settings: <SettingsPage state={state} setState={setState} navigate={navigate} />,
   }
   return <main className={`so-page ${state.reducedMotion ? 'so-reduced-motion' : ''}`}>{pages[page]}</main>

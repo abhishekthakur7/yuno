@@ -32,8 +32,11 @@ from typing import Protocol
 
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
+    CanonicalMergeFollowup,
+    CanonicalMergeProposal,
     ContentRevision,
     EditorialApproval,
+    MergeItem,
     Topic,
     TopicIdentity,
     TopicRelation,
@@ -60,7 +63,9 @@ class CanonicalGraphRepository(Protocol):
 
     # --- Reads: approval-gated. See module docstring.
 
-    def get_published_version(self, version_id: str) -> CanonicalGraphVersion | None: ...
+    def get_published_version(
+        self, version_id: str
+    ) -> CanonicalGraphVersion | None: ...
 
     def list_published_versions(self) -> Sequence[CanonicalGraphVersion]: ...
 
@@ -84,6 +89,46 @@ class CanonicalGraphRepository(Protocol):
     def topic_identity_exists(self, stable_id: str) -> bool: ...
 
 
+class CanonicalMergeRepository(Protocol):
+    def add_merge_proposal(
+        self, proposal: CanonicalMergeProposal, items: Sequence[MergeItem]
+    ) -> None: ...
+    def get_merge_proposal(
+        self, owner_id: str, proposal_id: str
+    ) -> CanonicalMergeProposal | None: ...
+    def get_current_merge_proposal(
+        self, owner_id: str, goal_id: str, base_version_id: str, target_version_id: str
+    ) -> CanonicalMergeProposal | None: ...
+    def list_merge_items(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[MergeItem]: ...
+    def close_merge_proposal(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        expected_status: str,
+        status: str,
+        decided_at: str,
+    ) -> bool: ...
+    def update_merge_item(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        item_id: str,
+        *,
+        selected: bool,
+        resolution: str,
+    ) -> None: ...
+    def add_merge_followup(self, followup: CanonicalMergeFollowup) -> None: ...
+    def list_merge_followups(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[CanonicalMergeFollowup]: ...
+    def list_pending_merge_followups(self) -> Sequence[CanonicalMergeFollowup]: ...
+    def mark_followup_dispatched(
+        self, owner_id: str, followup_id: str, job_id: str
+    ) -> None: ...
+
+
 class CanonicalUnitOfWork(UnitOfWork, Protocol):
     """A `UnitOfWork` that also carries the `canonical` module's
     repository. See `yuno.modules.identity.ports.IdentityUnitOfWork`'s
@@ -92,3 +137,4 @@ class CanonicalUnitOfWork(UnitOfWork, Protocol):
     """
 
     canonical: CanonicalGraphRepository
+    canonical_merges: CanonicalMergeRepository

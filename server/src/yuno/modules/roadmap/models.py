@@ -52,11 +52,11 @@ class OverlayEntryRow(Base):
     __tablename__ = "overlay_entries"
     __table_args__ = (
         CheckConstraint(
-            "entry_type IN ('order_constraint','skip','depth','bridge','recommendation')",
+            "entry_type IN ('order_constraint','skip','depth','bridge','recommendation','merge_resolution','archived_local_topic')",
             name="entry_type_valid",
         ),
         CheckConstraint(
-            "source IN ('learner','diagnostic_confirmation','overlay_proposal')",
+            "source IN ('learner','diagnostic_confirmation','overlay_proposal','canonical_merge')",
             name="source_valid",
         ),
         CheckConstraint("json_valid(value_json)", name="value_json_valid"),

@@ -17,5 +17,3 @@ export const REFERENCE_CODE = `public Reservation reserve(String requestId, Supp
     return ledger.putIfAbsent(requestId, candidate).orElse(candidate);
   });
 }`
-
-export const SIMULATION_LIMITATION = 'Deterministic browser fixture only — no Java process, network request, AWS service, or production environment is used.'

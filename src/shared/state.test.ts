@@ -1,12 +1,11 @@
-import { REFERENCE_CODE } from './model'
 import { createInitialState, learningReducer } from './state'
 
 describe('shared learner behavior', () => {
-  it('keeps static fixture results separate from server-backed evidence', () => {
+  it('keeps only the editable draft in browser state', () => {
     let state = createInitialState()
-    state = learningReducer(state, { type: 'SET_CODE', value: REFERENCE_CODE })
-    state = learningReducer(state, { type: 'RUN_CHECKS' })
-    expect(state.runResult?.status).toBe('passed')
+    state = learningReducer(state, { type: 'SET_CODE', value: 'revised artifact' })
+    expect(state.codeDraft).toBe('revised artifact')
+    expect(state).not.toHaveProperty('runResult')
     expect(state).not.toHaveProperty('evidence')
   })
 

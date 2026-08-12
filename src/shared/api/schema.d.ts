@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/canonical-update-proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept */
+        post: operations["accept_api_v1_canonical_update_proposals__proposal_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/canonical-update-proposals/{proposal_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide */
+        post: operations["decide_api_v1_canonical_update_proposals__proposal_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/canonical/versions": {
         parameters: {
             query?: never;
@@ -434,6 +468,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/canonical-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Update */
+        get: operations["get_update_api_v1_goals__goal_id__canonical_update_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals/{goal_id}/corrections": {
         parameters: {
             query?: never;
@@ -756,6 +807,40 @@ export interface paths {
         put?: never;
         /** Generate Topic Layer */
         post: operations["generate_topic_layer_api_v1_goals__goal_id__topics__topic_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Hands On */
+        get: operations["read_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Hands On */
+        post: operations["submit_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_submit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1402,6 +1487,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runner-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Runner */
+        post: operations["start_runner_api_v1_runner_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runner-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Runner Run */
+        get: operations["get_runner_run_api_v1_runner_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runner-runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Runner Run */
+        post: operations["cancel_runner_run_api_v1_runner_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runner/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Capabilities */
+        get: operations["get_capabilities_api_v1_runner_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runner/confirmations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Runner */
+        post: operations["confirm_runner_api_v1_runner_confirmations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1699,6 +1869,65 @@ export interface components {
          * @enum {string}
          */
         BundleSubject: "technical" | "behavioral" | "leadership";
+        /** CanonicalMergeItemResponse */
+        CanonicalMergeItemResponse: {
+            /**
+             * Change Type
+             * @enum {string}
+             */
+            change_type: "added" | "modified" | "deleted";
+            /** Chosen Resolution */
+            chosen_resolution: ("accept-canonical" | "overlay-wins" | "retain-local") | null;
+            /** Conflict Type */
+            conflict_type: ("overlay-conflict" | "local-state-on-deleted-topic") | null;
+            /**
+             * Entity Type
+             * @enum {string}
+             */
+            entity_type: "topic" | "relation" | "content";
+            /** Id */
+            id: string;
+            /** Impact */
+            impact: string;
+            /**
+             * Recommended Resolution
+             * @enum {string}
+             */
+            recommended_resolution: "accept-canonical" | "overlay-wins" | "retain-local";
+            /** Resolution Explanation */
+            resolution_explanation: string;
+            /** Selected */
+            selected: boolean;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Topic Id */
+            topic_id: string | null;
+        };
+        /** CanonicalMergeProposalResponse */
+        CanonicalMergeProposalResponse: {
+            /** Diff Hash */
+            diff_hash: string;
+            /** Id */
+            id: string;
+            /** Items */
+            items: components["schemas"]["CanonicalMergeItemResponse"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "awaiting" | "postponed" | "dismissed" | "accepted";
+        };
+        /** CanonicalMergeSelectionRequest */
+        CanonicalMergeSelectionRequest: {
+            /** Item Id */
+            item_id: string;
+            /** Resolution */
+            resolution?: ("accept-canonical" | "overlay-wins" | "retain-local") | null;
+            /** Selected */
+            selected: boolean;
+        };
         /**
          * CanonicalTopicRelationResponse
          * @description One `TopicRelation` row nested in
@@ -1739,6 +1968,84 @@ export interface components {
             target_capability: string;
             /** Title */
             title: string;
+        };
+        /** CanonicalUpdateAcceptRequest */
+        CanonicalUpdateAcceptRequest: {
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+            /** Items */
+            items: components["schemas"]["CanonicalMergeSelectionRequest"][];
+        };
+        /** CanonicalUpdateAcceptResponse */
+        CanonicalUpdateAcceptResponse: {
+            /** Accepted At */
+            accepted_at: string;
+            /** Base Version Id */
+            base_version_id: string;
+            /** Goal Graph Version Id */
+            goal_graph_version_id: string;
+            /** Goal Id */
+            goal_id: string;
+            /**
+             * Invalidation State
+             * @enum {string}
+             */
+            invalidation_state: "pending-dispatch" | "dispatched";
+            /** Proposal Id */
+            proposal_id: string;
+            reprocess_job: components["schemas"]["JobRefResponse"] | null;
+            /**
+             * Status
+             * @constant
+             */
+            status: "accepted";
+            /** Target Version Id */
+            target_version_id: string;
+        };
+        /** CanonicalUpdateDecisionRequest */
+        CanonicalUpdateDecisionRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "postpone" | "dismiss";
+            /** Reason */
+            reason?: string | null;
+        };
+        /** CanonicalUpdateDecisionResponse */
+        CanonicalUpdateDecisionResponse: {
+            /** Decided At */
+            decided_at: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "postponed" | "dismissed";
+        };
+        /** CanonicalUpdateResponse */
+        CanonicalUpdateResponse: {
+            base_version: components["schemas"]["CanonicalUpdateVersionResponse"];
+            /** Goal Id */
+            goal_id: string;
+            proposal: components["schemas"]["CanonicalMergeProposalResponse"] | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "empty" | "proposed" | "conflict-needs-resolution" | "postponed" | "dismissed";
+            target_version: components["schemas"]["CanonicalUpdateVersionResponse"] | null;
+        };
+        /** CanonicalUpdateVersionResponse */
+        CanonicalUpdateVersionResponse: {
+            /** Id */
+            id: string;
+            /** Version Label */
+            version_label: string;
         };
         /**
          * CanonicalVersionDetailResponse
@@ -2276,6 +2583,115 @@ export interface components {
          * @enum {string}
          */
         GoalStatus: "active" | "archived" | "tombstoned";
+        /** HandsOnArtifactResponse */
+        HandsOnArtifactResponse: {
+            /** Content */
+            content: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Created At */
+            created_at: string;
+            /** Cross Question Response */
+            cross_question_response: string | null;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Id */
+            id: string;
+            /** Response To Question Id */
+            response_to_question_id: string | null;
+            /** Revision Number */
+            revision_number: number;
+        };
+        /** HandsOnCrossQuestionAnswerRequest */
+        HandsOnCrossQuestionAnswerRequest: {
+            /** Question Id */
+            question_id: string;
+            /** Response */
+            response: string;
+        };
+        /** HandsOnCrossQuestionResponse */
+        HandsOnCrossQuestionResponse: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+            /** Review Id */
+            review_id: string;
+            /** Target Gap */
+            target_gap: string;
+        };
+        /** HandsOnLifecycleResponse */
+        HandsOnLifecycleResponse: {
+            /** Artifacts */
+            artifacts: components["schemas"]["HandsOnArtifactResponse"][];
+            /** Cross Questions */
+            cross_questions: components["schemas"]["HandsOnCrossQuestionResponse"][];
+            /** Goal Id */
+            goal_id: string;
+            /** Reviews */
+            reviews: components["schemas"]["HandsOnReviewResponse"][];
+            scenario: components["schemas"]["HandsOnScenarioResponse"];
+            /** Topic Id */
+            topic_id: string;
+            /** Work Id */
+            work_id: string | null;
+        };
+        /** HandsOnReviewResponse */
+        HandsOnReviewResponse: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Assessment Id */
+            assessment_id: string;
+            /** Created At */
+            created_at: string;
+            /** Feedback */
+            feedback: string;
+            /** Id */
+            id: string;
+            /** Limitation */
+            limitation: string;
+            /**
+             * Review Mode
+             * @constant
+             */
+            review_mode: "static";
+            /** Rubric Id */
+            rubric_id: string;
+            /** Rubric Status */
+            rubric_status: string;
+            /** Rubric Version */
+            rubric_version: string;
+        };
+        /** HandsOnScenarioResponse */
+        HandsOnScenarioResponse: {
+            /** Constraints */
+            constraints: string[];
+            /** Level */
+            level: string;
+            /** Prompt */
+            prompt: string;
+            /** Role */
+            role: string;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "fixture";
+            /** Title */
+            title: string;
+        };
+        /** HandsOnSubmitRequest */
+        HandsOnSubmitRequest: {
+            /** Artifact */
+            artifact: string;
+            cross_question_response?: components["schemas"]["HandsOnCrossQuestionAnswerRequest"] | null;
+        };
         /** HealthResponse */
         HealthResponse: {
             /** Schema Revision */
@@ -3339,6 +3755,11 @@ export interface components {
             explanation: string;
             /** Has Transferred Evidence */
             has_transferred_evidence: boolean;
+            /**
+             * Is Archived Local
+             * @default false
+             */
+            is_archived_local: boolean;
             /** Is Skipped */
             is_skipped: boolean;
             /** Level Tag */
@@ -3359,6 +3780,129 @@ export interface components {
             target_capability: string;
             /** Title */
             title: string;
+        };
+        /** RunnerCapabilitiesResponse */
+        RunnerCapabilitiesResponse: {
+            /** Capabilities */
+            capabilities: components["schemas"]["RunnerCapabilityItemResponse"][];
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Environment Policy Version */
+            environment_policy_version: string | null;
+            /** Limitation */
+            limitation: string;
+            /** Limits Config Version */
+            limits_config_version: string | null;
+        };
+        /** RunnerCapabilityItemResponse */
+        RunnerCapabilityItemResponse: {
+            /** Capability */
+            capability: string;
+            /** Detail */
+            detail: string;
+            language: components["schemas"]["RunnerLanguage"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "supported" | "missing" | "incompatible";
+        };
+        /** RunnerConfirmationRequest */
+        RunnerConfirmationRequest: {
+            /** Acknowledgement Version */
+            acknowledgement_version: string;
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Capability */
+            capability: string;
+            /** Goal Id */
+            goal_id?: string | null;
+            /** Inputs */
+            inputs: components["schemas"]["RunnerInputRequest"][];
+            language: components["schemas"]["RunnerLanguage"];
+            operation: components["schemas"]["RunnerOperation"];
+        };
+        /** RunnerConfirmationResponse */
+        RunnerConfirmationResponse: {
+            /** Capability */
+            capability: string;
+            /** Confirmed At */
+            confirmed_at: string;
+            /** Consumed At */
+            consumed_at: string | null;
+            /** Expires At */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: string;
+            }[];
+            language: components["schemas"]["RunnerLanguage"];
+            operation: components["schemas"]["RunnerOperation"];
+        };
+        /** RunnerInputRequest */
+        RunnerInputRequest: {
+            /** Content Hash */
+            content_hash: string;
+            /** Content Ref */
+            content_ref: string;
+            /** Declared Type */
+            declared_type: string;
+            /** Logical Path */
+            logical_path: string;
+        };
+        /**
+         * RunnerLanguage
+         * @enum {string}
+         */
+        RunnerLanguage: "java" | "python" | "relational";
+        /**
+         * RunnerOperation
+         * @enum {string}
+         */
+        RunnerOperation: "compile" | "test";
+        /** RunnerRunRequest */
+        RunnerRunRequest: {
+            /** Confirmation Id */
+            confirmation_id: string;
+        };
+        /** RunnerRunResponse */
+        RunnerRunResponse: {
+            /** Cleanup Diagnostic */
+            cleanup_diagnostic: string | null;
+            /** Cleanup State */
+            cleanup_state: string;
+            /** Compile Phase */
+            compile_phase: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: string;
+            }[];
+            /** Job Id */
+            job_id: string;
+            /** Limitation */
+            limitation: string;
+            /** Output Chunks */
+            output_chunks: {
+                [key: string]: unknown;
+            }[];
+            /** State */
+            state: string;
+            /** Static Phase */
+            static_phase: {
+                [key: string]: unknown;
+            };
+            /** Test Phase */
+            test_phase: {
+                [key: string]: unknown;
+            };
         };
         /** SkipDecisionRequest */
         SkipDecisionRequest: {
@@ -3755,6 +4299,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverlayProposalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_api_v1_canonical_update_proposals__proposal_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanonicalUpdateAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalUpdateAcceptResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    decide_api_v1_canonical_update_proposals__proposal_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanonicalUpdateDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalUpdateDecisionResponse"];
                 };
             };
             /** @description Default Response */
@@ -4475,6 +5093,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_update_api_v1_goals__goal_id__canonical_update_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalUpdateResponse"];
                 };
             };
             /** @description Default Response */
@@ -5289,6 +5938,76 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandsOnLifecycleResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_hands_on_api_v1_goals__goal_id__topics__topic_id__hands_on_submit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandsOnSubmitRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -6725,6 +7444,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewItemResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_runner_api_v1_runner_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_runner_run_api_v1_runner_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerRunResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_runner_run_api_v1_runner_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerRunResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_capabilities_api_v1_runner_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerCapabilitiesResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    confirm_runner_api_v1_runner_confirmations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunnerConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunnerConfirmationResponse"];
                 };
             };
             /** @description Default Response */
