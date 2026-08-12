@@ -318,6 +318,56 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         assert (request_row.id, "completed") in actions
 
 
+def test_evidence_reads_link_active_assessment_and_dispute_reevaluation_history(
+    client, uow_factory: UnitOfWorkFactory
+) -> None:
+    owner_id, evidence, _rubric, evaluation_request = _arrange(uow_factory)
+    with uow_factory() as uow:
+        assessment = perform_assessment(
+            uow, FakeEvaluationAdapter(), owner_id, evaluation_request
+        )
+        dispute = create_dispute(
+            uow, owner_id, assessment.id, "The assumption needs another review."
+        )
+        reevaluation = request_reevaluation(
+            uow, owner_id, assessment.id, dispute.id
+        )
+        uow.commit()
+
+    evidence_list = client.get(f"/api/v1/goals/{evidence.goal_id}/evidence")
+    assert evidence_list.status_code == 200
+    assert evidence_list.json()[0]["active_assessment_id"] == assessment.id
+
+    detail = client.get(f"/api/v1/evidence/{evidence.id}")
+    assert detail.status_code == 200
+    assert detail.json()["active_assessment_id"] == assessment.id
+    assert detail.json()["transfers"] == []
+
+    assessment_read = client.get(f"/api/v1/assessments/{assessment.id}")
+    assert assessment_read.status_code == 200
+    history = assessment_read.json()["disputes"]
+    assert history == [
+        {
+            "id": dispute.id,
+            "reason": dispute.reason,
+            "status": "requested",
+            "requested_at": dispute.requested_at,
+            "resolved_at": None,
+            "resolution_note": None,
+            "reevaluation": {
+                "id": reevaluation.id,
+                "dispute_id": dispute.id,
+                "status": "requested",
+                "job_id": reevaluation.job_id,
+                "resulting_assessment_id": None,
+                "failure_reference": None,
+                "requested_at": reevaluation.requested_at,
+                "completed_at": None,
+            },
+        }
+    ]
+
+
 def test_reevaluation_persists_job_identity_before_dispatch(
     client, uow_factory: UnitOfWorkFactory
 ) -> None:

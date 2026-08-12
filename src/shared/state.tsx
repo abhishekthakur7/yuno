@@ -18,14 +18,6 @@ export interface RunResult {
   checks: readonly RunCheck[]
 }
 
-export interface EvidenceRecord {
-  id: string
-  artifact: string
-  kind: 'static-review'
-  conclusion: string
-  limitation: string
-}
-
 export interface PracticeAttempt {
   id: string
   questionId: string
@@ -44,7 +36,6 @@ export interface LearningState {
   version: 1
   codeDraft: string
   runResult: RunResult | null
-  evidence: readonly EvidenceRecord[]
   practice: {
     questionIndex: number
     draft: string
@@ -65,7 +56,6 @@ export type LearningAction =
   | { type: 'SET_CODE'; value: string }
   | { type: 'RUN_CHECKS' }
   | { type: 'RESET_CODE' }
-  | { type: 'SUBMIT_CODE' }
   | { type: 'SET_PRACTICE_DRAFT'; value: string }
   | { type: 'REQUEST_HINT' }
   | { type: 'SUBMIT_PRACTICE' }
@@ -82,7 +72,6 @@ export function createInitialState(): LearningState {
     version: 1,
     codeDraft: STARTER_CODE,
     runResult: null,
-    evidence: [],
     practice: {
       questionIndex: 0,
       draft: '',
@@ -142,20 +131,6 @@ export function learningReducer(state: LearningState, action: LearningAction): L
       return { ...state, runResult: evaluateCode(state.codeDraft) }
     case 'RESET_CODE':
       return { ...state, codeDraft: STARTER_CODE, runResult: null }
-    case 'SUBMIT_CODE': {
-      if (!state.codeDraft.trim()) return state
-      const result = evaluateCode(state.codeDraft)
-      const evidence: EvidenceRecord = {
-        id: `evidence-${state.evidence.length + 1}`,
-        artifact: state.codeDraft,
-        kind: 'static-review',
-        conclusion: result.status === 'passed'
-          ? 'Static fixture checks find an explicit atomic duplicate boundary.'
-          : 'Static fixture checks still find an unresolved duplicate race.',
-        limitation: 'Static browser review only; no Java or AWS runtime behavior was executed.',
-      }
-      return { ...state, runResult: result, evidence: [...state.evidence, evidence] }
-    }
     case 'SET_PRACTICE_DRAFT':
       return { ...state, practice: { ...state.practice, draft: action.value } }
     case 'REQUEST_HINT':
@@ -238,14 +213,6 @@ function hydratePersistedDrafts(value: unknown, initial = createInitialState()):
     && value.every(isMockTurn)
     ? value
     : fallback
-  const evidence = Array.isArray(value.evidence)
-    ? value.evidence.filter((item): item is EvidenceRecord => isRecord(item)
-      && typeof item.id === 'string'
-      && typeof item.artifact === 'string'
-      && item.kind === 'static-review'
-      && typeof item.conclusion === 'string'
-      && typeof item.limitation === 'string')
-    : initial.evidence
   const rawRunResult = value.runResult
   const runResult = rawRunResult === null
     ? null
@@ -262,7 +229,6 @@ function hydratePersistedDrafts(value: unknown, initial = createInitialState()):
     ...initial,
     codeDraft: typeof value.codeDraft === 'string' ? value.codeDraft : initial.codeDraft,
     runResult,
-    evidence,
     practice: {
       questionIndex: typeof practice.questionIndex === 'number' && Number.isInteger(practice.questionIndex) && practice.questionIndex >= 0 && practice.questionIndex < PRACTICE_QUESTIONS.length ? practice.questionIndex : initial.practice.questionIndex,
       draft: typeof practice.draft === 'string' ? practice.draft : initial.practice.draft,
@@ -297,7 +263,6 @@ export function persistedLearningDrafts(state: LearningState) {
     version: state.version,
     codeDraft: state.codeDraft,
     runResult: state.runResult,
-    evidence: state.evidence,
     practice: state.practice,
     mock: state.mock,
   }

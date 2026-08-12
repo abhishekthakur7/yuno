@@ -246,6 +246,68 @@
         "title": "AssessmentDimensionResponse",
         "type": "object"
       },
+      "AssessmentDisputeDetailResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reevaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReevaluationRequestResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "resolution_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Note"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DisputeStatus"
+          }
+        },
+        "required": [
+          "id",
+          "reason",
+          "status",
+          "requested_at",
+          "resolved_at",
+          "resolution_note",
+          "reevaluation"
+        ],
+        "title": "AssessmentDisputeDetailResponse",
+        "type": "object"
+      },
       "AssessmentDisputeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -358,6 +420,13 @@
               "$ref": "#/components/schemas/AssessmentDimensionResponse"
             },
             "title": "Dimensions",
+            "type": "array"
+          },
+          "disputes": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentDisputeDetailResponse"
+            },
+            "title": "Disputes",
             "type": "array"
           },
           "evaluation_method": {
@@ -525,7 +594,8 @@
           "predecessor_assessment_id",
           "derivation_excluded",
           "created_at",
-          "dimensions"
+          "dimensions",
+          "disputes"
         ],
         "title": "AssessmentResponse",
         "type": "object"
@@ -1580,6 +1650,17 @@
       },
       "EvidenceDetailResponse": {
         "properties": {
+          "active_assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Assessment Id"
+          },
           "capability": {
             "title": "Capability",
             "type": "string"
@@ -1641,6 +1722,13 @@
           "topic_stable_id": {
             "title": "Topic Stable Id",
             "type": "string"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceTransferResponse"
+            },
+            "title": "Transfers",
+            "type": "array"
           }
         },
         "required": [
@@ -1653,15 +1741,28 @@
           "summary",
           "origin",
           "created_at",
+          "active_assessment_id",
           "content",
           "content_version",
-          "tombstoned"
+          "tombstoned",
+          "transfers"
         ],
         "title": "EvidenceDetailResponse",
         "type": "object"
       },
       "EvidenceResponse": {
         "properties": {
+          "active_assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Assessment Id"
+          },
           "capability": {
             "title": "Capability",
             "type": "string"
@@ -1708,9 +1809,47 @@
           "payload_hash",
           "summary",
           "origin",
-          "created_at"
+          "created_at",
+          "active_assessment_id"
         ],
         "title": "EvidenceResponse",
+        "type": "object"
+      },
+      "EvidenceTransferResponse": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/TransferClassification"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "learning_state_id": {
+            "title": "Learning State Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "target_goal_id": {
+            "title": "Target Goal Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "target_goal_id",
+          "learning_state_id",
+          "classification",
+          "rationale",
+          "created_at"
+        ],
+        "title": "EvidenceTransferResponse",
         "type": "object"
       },
       "FieldError": {
@@ -3324,6 +3463,36 @@
         "title": "OverlayProposalType",
         "type": "string"
       },
+      "OwnerSettingsPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "progress_display": {
+            "$ref": "#/components/schemas/ProgressDisplay"
+          }
+        },
+        "required": [
+          "progress_display"
+        ],
+        "title": "OwnerSettingsPatchRequest",
+        "type": "object"
+      },
+      "OwnerSettingsResponse": {
+        "properties": {
+          "progress_display": {
+            "$ref": "#/components/schemas/ProgressDisplay"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "progress_display",
+          "row_version"
+        ],
+        "title": "OwnerSettingsResponse",
+        "type": "object"
+      },
       "ProgressClassification": {
         "enum": [
           "likely-known",
@@ -3363,6 +3532,91 @@
         ],
         "title": "ProgressDimensionResponse",
         "type": "object"
+      },
+      "ProgressDisplay": {
+        "enum": [
+          "detailed",
+          "simple"
+        ],
+        "title": "ProgressDisplay",
+        "type": "string"
+      },
+      "ReevaluationRequestResponse": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "dispute_id": {
+            "title": "Dispute Id",
+            "type": "string"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "resulting_assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Assessment Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReevaluationStatus"
+          }
+        },
+        "required": [
+          "id",
+          "dispute_id",
+          "status",
+          "job_id",
+          "resulting_assessment_id",
+          "failure_reference",
+          "requested_at",
+          "completed_at"
+        ],
+        "title": "ReevaluationRequestResponse",
+        "type": "object"
+      },
+      "ReevaluationStatus": {
+        "enum": [
+          "requested",
+          "completed",
+          "failed"
+        ],
+        "title": "ReevaluationStatus",
+        "type": "string"
       },
       "ResumeDestination": {
         "enum": [
@@ -4427,6 +4681,16 @@
         ],
         "title": "TopicLayersResponse",
         "type": "object"
+      },
+      "TransferClassification": {
+        "enum": [
+          "likely-known",
+          "partial",
+          "unverified",
+          "new"
+        ],
+        "title": "TransferClassification",
+        "type": "string"
       },
       "TrustState": {
         "enum": [
@@ -8039,6 +8303,94 @@
         "summary": "Post Review Dismiss",
         "tags": [
           "notebook-review"
+        ]
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "get_settings_api_v1_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "patch": {
+        "operationId": "update_settings_api_v1_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerSettingsPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Update Settings",
+        "tags": [
+          "settings"
         ]
       }
     },

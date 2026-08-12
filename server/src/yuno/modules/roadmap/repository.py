@@ -34,6 +34,7 @@ from yuno.modules.roadmap.models import (
     TransferredEvidenceRefRow,
 )
 from yuno.modules.roadmap.ports import (
+    EvidenceTransferView,
     ProgressTransferView,
     TransferEvidenceRefView,
     TransferLearningStateView,
@@ -329,6 +330,26 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 classification, row.rationale, row.created_at,
             )
             for row, topic, classification in self._session.execute(stmt)
+        )
+
+    def list_evidence_transfers(
+        self, owner_id: str, evidence_id: str
+    ) -> Sequence[EvidenceTransferView]:
+        rows = self._session.scalars(
+            owner_scoped_select(TransferredEvidenceRefRow, owner_id)
+            .where(TransferredEvidenceRefRow.source_evidence_id == evidence_id)
+            .order_by(TransferredEvidenceRefRow.created_at, TransferredEvidenceRefRow.id)
+        ).all()
+        return tuple(
+            EvidenceTransferView(
+                row.id,
+                row.goal_id,
+                row.learning_state_id,
+                row.classification,
+                row.rationale,
+                row.created_at,
+            )
+            for row in rows
         )
 
     def get_learning_state_for_topic(

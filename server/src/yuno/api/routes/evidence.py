@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from yuno.api.contracts import (
     AssessmentCreateRequest,
     AssessmentDimensionResponse,
+    AssessmentDisputeDetailResponse,
     AssessmentDisputeRequest,
     AssessmentDisputeResponse,
     AssessmentReevaluateRequest,
@@ -17,9 +18,11 @@ from yuno.api.contracts import (
     EvidenceCreateRequest,
     EvidenceDetailResponse,
     EvidenceResponse,
+    EvidenceTransferResponse,
     GoalProgressResponse,
     JobRefResponse,
     LearningStateExplanationsResponse,
+    ReevaluationRequestResponse,
     accepted_job,
 )
 from yuno.api.dependencies import (
@@ -114,7 +117,7 @@ def post_evidence(
     if prior is not None:
         return prior
     evidence = create_evidence(uow, owner_id, goal_id, **body.model_dump())
-    response = _evidence_response(evidence)
+    response = _evidence_response(uow, owner_id, evidence)
     _store(uow, owner_id, operation, key, request_data, response)
     uow.commit()
     return response
@@ -126,7 +129,10 @@ def get_goal_evidence(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
 ) -> list[EvidenceResponse]:
-    return [_evidence_response(item) for item in list_goal_evidence(uow, owner_id, goal_id)]
+    return [
+        _evidence_response(uow, owner_id, item)
+        for item in list_goal_evidence(uow, owner_id, goal_id)
+    ]
 
 
 @router.get("/evidence/{evidence_id}", response_model=EvidenceDetailResponse)
@@ -137,10 +143,14 @@ def get_evidence(
 ) -> EvidenceDetailResponse:
     evidence, payload = get_evidence_record(uow, owner_id, evidence_id)
     return EvidenceDetailResponse(
-        **_evidence_response(evidence).model_dump(),
+        **_evidence_response(uow, owner_id, evidence).model_dump(),
         content=payload.content if payload else None,
         content_version=payload.content_version if payload else None,
         tombstoned=payload is None,
+        transfers=[
+            EvidenceTransferResponse(**item.__dict__)
+            for item in uow.roadmap.list_evidence_transfers(owner_id, evidence.id)
+        ],
     )
 
 
@@ -301,8 +311,14 @@ def run_reevaluation_job(request: JobRequest, uow_factory: UnitOfWorkFactory, ad
         raise
 
 
-def _evidence_response(evidence) -> EvidenceResponse:
-    return EvidenceResponse(**{key: value for key, value in evidence.__dict__.items() if key != "owner_id"})
+def _evidence_response(
+    uow: EvidenceUnitOfWork, owner_id: str, evidence
+) -> EvidenceResponse:
+    active = uow.evidence.get_active_assessment_for_evidence(owner_id, evidence.id)
+    return EvidenceResponse(
+        **{key: value for key, value in evidence.__dict__.items() if key != "owner_id"},
+        active_assessment_id=active.id if active else None,
+    )
 
 
 def _assessment_response(uow: EvidenceUnitOfWork, owner_id: str, assessment) -> AssessmentResponse:
@@ -317,7 +333,32 @@ def _assessment_response(uow: EvidenceUnitOfWork, owner_id: str, assessment) -> 
     values = {key: value for key, value in assessment.__dict__.items() if key != "owner_id"}
     for field in ("assumptions", "source_refs", "provenance_refs", "facts", "trade_offs", "citations", "ambiguities", "warnings", "limitation_labels"):
         values[field] = list(values[field])
-    return AssessmentResponse(**values, dimensions=dimensions)
+    disputes = []
+    for dispute in uow.evidence.list_disputes(owner_id, assessment.id):
+        reevaluation = uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id)
+        disputes.append(
+            AssessmentDisputeDetailResponse(
+                id=dispute.id,
+                reason=dispute.reason,
+                status=dispute.status,
+                requested_at=dispute.requested_at,
+                resolved_at=dispute.resolved_at,
+                resolution_note=dispute.resolution_note,
+                reevaluation=(
+                    ReevaluationRequestResponse(
+                        **{
+                            key: value
+                            for key, value in reevaluation.__dict__.items()
+                            if key
+                            not in {"owner_id", "goal_id", "prior_assessment_id"}
+                        }
+                    )
+                    if reevaluation
+                    else None
+                ),
+            )
+        )
+    return AssessmentResponse(**values, dimensions=dimensions, disputes=disputes)
 
 
 def _prior[ResponseModel: BaseModel](uow: EvidenceUnitOfWork, owner_id: str, operation: str, key: str, request: dict[str, object], response_type: type[ResponseModel]) -> ResponseModel | None:

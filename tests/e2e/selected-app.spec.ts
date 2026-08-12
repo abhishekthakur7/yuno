@@ -1,7 +1,9 @@
 import { expect, test as base, type Page, type Request } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { DiagnosticPreviewEdit, DiagnosticSession, DiagnosticSetup } from '../../src/shared/api/diagnostics'
+import type { Assessment, EvidenceDetail, GoalProgress, Source } from '../../src/shared/api/evidence'
 import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
+import type { OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
 
 const routes = [
   ['/', /Continue Resilient order fulfillment/i],
@@ -107,6 +109,30 @@ test.beforeEach(async ({ page }) => {
   let imports: Array<Record<string, unknown>> = []
   let importStatements: Array<Record<string, unknown>> = []
   let notebookEntries: Array<Record<string, unknown>> = []
+  let evidenceRecords: EvidenceDetail[] = []
+  let assessments: Assessment[] = []
+  let ownerSettings: OwnerSettings = {
+    progress_display: 'detailed',
+    row_version: 1,
+  }
+  const evidenceSources: Source[] = [
+    {
+      id: 'source-e2e-withdrawn', origin: 'synthetic-fixture', source_type: 'documentation',
+      title: 'Withdrawn evidence fixture advisory', publisher: 'Fixture publisher', canonical_url: null,
+      license_status: 'synthetic', availability_status: 'withdrawn',
+      created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z',
+    },
+  ]
+  const progress: GoalProgress = {
+    authoritative: false,
+    effective_now: '2026-08-12T00:00:00Z',
+    input_hash: 'progress-input-e2e',
+    rule_version: 'fixture-v0',
+    coverage: { classification: 'partial', definition: 'Breadth supported by qualified evidence.', supporting_evidence_refs: [], uncertainty: 'Fixture-only.' },
+    proficiency: { classification: 'partial', definition: 'Capability demonstrated in context.', supporting_evidence_refs: [], uncertainty: 'Fixture-only.' },
+    retention: { classification: 'unverified', definition: 'Durability across delayed recall.', supporting_evidence_refs: [], uncertainty: 'No delayed reassessment.' },
+    readiness: { classification: 'partial', definition: 'Current support against the declared target.', supporting_evidence_refs: [], uncertainty: 'Not an interview or hiring prediction.' },
+  }
   let reviewPreferences = {
     enabled: true,
     duration_minutes: 15,
@@ -491,7 +517,135 @@ test.beforeEach(async ({ page }) => {
     }
     await route.fulfill({ json: diagnostic })
   })
+  await page.route('**/api/v1/goals/*/evidence', async route => {
+    const request = route.request()
+    const goalId = new URL(request.url()).pathname.split('/').at(-2)!
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as {
+        topic_stable_id: string; evidence_type: string; capability: string; summary: string;
+        origin: string; content: string; content_version: string
+      }
+      const created: EvidenceDetail = {
+        id: `evidence-e2e-${evidenceRecords.length + 1}`, goal_id: goalId,
+        topic_stable_id: body.topic_stable_id, evidence_type: body.evidence_type,
+        capability: body.capability, summary: body.summary, origin: body.origin,
+        payload_hash: `payload-hash-e2e-${evidenceRecords.length + 1}`,
+        active_assessment_id: null, content: body.content, content_version: body.content_version,
+        tombstoned: false, transfers: [], created_at: '2026-08-12T00:03:00Z',
+      }
+      evidenceRecords.push(created)
+      await route.fulfill({ status: 201, json: evidenceSummary(created) })
+      return
+    }
+    await route.fulfill({ json: evidenceRecords.filter(item => item.goal_id === goalId).map(evidenceSummary) })
+  })
+  await page.route('**/api/v1/evidence/**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.split('/')
+    const evidenceId = path.at(path.at(-1) === 'assess' ? -2 : -1)!
+    const index = evidenceRecords.findIndex(item => item.id === evidenceId)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Evidence not found' } })
+      return
+    }
+    if (path.at(-1) === 'assess' && request.method() === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown>
+      const assessment = assessmentFixture(`assessment-e2e-${assessments.length + 1}`, evidenceRecords[index]!, body)
+      assessments.push(assessment)
+      evidenceRecords[index] = { ...evidenceRecords[index]!, active_assessment_id: assessment.id }
+      await route.fulfill({ status: 202, json: { job_id: 'assessment-job-e2e', kind: 'assess_evidence', status: 'succeeded', enqueued_at: '2026-08-12T00:04:00Z', deduplicated: false } })
+      return
+    }
+    await route.fulfill({ json: evidenceRecords[index] })
+  })
+  await page.route('**/api/v1/assessments/**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.split('/')
+    const action = path.at(-1)
+    const assessmentId = path.at(action === 'disputes' || action === 'reevaluate' ? -2 : -1)!
+    const index = assessments.findIndex(item => item.id === assessmentId)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Assessment not found' } })
+      return
+    }
+    if (action === 'disputes' && request.method() === 'POST') {
+      const body = request.postDataJSON() as { reason: string }
+      const dispute = {
+        id: `dispute-e2e-${assessments[index]!.disputes.length + 1}`,
+        reason: body.reason, status: 'requested' as const, requested_at: '2026-08-12T00:05:00Z',
+        resolved_at: null, resolution_note: null, reevaluation: null,
+      }
+      assessments[index] = { ...assessments[index]!, disputes: [...assessments[index]!.disputes, dispute] }
+      await route.fulfill({ status: 201, json: { id: dispute.id, assessment_id: assessmentId, goal_id: assessments[index]!.goal_id, reason: dispute.reason, status: dispute.status, requested_at: dispute.requested_at } })
+      return
+    }
+    if (action === 'reevaluate' && request.method() === 'POST') {
+      const { dispute_id: disputeId } = request.postDataJSON() as { dispute_id: string }
+      assessments[index] = {
+        ...assessments[index]!,
+        disputes: assessments[index]!.disputes.map(item => item.id === disputeId ? {
+          ...item,
+          reevaluation: { id: 'reevaluation-e2e-1', dispute_id: disputeId, status: 'requested', job_id: 'reevaluation-job-e2e', resulting_assessment_id: null, failure_reference: null, requested_at: '2026-08-12T00:06:00Z', completed_at: null },
+        } : item),
+      }
+      await route.fulfill({ status: 202, json: { job_id: 'reevaluation-job-e2e', kind: 'reevaluate_assessment', status: 'queued', enqueued_at: '2026-08-12T00:06:00Z', deduplicated: false } })
+      return
+    }
+    await route.fulfill({ json: assessments[index] })
+  })
+  await page.route('**/api/v1/sources/*', async route => {
+    const sourceId = new URL(route.request().url()).pathname.split('/').at(-1)
+    const source = evidenceSources.find(item => item.id === sourceId)
+    await route.fulfill(source ? { json: source } : { status: 404, json: { message: 'Source not found' } })
+  })
+  await page.route('**/api/v1/goals/*/progress', async route => {
+    const goalId = new URL(route.request().url()).pathname.split('/').at(-2)!
+    await route.fulfill({ json: {
+      ...progress,
+      coverage: { ...progress.coverage, supporting_evidence_refs: evidenceRecords.filter(item => item.goal_id === goalId).map(item => item.id) },
+    } })
+  })
+  await page.route('**/api/v1/settings', async route => {
+    const request = route.request()
+    if (request.method() === 'PATCH') {
+      if (Number(request.headers()['if-match']) !== ownerSettings.row_version) {
+        await route.fulfill({ status: 412, json: { code: 'precondition_failed', message: 'Settings changed; reload and retry.' } })
+        return
+      }
+      const body = request.postDataJSON() as OwnerSettingsPatch
+      ownerSettings = {
+        ...ownerSettings,
+        ...body,
+        row_version: ownerSettings.row_version + 1,
+      }
+    }
+    await route.fulfill({ json: ownerSettings })
+  })
 })
+
+function evidenceSummary({ content: _content, content_version: _contentVersion, tombstoned: _tombstoned, transfers: _transfers, ...summary }: EvidenceDetail) {
+  return summary
+}
+
+function assessmentFixture(id: string, evidence: EvidenceDetail, input: Record<string, unknown>): Assessment {
+  return {
+    id, evidence_id: evidence.id, goal_id: evidence.goal_id, run_id: null,
+    rubric_id: String(input.rubric_id), rubric_version: String(input.rubric_version),
+    task_ref: String(input.task_ref), assumptions: (input.assumptions as string[] | undefined) ?? [],
+    requested_capability: String(input.requested_capability),
+    source_refs: ['source-e2e-withdrawn'], provenance_refs: ['provenance-e2e-1'],
+    role: typeof input.role === 'string' ? input.role : null, level: typeof input.level === 'string' ? input.level : null,
+    evaluation_method: String(input.evaluation_method), state: 'feedback-ready',
+    dimensions: [{ dimension_id: 'failure-boundary', outcome: 'pass', rationale: 'The decision names the durable duplicate boundary.', evidence_refs: [evidence.id] }],
+    facts: ['A durable idempotency decision is present.'], trade_offs: ['Retention bounds storage against replay coverage.'],
+    citations: ['source-e2e-withdrawn'], ambiguities: [],
+    feedback: 'The submitted decision supports a bounded idempotency conclusion.',
+    cross_question_candidate: 'How does the boundary behave after acknowledgement loss?',
+    revision_invitation: 'Defend the same boundary under concurrent retries.', warnings: [],
+    limitation_labels: ['Static review cannot prove runtime behavior.'], predecessor_assessment_id: null,
+    derivation_excluded: false, disputes: [], created_at: '2026-08-12T00:04:00Z',
+  }
+}
 
 function requestIsRoadmapCommand(value: string | undefined): value is 'corrections' | 'order-constraints' | 'skip-decisions' | 'depth-overrides' {
   return value === 'corrections' || value === 'order-constraints' || value === 'skip-decisions' || value === 'depth-overrides'
@@ -527,6 +681,52 @@ async function learningState(page: Page) {
     const key = Object.keys(localStorage).filter(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup').at(-1)
     return JSON.parse(key ? localStorage.getItem(key) || 'null' : 'null')
   })
+}
+
+async function apiEvidence(page: Page, goalId = 'goal-default') {
+  return page.evaluate(id => fetch(`/api/v1/goals/${id}/evidence`).then(response => response.json()), goalId) as Promise<Array<{ id: string; active_assessment_id: string | null }>>
+}
+
+async function hasClientEvidenceSlice(page: Page) {
+  return page.evaluate(() => {
+    const key = Object.keys(localStorage).find(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup')
+    const value = JSON.parse(key ? localStorage.getItem(key) || 'null' : 'null')
+    return Boolean(value && Object.prototype.hasOwnProperty.call(value, 'evidence'))
+  })
+}
+
+async function seedAssessedEvidence(page: Page) {
+  return page.evaluate(async () => {
+    const evidenceResponse = await fetch('/api/v1/goals/goal-default/evidence', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'evidence-e2e' },
+      body: JSON.stringify({
+        topic_stable_id: 'idempotency-retry', evidence_type: 'answer', capability: 'implement',
+        summary: 'A bounded idempotency decision is supported.', origin: 'learner-submit',
+        content: 'Use a durable request key and retain the result across redelivery.', content_version: 'v1',
+      }),
+    })
+    const evidence = await evidenceResponse.json()
+    await fetch(`/api/v1/evidence/${evidence.id}/assess`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'assessment-e2e' },
+      body: JSON.stringify({
+        rubric_id: 'rubric-e2e', rubric_version: 'v1', task_ref: 'idempotency-checkpoint',
+        assumptions: ['Redelivery can follow a committed write.'], requested_capability: 'implement',
+        source_refs: ['source-e2e-withdrawn'], provenance_refs: ['provenance-e2e-1'],
+        role: 'backend', level: 'senior', evaluation_method: 'static',
+      }),
+    })
+    const records = await fetch('/api/v1/goals/goal-default/evidence').then(response => response.json())
+    return records.at(-1) as { id: string; active_assessment_id: string }
+  })
+}
+
+async function learningApiSnapshot(page: Page, evidenceId: string, assessmentId: string) {
+  return page.evaluate(async ({ evidenceId: itemId, assessmentId: reviewId }) => Promise.all([
+    fetch('/api/v1/goals/goal-default/evidence').then(response => response.json()),
+    fetch(`/api/v1/evidence/${itemId}`).then(response => response.json()),
+    fetch(`/api/v1/assessments/${reviewId}`).then(response => response.json()),
+    fetch('/api/v1/goals/goal-default/progress').then(response => response.json()),
+  ]), { evidenceId, assessmentId })
 }
 
 async function operationsState(page: Page) {
@@ -570,13 +770,13 @@ test('malformed bounded draft storage falls back field by field without runtime 
       practice: learning?.practice,
       mockPriorTurns: learning?.mock.priorTurns.length,
       mockReport: learning?.mock.reportKind,
-      evidence: learning?.evidence,
+      hasEvidence: Boolean(learning && Object.prototype.hasOwnProperty.call(learning, 'evidence')),
     }
   }).toEqual({
     practice: { questionIndex: 0, draft: '', hintRequested: false, mode: 'answering', attempts: [] },
     mockPriorTurns: 2,
     mockReport: null,
-    evidence: [],
+    hasEvidence: false,
   })
   await expect.poll(async () => {
     const operations = await operationsState(page)
@@ -737,7 +937,7 @@ test('onboarding persists verbatim source material as visibly untrusted seed', a
   await expect(page.locator('.sb-untrusted-seed pre')).toHaveText(source)
   await page.reload()
   await expect(page.locator('.sb-untrusted-seed pre')).toHaveText(source)
-  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+  await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
 })
 
 test('API-backed roadmap depth, knowledge, skip, and order edits survive reload', async ({ page, diagnostics }) => {
@@ -829,7 +1029,7 @@ test('Topic Studio keeps a stale body through explicit regeneration and exposes 
   await expect(page.getByText('Regenerated body after explicit action.')).toBeVisible({ timeout: 5_000 })
 })
 
-test('Topic Studio Run is exploratory and Submit alone appends evidence', async ({ page, diagnostics }) => {
+test('Topic Studio static checks do not create client-side evidence', async ({ page, diagnostics }) => {
   void diagnostics
   await page.setViewportSize({ width: 1366, height: 768 })
   await open(page, '/app/topic-studio')
@@ -839,13 +1039,12 @@ test('Topic Studio Run is exploratory and Submit alone appends evidence', async 
   expect((openLabBox?.y ?? 0) + (openLabBox?.height ?? 0), 'primary lesson action is in the first viewport').toBeLessThanOrEqual(768)
   await openLab.click()
   await expect(page.getByRole('textbox', { name: /Java code/i })).toBeInViewport()
-  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
-  await page.getByRole('button', { name: /Run static checks/i }).click()
+  await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
+  await page.getByRole('button', { name: 'Run static checks', exact: true }).click()
   await expect(page.getByText(/Carries a stable request key/i)).toBeVisible()
   await expect.poll(async () => (await learningState(page))?.runResult?.status).toBeTruthy()
-  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
-  await page.getByRole('button', { name: /Submit evidence/i }).click()
-  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(1)
+  await expect.poll(() => hasClientEvidenceSlice(page)).toBe(false)
+  await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
 })
 
 test('Practice reveals a requested hint, then feedback, repair, and append-only history', async ({ page, diagnostics }) => {
@@ -899,18 +1098,42 @@ test('Mock pause/resume preserves the exact draft and evaluation appears only af
   await expect.poll(async () => (await learningState(page))?.mock.reportKind).toBe('fixture-evaluation')
 })
 
-test('Evidence is unavailable before submission and derives its conclusion from submitted learner state', async ({ page, diagnostics }) => {
+test('Evidence reads API-backed assessment history and records a dispute without overwriting evidence', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/evidence')
   await expect(page.getByRole('heading', { name: /No submitted lab evidence is available yet/i })).toBeVisible()
-  await page.getByRole('button', { name: /Open Topic Studio/i }).click()
-  await expect(page.getByRole('heading', { name: /Implement an idempotency boundary under concurrent retries/i })).toBeVisible()
-  await page.getByRole('button', { name: /Submit evidence/i }).click()
-  const conclusion = (await learningState(page))?.evidence.at(-1)?.conclusion
+  const seeded = await seedAssessedEvidence(page)
+  const original = await page.evaluate(id => fetch(`/api/v1/evidence/${id}`).then(response => response.json()), seeded.id)
   await open(page, '/app/evidence')
-  await expect(page.getByRole('heading', { name: conclusion })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /submitted decision supports a bounded idempotency conclusion/i })).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText(/Tombstoned source warning/i)
+  await page.getByRole('button', { name: /Record dispute/i }).click()
+  await expect(page.getByRole('button', { name: /Request re-evaluation/i })).toBeVisible()
+  await expect.poll(async () => page.evaluate(id => fetch(`/api/v1/assessments/${id}`).then(response => response.json()).then(value => value.disputes.length), seeded.active_assessment_id)).toBe(1)
+  const preserved = await page.evaluate(id => fetch(`/api/v1/evidence/${id}`).then(response => response.json()), seeded.id)
+  expect(preserved).toEqual(original)
+  await page.getByText(/Disputes and re-evaluation/i).click()
+  await expect(page.getByText(/learner requested correction and re-evaluation/i)).toBeVisible()
   await page.getByRole('button', { name: /Open transfer check/i }).click()
   await expect(page).toHaveURL(/\/app\/practice$/)
+})
+
+test('progress display persists as presentation-only and leaves learning APIs unchanged', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/evidence')
+  const seeded = await seedAssessedEvidence(page)
+  const before = await learningApiSnapshot(page, seeded.id, seeded.active_assessment_id)
+
+  await open(page, '/app/settings')
+  const simple = page.getByRole('radio', { name: /Simple/i })
+  await simple.click()
+  await expect(simple).toBeChecked()
+  await expect.poll(async () => page.evaluate(() => fetch('/api/v1/settings').then(response => response.json()).then(settings => settings.progress_display))).toBe('simple')
+
+  await open(page, '/app/evidence')
+  await expect(page.locator('[data-progress-display="simple"]')).toBeVisible()
+  const after = await learningApiSnapshot(page, seeded.id, seeded.active_assessment_id)
+  expect(after).toEqual(before)
 })
 
 test('server-parsed imports stay exact and untrusted while learner decisions remain personal', async ({ page, diagnostics }) => {
@@ -932,7 +1155,7 @@ test('server-parsed imports stay exact and untrusted while learner decisions rem
   await first.getByRole('button', { name: /Verify as mine/i }).click()
   await page.getByText(/“A lookup before a write/i).locator('xpath=ancestor::article').getByRole('button', { name: /Dismiss/i }).click()
   await expect(page.getByText(/Mapping and verification are personal decisions/i)).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+  await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
   await expect.poll(async () => {
     const state = await operationsState(page)
     return 'importSource' in state || 'importStatements' in state

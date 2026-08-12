@@ -48,6 +48,8 @@ from yuno.modules.provenance.ports import SourceRepository
 from yuno.modules.provenance.repository import SqlAlchemySourceRepository
 from yuno.modules.roadmap.ports import RoadmapRepository
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
+from yuno.modules.settings_data.ports import SettingsRepository
+from yuno.modules.settings_data.repository import SqlAlchemySettingsRepository
 from yuno.shared.application.unit_of_work import UnitOfWork, UnitOfWorkFactory
 
 _WRITE_OPEN_KEY = "yuno_write_transaction_open"
@@ -92,6 +94,7 @@ class SqlAlchemyUnitOfWork:
     profiles_goals: ProfilesGoalsRepository
     provenance: SourceRepository
     roadmap: RoadmapRepository
+    settings_data: SettingsRepository
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -116,6 +119,7 @@ class SqlAlchemyUnitOfWork:
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         self.provenance = SqlAlchemySourceRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
+        self.settings_data = SqlAlchemySettingsRepository(self._session)
         return self
 
     def __exit__(

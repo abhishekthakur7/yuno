@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import {
   AlertTriangle,
@@ -21,12 +22,14 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
-import { useLearningState } from '../../shared/state'
 import type { ImportStatement, JobRef } from '../../shared/api/imports'
+import { evidenceQueryOptions } from '../../shared/api/evidence'
 import { useImports } from '../../shared/use-imports'
 import { useProfileGoals } from '../../shared/use-profile-goals'
 import { useRoadmap } from '../../shared/use-roadmap'
 import { useReviewPreferences } from '../../shared/use-notebook-review'
+import { useEvidence } from '../../shared/use-evidence'
+import { useOwnerSettings } from '../../shared/use-settings'
 import type { ReviewPreferencesPatch } from '../../shared/api/notebook-review'
 import './operations.css'
 
@@ -37,12 +40,10 @@ interface OperationsState {
   version: 1
   goalVersion: '2026.07' | '2026.08'
   owner: { name: string; role: string }
-  progress: 'detailed' | 'simple'
   reducedMotion: boolean
   updateDecision: 'pending' | 'accepted' | 'postponed' | 'dismissed'
   acceptedUpdates: string[]
   acceptedConflictResolution: 'overlay-kept' | 'canonical-adopted' | null
-  disputedEvidenceId: string | null
 }
 
 const STORAGE_KEY = 'yuno.operations.state.v1'
@@ -51,12 +52,10 @@ const DEFAULT_STATE: OperationsState = {
   version: 1,
   goalVersion: '2026.07',
   owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
-  progress: 'detailed',
   reducedMotion: false,
   updateDecision: 'pending',
   acceptedUpdates: [],
   acceptedConflictResolution: null,
-  disputedEvidenceId: null,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,12 +76,10 @@ function hydrateOperationsState(value: unknown): OperationsState | null {
       name: typeof owner.name === 'string' ? owner.name : DEFAULT_STATE.owner.name,
       role: typeof owner.role === 'string' ? owner.role : DEFAULT_STATE.owner.role,
     },
-    progress: value.progress === 'simple' || value.progress === 'detailed' ? value.progress : DEFAULT_STATE.progress,
     reducedMotion: typeof value.reducedMotion === 'boolean' ? value.reducedMotion : DEFAULT_STATE.reducedMotion,
     updateDecision: value.updateDecision === 'accepted' || value.updateDecision === 'postponed' || value.updateDecision === 'dismissed' || value.updateDecision === 'pending' ? value.updateDecision : DEFAULT_STATE.updateDecision,
     acceptedUpdates: isStringArray(value.acceptedUpdates) ? value.acceptedUpdates : DEFAULT_STATE.acceptedUpdates,
     acceptedConflictResolution: value.acceptedConflictResolution === 'overlay-kept' || value.acceptedConflictResolution === 'canonical-adopted' || value.acceptedConflictResolution === null ? value.acceptedConflictResolution : DEFAULT_STATE.acceptedConflictResolution,
-    disputedEvidenceId: typeof value.disputedEvidenceId === 'string' || value.disputedEvidenceId === null ? value.disputedEvidenceId : DEFAULT_STATE.disputedEvidenceId,
   }
 }
 
@@ -128,24 +125,47 @@ function Disclosure({ children }: { children: React.ReactNode }) {
   return <aside className="so-disclosure"><Info size={18} aria-hidden="true" /><div>{children}</div></aside>
 }
 
-function EvidencePage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
-  const { state: learning } = useLearningState()
-  const latestEvidence = learning.evidence.at(-1)
-  const olderEvidence = learning.evidence.slice(0, -1).reverse()
-  const latestPractice = learning.practice.attempts.at(-1)
-  const latestIsDisputed = Boolean(latestEvidence && state.disputedEvidenceId === latestEvidence.id)
+export function EvidencePage({ navigate }: { navigate: Navigate }) {
+  const { currentGoal } = useProfileGoals()
+  const workspace = useEvidence(currentGoal?.id ?? null)
+  const ownerSettings = useOwnerSettings()
+  const latestEvidence = workspace.evidence.data?.at(-1)
+  const assessment = workspace.assessment.data
+  const olderEvidence = (workspace.evidence.data ?? []).slice(0, -1).reverse()
+  const limitation = assessment?.limitation_labels[0] ?? assessment?.warnings[0] ?? 'This conclusion is limited to the submitted artifact and evaluation method.'
+  const nextAction = assessment?.revision_invitation ?? (latestEvidence ? 'Defend the same decision in a new failure scenario.' : 'Open Topic Studio and review the current artifact. Static checks do not create evidence.')
+  const unavailableSources = workspace.sources.data.filter(source => source.availability_status === 'withdrawn' || source.availability_status === 'unavailable')
+  const latestDispute = assessment?.disputes.at(-1)
+  const disputes = workspace.assessmentHistory.data.flatMap(item => item.disputes)
+  const evidenceFailed = workspace.evidence.isError
+  const evidencePending = workspace.evidence.isPending && !workspace.evidence.data
+  const assessmentPending = Boolean(workspace.assessmentId) && workspace.assessment.isPending
   return <>
     <PageHead eyebrow="Evidence · resilient order fulfillment" title="What your work supports" description="Conclusions are qualified by the artifact, rubric, and review method—not by lesson consumption." />
     <section className={`so-hero-card so-evidence-hero ${latestEvidence ? '' : 'is-unavailable'}`} aria-labelledby="so-conclusion">
       <div className="so-status-icon">{latestEvidence ? <Check size={24} /> : <FileText size={24} />}</div>
-      <div><span className="so-kicker">{latestEvidence ? 'Latest submitted conclusion' : 'Evidence unavailable'}</span><h2 id="so-conclusion">{latestEvidence?.conclusion ?? 'No submitted lab evidence is available yet.'}</h2><p>{latestEvidence?.limitation ?? 'Running checks can preview local feedback, but only an explicit submission creates an evidence record. No progress or qualification is inferred from a draft.'}</p></div>
-      <div className="so-next"><span>Next useful action</span><strong>{latestEvidence ? 'Defend the same boundary in a new failure scenario.' : 'Open Topic Studio, review the artifact, and submit it when it represents your decision.'}</strong><Button tone="secondary" onClick={() => navigate(latestEvidence ? 'practice' : 'topic-studio')}>{latestEvidence ? 'Open transfer check' : 'Open Topic Studio'} <ArrowRight size={16} /></Button></div>
+      <div><span className="so-kicker">{latestEvidence ? 'Latest submitted conclusion' : evidencePending ? 'Evidence loading' : 'Evidence unavailable'}</span><h2 id="so-conclusion">{evidenceFailed ? 'Evidence could not be loaded.' : evidencePending ? 'Loading submitted evidence…' : assessment?.feedback ?? latestEvidence?.summary ?? 'No submitted lab evidence is available yet.'}</h2><p><strong>Limitation:</strong> {evidenceFailed ? 'No conclusion can be drawn until the evidence list is available.' : evidencePending ? 'No evidence conclusion is inferred before the server read completes.' : latestEvidence ? limitation : 'Only an explicit submission creates an evidence record. No progress or qualification is inferred from a draft.'}</p></div>
+      <div className="so-next"><span>Next useful action</span><strong>{evidenceFailed ? 'Retry the evidence list while the rest of this page remains usable.' : evidencePending ? 'Keep this page open while the submitted-evidence read completes.' : nextAction}</strong>{evidenceFailed ? <Button tone="secondary" onClick={() => void workspace.evidence.refetch()}>Retry evidence</Button> : !evidencePending && <Button tone="secondary" onClick={() => navigate(latestEvidence ? 'practice' : 'topic-studio')}>{latestEvidence ? 'Open transfer check' : 'Open Topic Studio'} <ArrowRight size={16} /></Button>}</div>
     </section>
-    {latestPractice && <section className="so-panel so-practice-summary"><div><span className="so-kicker">Latest guided-practice attempt</span><h2>{latestPractice.facts[0] ?? 'A practice response was saved.'}</h2><p>{latestPractice.tradeoffs[0] ?? 'Open practice to inspect and repair the response.'}</p></div><Button tone="secondary" onClick={() => navigate('practice')}>Review practice <ArrowRight size={16} /></Button></section>}
-    <details className="so-details"><summary><span><History size={18} /> Inspect provenance <small>Method, artifact, and authority</small></span><ChevronRight size={18} /></summary><div className="so-inspection">{latestEvidence ? <dl className="so-facts"><dt>Record</dt><dd>{latestEvidence.id}</dd><dt>Artifact</dt><dd>Learner-submitted code ({latestEvidence.artifact.length} characters)</dd><dt>Review</dt><dd>{latestEvidence.kind === 'static-review' ? 'Deterministic browser static review' : latestEvidence.kind}</dd><dt>Authority</dt><dd>Learner evidence; not canonical content or runtime proof</dd></dl> : <p>No submitted artifact exists, so there is no evidence provenance to inspect.</p>}</div></details>
-    <details className="so-details"><summary><span><History size={18} /> Evidence history <small>{olderEvidence.length ? `${olderEvidence.length} older submitted record${olderEvidence.length === 1 ? '' : 's'}` : 'No older submitted records'}</small></span><ChevronRight size={18} /></summary><div className="so-timeline">{olderEvidence.length ? olderEvidence.map((item) => <article key={item.id}><span>{item.id}</span><strong>{item.conclusion}</strong><p>{item.limitation}</p></article>) : <p>No older submitted evidence is available.</p>}</div></details>
-    {latestEvidence && <section className="so-panel so-dispute"><div><span className="so-kicker">Correction and dispute</span><h2>{latestIsDisputed ? 'Re-evaluation requested' : 'Something about this assessment is wrong?'}</h2><p>{latestIsDisputed ? 'The original assessment is preserved. This local prototype cannot perform a real re-evaluation, so the request is recorded as unresolved without a readiness penalty.' : 'This local request does not overwrite the submitted evidence. Unresolved ambiguity does not lower readiness.'}</p></div><Button tone="secondary" disabled={latestIsDisputed} onClick={() => setState((s) => ({ ...s, disputedEvidenceId: latestEvidence.id }))}>{latestIsDisputed ? 'Request recorded' : 'Request re-evaluation'}</Button></section>}
+    {unavailableSources.length > 0 && <aside className="so-warning so-tombstone-warning" role="alert"><AlertTriangle size={20} /><div><strong>Tombstoned source warning: cited source withdrawn or unavailable</strong><p>{unavailableSources.map(source => source.title).join(', ')} remains in provenance history, but its content may no longer be inspected.</p></div></aside>}
+    <details className="so-details"><summary><span><History size={18} /> Rubric, state, and assumptions <small>Dimensions, ambiguity, limits, and evaluation method</small></span><ChevronRight size={18} /></summary><div className="so-inspection">{workspace.assessment.isError ? <RegionFailure label="Assessment detail" retry={() => void workspace.assessment.refetch()} /> : assessmentPending ? <p>Loading assessment detail…</p> : assessment ? <><dl className="so-facts"><dt>Assessment state</dt><dd>{assessment.state}</dd></dl>{assessment.state === 'ambiguity-unresolved' && <aside className="so-warning"><AlertTriangle size={18} /><div><strong>Ambiguity unresolved</strong><p>This uncertainty is shown explicitly and carries no readiness penalty.</p></div></aside>}<h3>Ambiguities</h3>{assessment.ambiguities.length ? <ul>{assessment.ambiguities.map(item => <li key={item}>{item}</li>)}</ul> : <p>No unresolved ambiguities recorded.</p>}<div className="so-rubric">{assessment.dimensions.map(dimension => <article key={dimension.dimension_id}><Check size={17} /><div><strong>{dimension.dimension_id} · {dimension.outcome}</strong><p>{dimension.rationale}</p></div></article>)}</div><h3>Assumptions</h3>{assessment.assumptions.length ? <ul>{assessment.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>No assumptions recorded.</p>}</> : <p>No assessment is attached to this evidence.</p>}</div></details>
+    <details className="so-details"><summary><span><History size={18} /> Sources and provenance <small>Citations, artifact, and authority</small></span><ChevronRight size={18} /></summary><div className="so-inspection">{workspace.detail.isError ? <RegionFailure label="Evidence provenance" retry={() => void workspace.detail.refetch()} /> : workspace.detail.isPending && latestEvidence ? <p>Loading evidence provenance…</p> : latestEvidence ? <><dl className="so-facts"><dt>Record</dt><dd>{latestEvidence.id}</dd><dt>Origin</dt><dd>{latestEvidence.origin}</dd><dt>Payload hash</dt><dd>{latestEvidence.payload_hash}</dd><dt>Method</dt><dd>{assessmentPending ? 'Loading assessment method…' : assessment?.evaluation_method ?? 'No assessment available'}</dd><dt>Citations</dt><dd>{assessmentPending ? 'Loading citations…' : assessment?.citations.join(', ') || 'None'}</dd><dt>Provenance refs</dt><dd>{assessmentPending ? 'Loading provenance references…' : assessment?.provenance_refs.join(', ') || 'None'}</dd></dl>{workspace.sources.isError ? <RegionFailure label="Cited sources" retry={() => void workspace.sources.refetch()} /> : workspace.sources.isPending ? <p>Loading cited sources…</p> : workspace.sources.data.map(source => <p key={source.id}><strong>{source.title}</strong> · {source.availability_status}</p>)}</> : <p>No submitted artifact exists, so there is no evidence provenance to inspect.</p>}</div></details>
+    <details className="so-details"><summary><span><History size={18} /> Transfer lineage <small>Goal-to-goal derivation</small></span><ChevronRight size={18} /></summary><div className="so-timeline">{workspace.detail.isError ? <RegionFailure label="Transfer lineage" retry={() => void workspace.detail.refetch()} /> : workspace.detail.isPending && latestEvidence ? <p>Loading transfer lineage…</p> : workspace.detail.data?.transfers.length ? workspace.detail.data.transfers.map(item => <article key={item.id}><span>{item.classification} · {item.target_goal_id}</span><strong>{item.learning_state_id}</strong><p>{item.rationale}</p></article>) : <p>No transfer lineage is recorded.</p>}</div></details>
+    <details className="so-details"><summary><span><History size={18} /> Disputes and re-evaluation <small>Append-only correction history</small></span><ChevronRight size={18} /></summary><div className="so-timeline">{workspace.assessmentHistory.isError ? <RegionFailure label="Assessment history" retry={() => void workspace.assessmentHistory.refetch()} /> : workspace.assessmentHistory.isPending ? <p>Loading disputes and re-evaluation history…</p> : disputes.length ? disputes.map(dispute => <article key={dispute.id}><span>{dispute.requested_at} · {dispute.status}</span><strong>{dispute.reason}</strong><p>{dispute.reevaluation ? `Re-evaluation: ${dispute.reevaluation.status}` : 'No re-evaluation requested.'}</p></article>) : <p>No disputes or re-evaluations are recorded.</p>}</div></details>
+    <details className="so-details"><summary><span><History size={18} /> Evidence and assessment history <small>{olderEvidence.length} older evidence record{olderEvidence.length === 1 ? '' : 's'} · {workspace.assessmentHistory.data.length} assessment revision{workspace.assessmentHistory.data.length === 1 ? '' : 's'}</small></span><ChevronRight size={18} /></summary><div className="so-timeline">{workspace.assessmentHistory.isError ? <RegionFailure label="Assessment history" retry={() => void workspace.assessmentHistory.refetch()} /> : workspace.assessmentHistory.isPending ? <p>Loading assessment history…</p> : workspace.assessmentHistory.data.length ? workspace.assessmentHistory.data.map((item, index) => <article key={item.id}><span>{item.created_at} · {item.state}</span><strong>{item.feedback}</strong><p>Assessment {item.id}{item.predecessor_assessment_id ? ` · predecessor ${item.predecessor_assessment_id}` : ' · original assessment'}</p><div className="so-rubric">{item.dimensions.map(dimension => <article key={`${item.id}-${dimension.dimension_id}`}><Check size={15} /><div><strong>{dimension.dimension_id} · {dimension.outcome}</strong><p>{dimension.rationale}</p></div></article>)}</div>{index === 0 && <span className="so-chip so-chip--green">Current</span>}</article>) : <p>No assessment history is available.</p>}{olderEvidence.map(item => <article key={item.id}><span>{item.created_at} · evidence</span><strong>{item.summary}</strong><p>{item.evidence_type} · {item.capability}</p></article>)}</div></details>
+    <ProgressDisclosure progress={workspace.progress} display={ownerSettings.settings.data?.progress_display ?? null} settings={ownerSettings.settings} />
+    {latestEvidence && assessment && <section className="so-panel so-dispute"><div><span className="so-kicker">Correction and dispute</span><h2>{latestDispute ? 'Assessment dispute recorded' : 'Something about this assessment is wrong?'}</h2><p>The original assessment is preserved. Unresolved ambiguity does not lower readiness.</p>{workspace.dispute.isError && <p className="so-error" role="alert">The dispute was not recorded. Nothing changed; try again.</p>}{workspace.reevaluate.isError && <p className="so-error" role="alert">Re-evaluation could not be requested. The dispute and assessment remain preserved; try again.</p>}</div>{latestDispute && !latestDispute.reevaluation ? <Button tone="secondary" disabled={workspace.reevaluate.isPending} onClick={() => workspace.reevaluate.mutate({ assessmentId: assessment.id, disputeId: latestDispute.id })}>Request re-evaluation</Button> : <Button tone="secondary" disabled={Boolean(latestDispute) || workspace.dispute.isPending} onClick={() => workspace.dispute.mutate({ assessmentId: assessment.id, reason: 'The learner requested correction and re-evaluation.' })}>{latestDispute ? latestDispute.reevaluation ? `Re-evaluation ${latestDispute.reevaluation.status}` : 'Dispute recorded' : workspace.dispute.isError ? 'Retry dispute' : 'Record dispute'}</Button>}</section>}
   </>
+}
+
+type ProgressQuery = ReturnType<typeof useEvidence>['progress']
+type SettingsQuery = ReturnType<typeof useOwnerSettings>['settings']
+function ProgressDisclosure({ progress, display, settings }: { progress: ProgressQuery; display: 'simple' | 'detailed' | null; settings: SettingsQuery }) {
+  return <details className="so-details" data-progress-display={display ?? 'loading'}><summary><span><History size={18} /> Learning progress <small>{display === 'detailed' ? 'Classifications, definitions, uncertainty, and evidence links' : display === 'simple' ? 'Condensed classifications' : 'Loading display preference'}</small></span><ChevronRight size={18} /></summary><div className="so-inspection">{settings.isError ? <RegionFailure label="Progress display preference" retry={() => void settings.refetch()} /> : display === null ? <p>Loading progress display preference…</p> : progress.isError ? <RegionFailure label="Learning progress" retry={() => void progress.refetch()} /> : progress.data ? <div className="so-rubric">{(['coverage', 'proficiency', 'retention', 'readiness'] as const).map(key => <article key={key}><Check size={17} /><div><strong>{key} · {progress.data![key].classification}</strong>{display === 'detailed' && <><p>{progress.data![key].definition}</p><p>Uncertainty: {progress.data![key].uncertainty}</p><p>Evidence: {progress.data![key].supporting_evidence_refs.join(', ') || 'None'}</p></>}</div></article>)}</div> : <p>Loading progress…</p>}</div></details>
+}
+
+function RegionFailure({ label, retry }: { label: string; retry: () => void }) {
+  return <div className="so-region-failure" role="alert"><p>{label} could not be loaded. Other evidence regions remain available.</p><Button tone="secondary" onClick={retry}>Retry {label.toLowerCase()}</Button></div>
 }
 
 function ImportStatementReview({ statement, topics, goalId, workspace }: { statement: ImportStatement; topics: { stable_id: string; title: string }[]; goalId: string; workspace: ReturnType<typeof useImports> }) {
@@ -241,17 +261,28 @@ function CanonicalUpdatesPage({ state, setState }: { state: OperationsState; set
 }
 
 function SearchPage({ navigate }: { navigate: Navigate }) {
-  const { state: learning } = useLearningState()
+  const { currentGoal } = useProfileGoals()
+  const evidence = useQuery(evidenceQueryOptions(currentGoal?.id ?? null))
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [stale, setStale] = useState(true)
-  const items = useMemo(() => [...SEARCH_ITEMS, ...learning.evidence.map((item) => ({ kind: 'Evidence', title: item.conclusion, path: `Evidence · ${item.id}`, text: `${item.artifact} ${item.limitation}`, lessonId: null }))], [learning.evidence])
+  const items = useMemo(() => [
+    ...SEARCH_ITEMS,
+    ...(evidence.data ?? []).map(item => ({
+      kind: 'Evidence',
+      title: item.summary,
+      path: `Evidence · ${item.id}`,
+      text: `${item.evidence_type} ${item.capability} ${item.origin} ${item.payload_hash}`,
+      lessonId: null,
+    })),
+  ], [evidence.data])
   const results = useMemo(() => items.filter((item) => `${item.title} ${item.text}`.toLowerCase().includes(submitted.toLowerCase())), [items, submitted])
   return <>
-    <PageHead eyebrow="Course and content search" title="Find a lesson, reading, review, or evidence record" description="Search uses this bundled local fixture. It is deterministic and makes no network, vector, semantic, or source-retrieval claim." />
+    <PageHead eyebrow="Course and content search" title="Find a lesson, reading, review, or evidence record" description="Search combines the bundled course index with the current goal’s server-backed evidence metadata. It makes no vector, semantic, or external source-retrieval claim." />
     <form className="so-search" onSubmit={(event) => { event.preventDefault(); setSubmitted(query.trim()) }}><Search size={20} /><label className="so-sr-only" htmlFor="so-search-input">Search course content</label><input id="so-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try “idempotency” or “dead letter”" /><Button type="submit">Search</Button></form>
-    {stale && <div className="so-warning"><AlertTriangle size={19} /><div><strong>Bundled index may be stale</strong><p>Bundled course entries represent graph 2026.07. Submitted evidence results come directly from this application’s local learner state.</p></div><Button tone="secondary" onClick={() => setStale(false)}><X size={16} /> Dismiss notice</Button></div>}
-    {!submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current local course</h2><p>Results include titles and fixture keywords only. No remote sources are queried.</p></div> : results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try a topic term such as retry, acknowledgement, idempotency, or DLQ.</p></div> : <section><div className="so-section-head"><div><span className="so-kicker">Local results</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>Bundled entries + submitted evidence</span></div><div className="so-results">{results.map((item) => <button key={`${item.kind}-${item.path}`} onClick={() => navigate(item.kind === 'Evidence' ? 'evidence' : 'topic-studio')}><span className="so-chip">{item.kind}</span><strong>{item.title}</strong><small>{item.path}</small><ChevronRight size={19} /></button>)}</div></section>}
+    {stale && <div className="so-warning"><AlertTriangle size={19} /><div><strong>Bundled index may be stale</strong><p>Bundled course entries represent graph 2026.07. Evidence results come from the current goal’s server records.</p></div><Button tone="secondary" onClick={() => setStale(false)}><X size={16} /> Dismiss notice</Button></div>}
+    {evidence.isError && <RegionFailure label="Evidence search results" retry={() => void evidence.refetch()} />}
+    {!submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current local course</h2><p>Results include bundled titles and current evidence metadata. No remote sources are queried.</p></div> : results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try a topic term such as retry, acknowledgement, idempotency, or DLQ.</p></div> : <section><div className="so-section-head"><div><span className="so-kicker">Local results</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>Bundled entries + server evidence</span></div><div className="so-results">{results.map((item) => <button key={`${item.kind}-${item.path}`} onClick={() => navigate(item.kind === 'Evidence' ? 'evidence' : 'topic-studio')}><span className="so-chip">{item.kind}</span><strong>{item.title}</strong><small>{item.path}</small><ChevronRight size={19} /></button>)}</div></section>}
   </>
 }
 
@@ -304,20 +335,21 @@ export function ReviewPreferencesPanel({ goalId }: { goalId: string | null }) {
 function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
   const { currentGoal } = useProfileGoals()
   const imports = useImports(currentGoal?.id ?? null, null).imports
+  const ownerSettings = useOwnerSettings()
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), scope: 'application prototype local operations state', ...state }, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
   }
   return <>
-    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile applies across every goal. Review preferences are saved per goal; display and accessibility choices remain local to this browser." />
+    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile and progress display apply across every goal. Review preferences are saved per goal; accessibility choices on this page remain local to this browser." />
     <div className="so-settings-grid">
       <GlobalProfileSettings />
-      <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div><fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" checked={state.progress === 'detailed'} onChange={() => setState((s) => ({ ...s, progress: 'detailed' }))} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, and evidence links.</small></span></label><label><input type="radio" name="progress" checked={state.progress === 'simple'} onChange={() => setState((s) => ({ ...s, progress: 'simple' }))} /><span><strong>Simple</strong><small>Condensed display only; underlying local fixture data is not deleted.</small></span></label></fieldset></section>
+      <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div>{ownerSettings.settings.isError ? <RegionFailure label="Progress display preference" retry={() => void ownerSettings.settings.refetch()} /> : ownerSettings.settings.data ? <fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" disabled={ownerSettings.saveProgressDisplay.isPending} checked={ownerSettings.settings.data.progress_display === 'detailed'} onChange={() => ownerSettings.saveProgressDisplay.mutate('detailed')} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, uncertainty, and evidence links.</small></span></label><label><input type="radio" name="progress" disabled={ownerSettings.saveProgressDisplay.isPending} checked={ownerSettings.settings.data.progress_display === 'simple'} onChange={() => ownerSettings.saveProgressDisplay.mutate('simple')} /><span><strong>Simple</strong><small>Condensed presentation only; underlying server evidence, assessments, and progress data remain unchanged.</small></span></label></fieldset> : <p>Loading progress display preference…</p>}{ownerSettings.saveProgressDisplay.isError && <p className="so-error" role="alert">The progress display preference was not saved. Your prior setting and all learning data remain unchanged; try again.</p>}</section>
       <ReviewPreferencesPanel goalId={currentGoal?.id ?? null} />
       <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>
       <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div>{!currentGoal ? <p>Select a current goal to review its imports.</p> : imports.isPending ? <p>Loading the current goal’s server imports…</p> : imports.isError ? <><p role="alert">The imports summary is unavailable. No browser count was substituted.</p><Button tone="secondary" onClick={() => void imports.refetch()}>Retry summary</Button></> : <p>{imports.data?.length ?? 0} preserved import{imports.data?.length === 1 ? '' : 's'} for {currentGoal.name}; {(imports.data ?? []).filter(item => item.status === 'failed' || item.status === 'cancelled').length} need attention.</p>}<Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Not connected</span></div><div className="so-network-grid"><article><strong>Model providers</strong><p>No Codex, Claude, or other provider adapter is configured or invoked by these pages.</p></article><article><strong>Source retrieval</strong><p>No external documentation or citation source is fetched.</p></article><article><strong>Local runner</strong><p>No Java process, subprocess sandbox, or execution service is present.</p></article></div><p className="so-help">This prototype makes no strict-offline guarantee for the wider application; these operational pages themselves use bundled data and localStorage.</p></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads local display, accessibility, dispute, and update-decision state. Server imports and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local display, accessibility, dispute, and update-decision state to defaults. Server imports and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local display, accessibility, dispute, and canonical update choices will be replaced with fixture defaults. Server imports and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
+      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads local accessibility and update-decision state. Server settings, evidence, imports, and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local accessibility and update-decision state to initial defaults. Server settings, evidence, imports, and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local accessibility and canonical update choices will return to their initial defaults. Server settings, evidence, imports, and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
     </div>
   </>
 }
@@ -325,7 +357,7 @@ function SettingsPage({ state, setState, navigate }: { state: OperationsState; s
 export function OperationalPageView({ page, navigate }: { page: OperationalPage; navigate: Navigate }) {
   const [state, setState] = useOperationsState()
   const pages: Record<OperationalPage, React.ReactNode> = {
-    evidence: <EvidencePage state={state} setState={setState} navigate={navigate} />,
+    evidence: <EvidencePage navigate={navigate} />,
     imports: <ImportsPage />,
     'canonical-updates': <CanonicalUpdatesPage state={state} setState={setState} />,
     search: <SearchPage navigate={navigate} />,

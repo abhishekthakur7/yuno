@@ -21,12 +21,14 @@ from yuno.api.routes.notebook_review import router as notebook_review_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.provenance import router as provenance_router
 from yuno.api.routes.roadmap import router as roadmap_router
+from yuno.api.routes.settings_data import router as settings_data_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
 from yuno.modules.identity.service import ensure_local_owner
 from yuno.modules.learning_content.service import run_generation
 from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
+from yuno.modules.settings_data.service import ensure_owner_settings
 from yuno.shared.domain.clock import SystemClock
 from yuno.shared.infrastructure.alembic_guard import require_single_head
 from yuno.shared.infrastructure.database import (
@@ -57,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             with uow_factory() as uow:
                 owner = ensure_local_owner(uow, resolved_settings.owner_display_name)
                 ensure_profile(uow, owner.id)
+                ensure_owner_settings(uow, owner.id)
                 uow.commit()
 
             dispatcher = InProcessJobDispatcher()
@@ -137,6 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(evidence_router)
     api_router.include_router(notebook_review_router)
     api_router.include_router(provenance_router)
+    api_router.include_router(settings_data_router)
     app.include_router(api_router)
 
     register_exception_handlers(app)
