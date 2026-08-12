@@ -1,0 +1,208 @@
+"""Owner-scoped SQLAlchemy source registry."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from yuno.modules.provenance.domain import (
+    ArtifactProvenanceRef,
+    ArtifactProvenanceSnapshot,
+    Citation,
+    Claim,
+    ClaimStatus,
+    ClaimType,
+    Source,
+    SourceAvailability,
+    SourceSnapshot,
+)
+from yuno.modules.provenance.models import (
+    ArtifactProvenanceRefRow,
+    ArtifactProvenanceSnapshotRow,
+    CitationRow,
+    ClaimRow,
+    SourceRow,
+    SourceSnapshotRow,
+)
+from yuno.shared.infrastructure.repository import (
+    SqlAlchemyRepository,
+    owner_scoped_select,
+)
+
+
+class SqlAlchemySourceRepository(SqlAlchemyRepository):
+    def add_source(self, source: Source) -> Source:
+        values = source.__dict__.copy()
+        values["availability_status"] = source.availability_status.value
+        self._session.add(SourceRow(**values))
+        self._session.flush()
+        return source
+
+    def get_source(self, owner_id: str, source_id: str) -> Source | None:
+        row = self._session.scalars(
+            owner_scoped_select(SourceRow, owner_id).where(SourceRow.id == source_id)
+        ).one_or_none()
+        return _source(row) if row else None
+
+    def list_sources(self, owner_id: str) -> Sequence[Source]:
+        rows = self._session.scalars(
+            owner_scoped_select(SourceRow, owner_id).order_by(
+                SourceRow.title, SourceRow.id
+            )
+        ).all()
+        return tuple(_source(row) for row in rows)
+
+    def get_source_snapshot(self, owner_id, snapshot_id):
+        r = self._session.scalars(
+            owner_scoped_select(SourceSnapshotRow, owner_id).where(
+                SourceSnapshotRow.id == snapshot_id
+            )
+        ).one_or_none()
+        return (
+            SourceSnapshot(
+                r.id,
+                r.owner_id,
+                r.source_id,
+                r.retrieved_at,
+                r.content_ref,
+                r.content_hash,
+                r.status,
+                r.version_label,
+            )
+            if r
+            else None
+        )
+
+    def add_generation_result(self, snapshot, refs, claims):
+        self._session.add(ArtifactProvenanceSnapshotRow(**snapshot.__dict__))
+        self._session.flush()
+        for ref in refs:
+            self._session.add(ArtifactProvenanceRefRow(**ref.__dict__))
+        for claim, citations in claims:
+            values = claim.__dict__.copy()
+            values.update(
+                claim_type=getattr(claim.claim_type, "value", claim.claim_type),
+                status=ClaimStatus.PENDING.value,
+                sensitive=int(claim.sensitive),
+            )
+            self._session.add(ClaimRow(**values))
+            self._session.flush()
+            for citation in citations:
+                self._session.add(CitationRow(**citation.__dict__))
+            self._session.flush()
+            claim_row = self._session.get(ClaimRow, claim.id)
+            claim_row.status = ClaimStatus.PUBLISHED.value
+        self._session.flush()
+
+    def get_artifact_snapshot(self, owner_id, snapshot_id):
+        r = self._session.scalars(
+            owner_scoped_select(ArtifactProvenanceSnapshotRow, owner_id).where(
+                ArtifactProvenanceSnapshotRow.id == snapshot_id
+            )
+        ).one_or_none()
+        return _snapshot(r) if r else None
+
+    def list_artifact_refs(self, owner_id, snapshot_id):
+        rows = self._session.scalars(
+            owner_scoped_select(ArtifactProvenanceRefRow, owner_id).where(
+                ArtifactProvenanceRefRow.snapshot_id == snapshot_id
+            )
+        ).all()
+        return tuple(
+            ArtifactProvenanceRef(
+                r.id,
+                r.owner_id,
+                r.goal_id,
+                r.artifact_id,
+                r.snapshot_id,
+                r.ref_kind,
+                r.reference_id,
+            )
+            for r in rows
+        )
+
+    def get_claim(self, owner_id, claim_id):
+        r = self._session.scalars(
+            owner_scoped_select(ClaimRow, owner_id).where(
+                ClaimRow.id == claim_id, ClaimRow.status == "published"
+            )
+        ).one_or_none()
+        return _claim(r) if r else None
+
+    def list_claims(self, owner_id, snapshot_id):
+        rows = self._session.scalars(
+            owner_scoped_select(ClaimRow, owner_id).where(
+                ClaimRow.snapshot_id == snapshot_id, ClaimRow.status == "published"
+            )
+        ).all()
+        return tuple(_claim(r) for r in rows)
+
+    def list_citations(self, owner_id, claim_id):
+        rows = self._session.scalars(
+            owner_scoped_select(CitationRow, owner_id).where(
+                CitationRow.claim_id == claim_id
+            )
+        ).all()
+        return tuple(
+            Citation(
+                r.id,
+                r.owner_id,
+                r.goal_id,
+                r.claim_id,
+                r.source_id,
+                r.source_snapshot_id,
+                r.locator,
+                r.support_kind,
+                r.note,
+            )
+            for r in rows
+        )
+
+
+def _source(row: SourceRow) -> Source:
+    return Source(
+        row.id,
+        row.owner_id,
+        row.origin,
+        row.source_type,
+        row.title,
+        row.publisher,
+        row.canonical_url,
+        row.license_status,
+        SourceAvailability(row.availability_status),
+        row.created_at,
+        row.updated_at,
+    )
+
+
+def _snapshot(r):
+    return ArtifactProvenanceSnapshot(
+        r.id,
+        r.owner_id,
+        r.goal_id,
+        r.artifact_id,
+        r.attempt_id,
+        r.evidence_state_hash,
+        r.profile_hash,
+        r.provider,
+        r.model,
+        r.generated_at,
+        r.schema_version,
+        r.contract_version,
+        r.prompt_template_version,
+        r.snapshot_hash,
+    )
+
+
+def _claim(r):
+    return Claim(
+        r.id,
+        r.owner_id,
+        r.goal_id,
+        r.content_revision_id,
+        r.generated_artifact_id,
+        r.snapshot_id,
+        r.claim_text,
+        ClaimType(r.claim_type),
+        bool(r.sensitive),
+        ClaimStatus(r.status),
+    )

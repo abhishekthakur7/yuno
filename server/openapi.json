@@ -1,6 +1,133 @@
 {
   "components": {
     "schemas": {
+      "ArtifactProvenanceRefResponse": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "reference_id": {
+            "title": "Reference Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reference_id"
+        ],
+        "title": "ArtifactProvenanceRefResponse",
+        "type": "object"
+      },
+      "ArtifactProvenanceResponse": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "baked_snapshot": {
+            "$ref": "#/components/schemas/ArtifactSnapshotResponse"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResponse"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "current_snapshot_hash": {
+            "title": "Current Snapshot Hash",
+            "type": "string"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactProvenanceRefResponse"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_reasons": {
+            "items": {
+              "$ref": "#/components/schemas/StaleReason"
+            },
+            "title": "Stale Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "baked_snapshot",
+          "current_snapshot_hash",
+          "stale",
+          "stale_reasons",
+          "refs",
+          "claims"
+        ],
+        "title": "ArtifactProvenanceResponse",
+        "type": "object"
+      },
+      "ArtifactSnapshotResponse": {
+        "properties": {
+          "contract_version": {
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "evidence_state_hash": {
+            "title": "Evidence State Hash",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "profile_hash": {
+            "title": "Profile Hash",
+            "type": "string"
+          },
+          "prompt_template_version": {
+            "title": "Prompt Template Version",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "snapshot_hash": {
+            "title": "Snapshot Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "evidence_state_hash",
+          "profile_hash",
+          "provider",
+          "model",
+          "generated_at",
+          "schema_version",
+          "contract_version",
+          "prompt_template_version",
+          "snapshot_hash"
+        ],
+        "title": "ArtifactSnapshotResponse",
+        "type": "object"
+      },
       "AssessmentCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -641,6 +768,104 @@
           "defend"
         ],
         "title": "Capability",
+        "type": "string"
+      },
+      "CitationResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceResponse"
+          },
+          "source_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Snapshot Id"
+          },
+          "support_kind": {
+            "title": "Support Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "source_snapshot_id",
+          "locator",
+          "support_kind",
+          "note"
+        ],
+        "title": "CitationResponse",
+        "type": "object"
+      },
+      "ClaimResponse": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationResponse"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claim_text": {
+            "title": "Claim Text",
+            "type": "string"
+          },
+          "claim_type": {
+            "$ref": "#/components/schemas/ClaimType"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "sensitive": {
+            "title": "Sensitive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "claim_text",
+          "claim_type",
+          "sensitive",
+          "citations"
+        ],
+        "title": "ClaimResponse",
+        "type": "object"
+      },
+      "ClaimType": {
+        "enum": [
+          "fact",
+          "trade-off",
+          "routine",
+          "disputed",
+          "comparative",
+          "time-or-version-dependent"
+        ],
+        "title": "ClaimType",
         "type": "string"
       },
       "CorrectionType": {
@@ -1507,6 +1732,17 @@
         "title": "FieldError",
         "type": "object"
       },
+      "GenerationAttemptStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "quarantined"
+        ],
+        "title": "GenerationAttemptStatus",
+        "type": "string"
+      },
       "GoalCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2299,10 +2535,59 @@
         "title": "JobStatus",
         "type": "string"
       },
+      "LayerGenerationResponse": {
+        "properties": {
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationAttemptStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "retryable",
+          "failure_reference"
+        ],
+        "title": "LayerGenerationResponse",
+        "type": "object"
+      },
       "LayerState": {
         "enum": [
           "ready",
-          "empty",
+          "absent",
+          "generating",
           "stale",
           "unavailable"
         ],
@@ -2599,6 +2884,194 @@
         ],
         "title": "MappingState",
         "type": "string"
+      },
+      "NotebookEntryCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_kind": {
+            "$ref": "#/components/schemas/NotebookEntryKind"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "markdown": {
+            "title": "Markdown",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "entry_kind",
+          "markdown"
+        ],
+        "title": "NotebookEntryCreateRequest",
+        "type": "object"
+      },
+      "NotebookEntryKind": {
+        "enum": [
+          "auto",
+          "user"
+        ],
+        "title": "NotebookEntryKind",
+        "type": "string"
+      },
+      "NotebookEntryPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markdown"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "title": "NotebookEntryPatchRequest",
+        "type": "object"
+      },
+      "NotebookEntryResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "entry_kind": {
+            "$ref": "#/components/schemas/NotebookEntryKind"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "markdown": {
+            "title": "Markdown",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "topic_stable_id",
+          "evidence_id",
+          "source_id",
+          "entry_kind",
+          "markdown",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NotebookEntryResponse",
+        "type": "object"
       },
       "OrderConstraintRequest": {
         "additionalProperties": false,
@@ -2902,6 +3375,467 @@
         "title": "ResumeDestination",
         "type": "string"
       },
+      "ReviewAttemptCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Result"
+          },
+          "response": {
+            "title": "Response",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "ReviewAttemptCreateRequest",
+        "type": "object"
+      },
+      "ReviewAttemptResponse": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Result"
+          },
+          "context_variation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Variation"
+          },
+          "correction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next_interval_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Interval Label"
+          },
+          "response": {
+            "title": "Response",
+            "type": "string"
+          },
+          "revealed_answer": {
+            "title": "Revealed Answer",
+            "type": "string"
+          },
+          "review_item_id": {
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "review_status": {
+            "$ref": "#/components/schemas/ReviewItemStatus"
+          },
+          "scheduling_version": {
+            "title": "Scheduling Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "review_item_id",
+          "response",
+          "confidence",
+          "feedback",
+          "correction",
+          "next_interval_label",
+          "context_variation",
+          "context_result",
+          "scheduling_version",
+          "created_at",
+          "review_status",
+          "revealed_answer"
+        ],
+        "title": "ReviewAttemptResponse",
+        "type": "object"
+      },
+      "ReviewCadence": {
+        "enum": [
+          "once-weekly",
+          "twice-weekly",
+          "three-times-weekly"
+        ],
+        "title": "ReviewCadence",
+        "type": "string"
+      },
+      "ReviewConfidence": {
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "title": "ReviewConfidence",
+        "type": "string"
+      },
+      "ReviewItemResponse": {
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Label"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "prompt_ref": {
+            "title": "Prompt Ref",
+            "type": "string"
+          },
+          "prompt_type": {
+            "$ref": "#/components/schemas/ReviewPromptType"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "scheduling_version": {
+            "title": "Scheduling Version",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReviewItemStatus"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "topic_stable_id",
+          "prompt_ref",
+          "prompt_type",
+          "prompt",
+          "status",
+          "due_at",
+          "interval_label",
+          "context",
+          "scheduling_version",
+          "failure_reference",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewItemResponse",
+        "type": "object"
+      },
+      "ReviewItemStatus": {
+        "enum": [
+          "ready",
+          "due",
+          "dismissed",
+          "disabled",
+          "generation-failed",
+          "completed"
+        ],
+        "title": "ReviewItemStatus",
+        "type": "string"
+      },
+      "ReviewPreferencesPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cadence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewCadence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "retrieval_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Enabled"
+          },
+          "varied_context_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Varied Context Enabled"
+          }
+        },
+        "title": "ReviewPreferencesPatchRequest",
+        "type": "object"
+      },
+      "ReviewPreferencesResponse": {
+        "properties": {
+          "cadence": {
+            "$ref": "#/components/schemas/ReviewCadence"
+          },
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "retrieval_enabled": {
+            "title": "Retrieval Enabled",
+            "type": "boolean"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "scheduling_version": {
+            "title": "Scheduling Version",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "varied_context_enabled": {
+            "title": "Varied Context Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "goal_id",
+          "enabled",
+          "duration_minutes",
+          "cadence",
+          "retrieval_enabled",
+          "varied_context_enabled",
+          "scheduling_version",
+          "row_version",
+          "updated_at"
+        ],
+        "title": "ReviewPreferencesResponse",
+        "type": "object"
+      },
+      "ReviewPromptType": {
+        "enum": [
+          "recall",
+          "explanation",
+          "application"
+        ],
+        "title": "ReviewPromptType",
+        "type": "string"
+      },
+      "ReviewQueueResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "scheduling_version": {
+            "title": "Scheduling Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "enabled",
+          "scheduling_version",
+          "items"
+        ],
+        "title": "ReviewQueueResponse",
+        "type": "object"
+      },
       "RoadmapMutationResponse": {
         "properties": {
           "checkpoint_saved": {
@@ -3079,6 +4013,94 @@
         ],
         "title": "SkipDecisionRequest",
         "type": "object"
+      },
+      "SourceAvailability": {
+        "enum": [
+          "available",
+          "unavailable",
+          "withdrawn"
+        ],
+        "title": "SourceAvailability",
+        "type": "string"
+      },
+      "SourceResponse": {
+        "properties": {
+          "availability_status": {
+            "$ref": "#/components/schemas/SourceAvailability"
+          },
+          "canonical_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Url"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "license_status": {
+            "title": "License Status",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "source_type",
+          "title",
+          "publisher",
+          "canonical_url",
+          "license_status",
+          "availability_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SourceResponse",
+        "type": "object"
+      },
+      "StaleReason": {
+        "enum": [
+          "personalization-snapshot-mismatch",
+          "cache-key-changed"
+        ],
+        "title": "StaleReason",
+        "type": "string"
       },
       "TargetCapability": {
         "enum": [
@@ -3263,10 +4285,46 @@
       },
       "TopicLayerResponse": {
         "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
           "checkpoint": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/TopicCheckpointResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content_origin": {
+            "anyOf": [
+              {
+                "enum": [
+                  "authored",
+                  "generated"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Origin"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LayerGenerationResponse"
               },
               {
                 "type": "null"
@@ -3308,6 +4366,16 @@
               }
             ],
             "title": "Revision Id"
+          },
+          "stale_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StaleReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/LayerState"
@@ -3385,6 +4453,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/artifacts/{artifact_id}/provenance": {
+      "get": {
+        "operationId": "artifact_provenance_api_v1_artifacts__artifact_id__provenance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactProvenanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Artifact Provenance",
+        "tags": [
+          "provenance"
+        ]
+      }
+    },
     "/api/v1/artifacts/{artifact_id}/regenerate": {
       "post": {
         "operationId": "regenerate_artifact_api_v1_artifacts__artifact_id__regenerate_post",
@@ -3765,6 +4875,48 @@
         "summary": "Get Canonical Version",
         "tags": [
           "canonical"
+        ]
+      }
+    },
+    "/api/v1/claims/{claim_id}": {
+      "get": {
+        "operationId": "claim_api_v1_claims__claim_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "provenance"
         ]
       }
     },
@@ -5024,6 +6176,118 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/notebook": {
+      "get": {
+        "operationId": "get_notebook_api_v1_goals__goal_id__notebook_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotebookEntryResponse"
+                  },
+                  "title": "Response Get Notebook Api V1 Goals  Goal Id  Notebook Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Notebook",
+        "tags": [
+          "notebook-review"
+        ]
+      },
+      "post": {
+        "operationId": "post_notebook_entry_api_v1_goals__goal_id__notebook_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotebookEntryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Notebook Entry",
+        "tags": [
+          "notebook-review"
+        ]
+      }
+    },
     "/api/v1/goals/{goal_id}/order-constraints": {
       "post": {
         "operationId": "post_order_constraint_api_v1_goals__goal_id__order_constraints_post",
@@ -5253,6 +6517,156 @@
         "summary": "Get Goal Progress",
         "tags": [
           "evidence-evaluation"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/review-preferences": {
+      "get": {
+        "operationId": "get_preferences_api_v1_goals__goal_id__review_preferences_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Preferences",
+        "tags": [
+          "notebook-review"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_preferences_api_v1_goals__goal_id__review_preferences_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPreferencesPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Patch Preferences",
+        "tags": [
+          "notebook-review"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/reviews": {
+      "get": {
+        "operationId": "get_reviews_api_v1_goals__goal_id__reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Reviews",
+        "tags": [
+          "notebook-review"
         ]
       }
     },
@@ -6213,6 +7627,139 @@
         ]
       }
     },
+    "/api/v1/notebook/{entry_id}": {
+      "delete": {
+        "operationId": "delete_notebook_api_v1_notebook__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Delete Notebook",
+        "tags": [
+          "notebook-review"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_notebook_entry_api_v1_notebook__entry_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotebookEntryPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Patch Notebook Entry",
+        "tags": [
+          "notebook-review"
+        ]
+      }
+    },
     "/api/v1/overlay-proposals/{proposal_id}/decision": {
       "post": {
         "operationId": "post_overlay_proposal_decision_api_v1_overlay_proposals__proposal_id__decision_post",
@@ -6366,6 +7913,209 @@
         "summary": "Update Profile",
         "tags": [
           "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/reviews/{review_id}/attempts": {
+      "post": {
+        "operationId": "post_review_attempt_api_v1_reviews__review_id__attempts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAttemptCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAttemptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Review Attempt",
+        "tags": [
+          "notebook-review"
+        ]
+      }
+    },
+    "/api/v1/reviews/{review_id}/dismiss": {
+      "post": {
+        "operationId": "post_review_dismiss_api_v1_reviews__review_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Review Dismiss",
+        "tags": [
+          "notebook-review"
+        ]
+      }
+    },
+    "/api/v1/sources": {
+      "get": {
+        "operationId": "sources_api_v1_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceResponse"
+                  },
+                  "title": "Response Sources Api V1 Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Sources",
+        "tags": [
+          "provenance"
+        ]
+      }
+    },
+    "/api/v1/sources/{source_id}": {
+      "get": {
+        "operationId": "source_api_v1_sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Source",
+        "tags": [
+          "provenance"
         ]
       }
     },

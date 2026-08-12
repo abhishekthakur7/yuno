@@ -39,9 +39,13 @@ SERVER_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = SERVER_ROOT / "pyproject.toml"
 SRC_ROOT = SERVER_ROOT / "src" / "yuno"
 
-EXPECTED_ROOT_LAYERS_CONTRACT_NAME = "Composition-root layering: api > modules > shared (spec §3.2)"
+EXPECTED_ROOT_LAYERS_CONTRACT_NAME = (
+    "Composition-root layering: api > modules > shared (spec §3.2)"
+)
 EXPECTED_MODULE_LAYERS_CONTRACT_NAME = "Per-module layering (spec §3.3)"
-EXPECTED_FORBIDDEN_CONTRACT_NAME = "Domain and application are framework-free (spec §3.2, SYS-01/NFR-07)"
+EXPECTED_FORBIDDEN_CONTRACT_NAME = (
+    "Domain and application are framework-free (spec §3.2, SYS-01/NFR-07)"
+)
 EXPECTED_INDEPENDENCE_CONTRACT_NAME = "Module independence (spec §3.3, IDK-102 scope)"
 
 EXPECTED_ROOT_LAYERS = ["yuno.api", "yuno.modules", "yuno.shared"]
@@ -55,9 +59,18 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
     "yuno.modules.imports",
+    "yuno.modules.notebook_review",
+    "yuno.modules.provenance",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
-EXPECTED_FORBIDDEN_MODULES = {"fastapi", "starlette", "sqlalchemy", "alembic", "pydantic", "subprocess"}
+EXPECTED_FORBIDDEN_MODULES = {
+    "fastapi",
+    "starlette",
+    "sqlalchemy",
+    "alembic",
+    "pydantic",
+    "subprocess",
+}
 EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.shared.domain",
     "yuno.shared.application",
@@ -85,6 +98,11 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.imports.domain",
     "yuno.modules.imports.ports",
     "yuno.modules.imports.service",
+    "yuno.modules.notebook_review.domain",
+    "yuno.modules.notebook_review.ports",
+    "yuno.modules.notebook_review.service",
+    "yuno.modules.provenance.domain",
+    "yuno.modules.provenance.ports",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -96,6 +114,8 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
     "yuno.modules.imports",
+    "yuno.modules.notebook_review",
+    "yuno.modules.provenance",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
@@ -136,7 +156,9 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "forbidden_modules below are all external to 'yuno'; without this flag "
         "ForbiddenContract.check() raises instead of reporting a clean pass/fail"
     )
-    assert user_options.contracts_options, "pyproject.toml declares no import-linter contracts"
+    assert user_options.contracts_options, (
+        "pyproject.toml declares no import-linter contracts"
+    )
 
     by_name = {c["name"]: c for c in user_options.contracts_options}
 
@@ -151,7 +173,9 @@ def test_pyproject_declares_the_required_contracts(user_options):
 
     forbidden_contract = by_name[EXPECTED_FORBIDDEN_CONTRACT_NAME]
     assert forbidden_contract["type"] == "forbidden"
-    assert set(forbidden_contract["source_modules"]) == EXPECTED_FORBIDDEN_SOURCE_MODULES
+    assert (
+        set(forbidden_contract["source_modules"]) == EXPECTED_FORBIDDEN_SOURCE_MODULES
+    )
     assert set(forbidden_contract["forbidden_modules"]) == EXPECTED_FORBIDDEN_MODULES
 
     independence_contract = by_name[EXPECTED_INDEPENDENCE_CONTRACT_NAME]
@@ -173,6 +197,8 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.roadmap.service -> yuno.modules.audit.**",
         "yuno.modules.imports.ports -> yuno.modules.audit.**",
         "yuno.modules.imports.service -> yuno.modules.audit.**",
+        "yuno.modules.notebook_review.ports -> yuno.modules.audit.**",
+        "yuno.modules.notebook_review.service -> yuno.modules.audit.**",
     }
 
 
@@ -190,7 +216,9 @@ def test_import_linter_contracts_pass_against_real_code(user_options):
             for contract, check in report.get_contracts_and_checks()
             if not check.kept
         ]
-        pytest.fail("import-linter contract(s) failed:\n" + "\n".join(failures), pytrace=False)
+        pytest.fail(
+            "import-linter contract(s) failed:\n" + "\n".join(failures), pytrace=False
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +250,9 @@ def test_layers_contract_detects_a_reverse_layer_import():
         },
     )
     check = contract.check(graph, verbose=False)
-    assert not check.kept, "LayersContract did not detect a deliberate reverse-layer import"
+    assert not check.kept, (
+        "LayersContract did not detect a deliberate reverse-layer import"
+    )
 
 
 def test_forbidden_contract_detects_a_forbidden_import():
@@ -233,7 +263,10 @@ def test_forbidden_contract_detects_a_forbidden_import():
 
     contract = ForbiddenContract(
         name="self-test forbidden",
-        session_options={"root_packages": ["demo"], "include_external_packages": "True"},
+        session_options={
+            "root_packages": ["demo"],
+            "include_external_packages": "True",
+        },
         contract_options={
             "name": "self-test forbidden",
             "type": "forbidden",
@@ -242,7 +275,9 @@ def test_forbidden_contract_detects_a_forbidden_import():
         },
     )
     check = contract.check(graph, verbose=False)
-    assert not check.kept, "ForbiddenContract did not detect a deliberate forbidden import"
+    assert not check.kept, (
+        "ForbiddenContract did not detect a deliberate forbidden import"
+    )
 
 
 def test_independence_contract_detects_a_cross_module_import():
@@ -261,7 +296,8 @@ def test_independence_contract_detects_a_cross_module_import():
     # A cross-module ORM/repository import -- exactly what spec §3.2's
     # "cross-module ORM mutation is forbidden" rules out.
     graph.add_import(
-        importer="demo.modules.alpha.repository", imported="demo.modules.beta.repository"
+        importer="demo.modules.alpha.repository",
+        imported="demo.modules.beta.repository",
     )
 
     contract = IndependenceContract(
@@ -274,7 +310,9 @@ def test_independence_contract_detects_a_cross_module_import():
         },
     )
     check = contract.check(graph, verbose=False)
-    assert not check.kept, "IndependenceContract did not detect a deliberate cross-module import"
+    assert not check.kept, (
+        "IndependenceContract did not detect a deliberate cross-module import"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +333,9 @@ _SUBPROCESS_USAGE = re.compile(
     r"|import_module\(\s*['\"]subprocess['\"]"
 )
 _FTS5_TOKEN = re.compile(r"\bfts5\b", re.IGNORECASE)
-_FTS_MATCH_KEYWORD = re.compile(r"\bMATCH\b")  # case-sensitive: the SQL keyword, not English prose
+_FTS_MATCH_KEYWORD = re.compile(
+    r"\bMATCH\b"
+)  # case-sensitive: the SQL keyword, not English prose
 
 _STRING_PATTERNS = {
     "subprocess usage": _SUBPROCESS_USAGE,
@@ -337,7 +377,9 @@ def test_no_subprocess_or_fts_syntax_in_domain_or_application():
             for label, pattern in _STRING_PATTERNS.items():
                 if pattern.search(line):
                     rel = path.relative_to(SERVER_ROOT)
-                    violations.append(f"{rel}:{lineno}: forbidden {label}: {line.strip()!r}")
+                    violations.append(
+                        f"{rel}:{lineno}: forbidden {label}: {line.strip()!r}"
+                    )
 
     assert not violations, (
         "domain/application code must not reference subprocess or raw FTS syntax (spec §3.2):\n"

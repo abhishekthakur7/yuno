@@ -4,14 +4,14 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Tabs from '@radix-ui/react-tabs'
 import {
-  Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, Circle,
+  AlertTriangle, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, Circle,
   Clock3, Code2, FileText, HelpCircle, History, Lightbulb, ListTree, MessageSquareText,
   LockKeyhole, NotebookPen, Pause, Play, RefreshCcw, RotateCcw, Settings2, ShieldCheck, X,
 } from 'lucide-react'
 import {
-  ALL_LESSONS, CURRICULUM_MODULES, CURRENT_LESSON_ID, FIXTURE_REPORT,
+  CURRENT_LESSON_ID, FIXTURE_REPORT,
   MOCK_CURRENT_QUESTION, PRACTICE_QUESTIONS, SIMULATION_LIMITATION,
-  type Depth, type Lesson,
+  type Depth,
 } from '../../shared/model'
 import { currentPracticeQuestion, useLearningState } from '../../shared/state'
 import { ApiError, canonicalVersionsQueryOptions } from '../../shared/api/queries'
@@ -21,12 +21,15 @@ import { useDiagnostic, type DiagnosticConfidence, type DiagnosticPreviewEdit, t
 import { useRoadmap } from '../../shared/use-roadmap'
 import {
   TOPIC_LAYERS,
+  type ArtifactProvenanceSummary,
   type TopicCheckpoint,
   type TopicLayerContent,
   type TopicLayerName,
 } from '../../shared/api/learning-content'
-import { useTopicContent } from '../../shared/use-topic-content'
-import type { LearnerCorrection, OverlayProposal, OverlayProposalDecision } from '../../shared/api/roadmap'
+import { useArtifactProvenance, useTopicContent } from '../../shared/use-topic-content'
+import { useNotebookReview } from '../../shared/use-notebook-review'
+import type { ReviewAttempt, ReviewItem } from '../../shared/api/notebook-review'
+import { roadmapQueryOptions, type LearnerCorrection, type OverlayProposal, type OverlayProposalDecision } from '../../shared/api/roadmap'
 import type { InterviewMode } from '../app-model'
 import './core.css'
 
@@ -35,7 +38,6 @@ export type CorePage = 'home' | 'onboarding' | 'learn-roadmap' | 'topic-studio' 
 type Navigate = (page: CorePage | string, mode?: InterviewMode) => void
 type PageProps = { navigate: Navigate }
 const DEPTHS: readonly Depth[] = ['Essential', 'Implementation', 'Production', 'Interview']
-const LESSONS = ALL_LESSONS as readonly Lesson[]
 
 const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'secondary' | 'quiet' }>(function Button({ children, tone = 'primary', className = '', ...props }, ref) {
   return <button ref={ref} className={`sb-button sb-button--${tone} ${className}`} {...props}>{children}</button>
@@ -91,6 +93,7 @@ function GoalCard({ goal, current, navigate, workspace }: { goal: GoalWorkspace;
 export function Home({ navigate }: PageProps) {
   const workspace = useProfileGoals()
   const canonicalVersions = useQuery(canonicalVersionsQueryOptions())
+  const resumeRoadmap = useQuery(roadmapQueryOptions(workspace.currentGoal?.id ?? null))
   const error = workspace.goals.error ?? workspace.profile.error
   const errorStatus = error instanceof ApiError ? error.status : null
 
@@ -113,7 +116,7 @@ export function Home({ navigate }: PageProps) {
   const canonicalStale = Boolean(currentGoal && latestGraph && currentGoal.graph_version_id !== latestGraph.id)
   const recommendationKey = currentGoal ? `goal-entry:${currentGoal.path}:${currentGoal.target_capability}` : null
   const recommendationVisible = currentGoal && recommendationKey && !currentGoal.dismissed_recommendation_keys.includes(recommendationKey)
-  const resumeTitle = currentGoal?.resume_position ? LESSONS.find((lesson) => lesson.id === currentGoal.resume_position)?.title ?? currentGoal.resume_position : null
+  const resumeTitle = resumeRoadmap.data?.topics.find(topic => topic.stable_id === currentGoal?.resume_position)?.title ?? currentGoal?.resume_position ?? null
   const actionError = workspace.switchGoal.error ?? workspace.archive.error ?? workspace.dismissRecommendation.error ?? workspace.recordNavigation.error
   const resume = () => {
     if (!currentGoal?.resume_position) return
@@ -511,13 +514,36 @@ function CheckpointContract({ checkpoint }: { checkpoint: TopicCheckpoint }) {
   </aside>
 }
 
-function TopicLayerPanel({
+function ArtifactProvenanceDetails({ provenance, isPending, isError, onRetry }: { provenance: ArtifactProvenanceSummary | undefined; isPending: boolean; isError: boolean; onRetry: () => void }) {
+  const sources = provenance ? [...new Map(provenance.claims.flatMap(claim => claim.citations).map(citation => [citation.source.id, citation.source])).values()] : []
+  const unavailableSources = sources.filter(source => source.availability_status !== 'available')
+  return <details className="sb-provenance"><summary>About this content</summary>
+    {isPending ? <p role="status">Loading provenance…</p>
+      : isError ? <div role="alert"><p>Provenance is unavailable.</p><Button tone="quiet" onClick={onRetry}>Retry provenance</Button></div>
+        : provenance ? <div>
+          {unavailableSources.length > 0 && <aside className="sb-source-warning" role="alert"><AlertTriangle size={18} /><div><strong>Source availability warning</strong><p>{unavailableSources.map(source => `${source.title} is ${source.availability_status}`).join(' · ')}. Last known provenance is retained.</p></div></aside>}
+          <dl className="sb-provenance-meta"><div><dt>Generated</dt><dd>{provenance.baked_snapshot.generated_at}</dd></div><div><dt>Provider / model</dt><dd>{provenance.baked_snapshot.provider} / {provenance.baked_snapshot.model}</dd></div><div><dt>Prompt template</dt><dd>{provenance.baked_snapshot.prompt_template_version}</dd></div><div><dt>Contract</dt><dd>{provenance.baked_snapshot.contract_version} · {provenance.baked_snapshot.schema_version}</dd></div></dl>
+          {provenance.claims.length === 0 ? <p>No claim-level citations are attached. Routine content remains self-contained.</p>
+            : <ol className="sb-claim-list">{provenance.claims.map(claim => <li key={claim.id}><span className="sb-entry-kind">{claim.claim_type}</span><p>{claim.claim_text}</p>{claim.citations.length === 0 ? <small>Routine claim · no citation required</small> : <ul>{claim.citations.map(citation => <li key={citation.id}><strong>{citation.source.title}</strong>{citation.locator && <span> · {citation.locator}</span>}<small>{citation.source.publisher ?? 'Publisher unavailable'} · {citation.source.availability_status}</small></li>)}</ul>}</li>)}</ol>}
+        </div> : <p>No generated provenance is attached to this authored layer.</p>}
+  </details>
+}
+
+export function TopicLayerPanel({
   layerName,
   layer,
   checkpointNumber,
   isPending,
   isError,
   onRetry,
+  onGenerate,
+  onRegenerate,
+  actionPending,
+  actionError,
+  provenance,
+  provenancePending = false,
+  provenanceError = false,
+  onRetryProvenance = () => undefined,
   anchorId,
 }: {
   layerName: TopicLayerName
@@ -526,6 +552,14 @@ function TopicLayerPanel({
   isPending: boolean
   isError: boolean
   onRetry: () => void
+  onGenerate: () => void
+  onRegenerate: (artifactId: string) => void
+  actionPending: boolean
+  actionError: boolean
+  provenance?: ArtifactProvenanceSummary | undefined
+  provenancePending?: boolean
+  provenanceError?: boolean
+  onRetryProvenance?: () => void
   anchorId: string | undefined
 }) {
   if (isPending) {
@@ -534,23 +568,34 @@ function TopicLayerPanel({
   if (isError) {
     return <section className="sb-layer-state" data-layer-state="unavailable" aria-live="polite"><LockKeyhole /><h2>Topic content unavailable</h2><p>Notes and Help are still available.</p><Button onClick={onRetry}>Retry</Button></section>
   }
-  if (layer?.state === 'ready') {
+  const generation = layer?.generation ?? null
+  const hasBody = Boolean(layer?.markdown)
+  const stale = layer?.state === 'stale'
+  const generating = layer?.state === 'generating' || generation?.status === 'queued' || generation?.status === 'running'
+  const failed = generation?.status === 'failed' || generation?.status === 'quarantined'
+  if (layer && hasBody && (layer.state === 'ready' || stale || generating || failed)) {
     return <section className="sb-reading" id={anchorId}>
       <span>{String(checkpointNumber).padStart(2, '0')}</span>
       <div>
+        {stale && <aside className="sb-artifact-warning" role="status"><RefreshCcw size={18} /><div><strong>Generated before your latest correction or update</strong><p>The existing content remains visible and unchanged. Regenerate only when you choose.</p><Button disabled={actionPending || generating || !layer.artifact_id} onClick={() => layer.artifact_id && onRegenerate(layer.artifact_id)}>{generating ? 'Generating…' : actionPending ? 'Starting…' : 'Regenerate'}</Button></div></aside>}
+        {generating && <aside className="sb-artifact-progress" role="status"><RefreshCcw className="sb-spin" size={18} /><div><strong>Generating updated content</strong><p>{stale || layer.markdown ? 'The previous body remains visible until generation succeeds.' : 'This can take a moment.'}</p></div></aside>}
+        {failed && <aside className="sb-artifact-warning" role="alert"><LockKeyhole size={18} /><div><strong>Generation did not complete</strong><p>{generation?.failure_reference ?? 'The prior content remains available.'}</p><Button disabled={actionPending || !layer.artifact_id} onClick={() => layer.artifact_id && onRegenerate(layer.artifact_id)}>Retry generation</Button></div></aside>}
+        {actionError && <p className="sb-tool-error" role="alert">Generation could not be started. The visible content was not changed.</p>}
         <h2>{layer.layer}</h2>
         <div className="sb-layer-copy">{layer.markdown}</div>
         {layer.checkpoint && <CheckpointContract checkpoint={layer.checkpoint} />}
+        {layer.artifact_id && <ArtifactProvenanceDetails provenance={provenance} isPending={provenancePending} isError={provenanceError} onRetry={onRetryProvenance} />}
       </div>
     </section>
   }
 
-  const state = layer?.state ?? 'empty'
-  const stale = state === 'stale'
+  const state = layer?.state ?? 'absent'
   return <section className="sb-layer-state" data-layer-state={state} aria-live="polite">
-    <FileText />
-    <h2>{stale ? `${layerName} is out of date` : `No ${layerName} content yet`}</h2>
-    <p>{stale ? 'This layer needs to be regenerated before you use it.' : 'No content has been approved for this layer.'}</p>
+    {generating ? <RefreshCcw className="sb-spin" /> : failed ? <LockKeyhole /> : <FileText />}
+    <h2>{generating ? `Generating ${layerName}` : failed ? `${layerName} generation failed` : `No ${layerName} content yet`}</h2>
+    <p>{generating ? 'The requested content is being prepared.' : failed ? generation?.failure_reference ?? 'Nothing partial was published.' : 'Generate content for this approved topic and goal.'}</p>
+    {!generating && (failed && layer?.artifact_id ? <Button disabled={actionPending} onClick={() => onRegenerate(layer.artifact_id!)}>Retry generation</Button> : <Button disabled={actionPending} onClick={onGenerate}>{actionPending ? 'Starting…' : `Generate ${layerName}`}</Button>)}
+    {actionError && <p className="sb-tool-error" role="alert">Generation could not be started. Try again.</p>}
   </section>
 }
 
@@ -565,7 +610,6 @@ function Topic({ navigate }: PageProps) {
   const currentLessonId = goal?.resume_position && roadmapIds.includes(goal.resume_position) ? goal.resume_position : (roadmapIds[0] ?? CURRENT_LESSON_ID)
   const topicContent = useTopicContent(goal?.id ?? null, currentLessonId)
   const projectedTopic = roadmapTopics.find(topic => topic.stable_id === currentLessonId)
-  const fixtureLesson = LESSONS.find(lesson => lesson.id === currentLessonId)
   const activeIds = roadmapIds.length ? roadmapIds : [CURRENT_LESSON_ID]
   const currentIndex = Math.max(0, activeIds.indexOf(currentLessonId))
   const previousId = currentIndex > 0 ? activeIds[currentIndex - 1] : null
@@ -575,27 +619,77 @@ function Topic({ navigate }: PageProps) {
     workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: id, destination: '/app/topic-studio' }, { onSuccess: () => { window.scrollTo({ top: 0 }) } })
   }
   const activeLayer = topicContent.data?.layers.find(layer => layer.layer === selectedLayer)
+  const provenance = useArtifactProvenance(activeLayer?.artifact_id ?? null)
   const sourcesLayer = topicContent.data?.layers.find(layer => layer.layer === 'Sources')
   const sourcesMarkdown = sourcesLayer?.state === 'ready' ? sourcesLayer.markdown : null
-  const title = projectedTopic?.title ?? fixtureLesson?.title ?? currentLessonId
+  const title = projectedTopic?.title ?? currentLessonId
   const previousTitle = roadmapTopics.find(topic => topic.stable_id === previousId)?.title ?? previousId ?? 'Course roadmap'
   const nextTitle = roadmapTopics.find(topic => topic.stable_id === nextId)?.title ?? nextId ?? 'Guided practice'
   return <Classroom navigate={navigate}><article className="sb-topic">
     <PageIntro eyebrow={`Topic Studio · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{currentLessonId === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{projectedTopic?.depth_override ?? projectedTopic?.recommended_depth ?? 'Essential'} · target capability: {projectedTopic?.target_capability ?? 'unverified'}</span></PageIntro>
     <TopicLayerTabs selected={selectedLayer} onSelect={setSelectedLayer} />
-    <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
+    <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} onGenerate={() => topicContent.generate.mutate(selectedLayer)} onRegenerate={(artifactId) => topicContent.regenerate.mutate(artifactId)} actionPending={topicContent.generate.isPending || topicContent.regenerate.isPending} actionError={topicContent.generate.isError || topicContent.regenerate.isError} provenance={provenance.data} provenancePending={provenance.isPending} provenanceError={provenance.isError} onRetryProvenance={() => void provenance.refetch()} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
     {currentLessonId === CURRENT_LESSON_ID ? <section className="sb-code" id="sb-lesson-artifact"><header><span><Code2 size={17} /> ReservationService.java</span><Button tone="quiet" onClick={() => dispatch({ type: 'RESET_CODE' })}><RotateCcw size={15} /> Reset</Button></header><label className="sb-sr-only" htmlFor="sb-code">Java code</label><textarea id="sb-code" value={state.codeDraft} onChange={e => dispatch({ type: 'SET_CODE', value: e.target.value })} spellCheck={false} />
       <footer><p>{SIMULATION_LIMITATION}</p><div><Button tone="secondary" onClick={() => dispatch({ type: 'RUN_CHECKS' })}><Play size={16} /> Run static checks</Button><Button onClick={() => dispatch({ type: 'SUBMIT_CODE' })}><ShieldCheck size={16} /> Submit evidence</Button></div></footer>
       <div className="sb-output" aria-live="polite"><header><strong>Static check output</strong><span>{state.runResult?.status ?? 'Not run'}</span></header>{state.runResult ? state.runResult.checks.map(check => <div key={check.label}><span className={check.passed ? 'is-pass' : 'is-fail'}>{check.passed ? <Check size={14} /> : <X size={14} />}</span><p><strong>{check.label}</strong><small>{check.detail}</small></p></div>) : <p>No process will run. These deterministic browser checks inspect text patterns only.</p>}</div>
     </section> : null}
-  </article><TopicTools conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
+  </article><TopicTools goalId={goal?.id ?? null} topicId={currentLessonId} conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
 }
 
-function TopicTools({ conversationScope, sourcesMarkdown }: { conversationScope: string | null; sourcesMarkdown: string | null }) {
-  const { state, dispatch } = useLearningState()
+export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown }: { goalId: string | null; topicId: string; conversationScope: string | null; sourcesMarkdown: string | null }) {
+  const review = useNotebookReview(goalId)
+  const [entryMarkdown, setEntryMarkdown] = useState('')
+  const [responses, setResponses] = useState<Record<string, string>>({})
+  const [confidence, setConfidence] = useState<Record<string, 'low' | 'medium' | 'high' | ''>>({})
+  const [revealed, setRevealed] = useState<Record<string, ReviewAttempt>>({})
+  const entries = review.notebook.data ?? []
+  const items = review.reviews.data?.items ?? []
+  const saveEntry = () => {
+    const markdown = entryMarkdown.trim()
+    if (!markdown || !goalId) return
+    review.createEntry.mutate({ entry_kind: 'user', markdown, topic_stable_id: topicId }, { onSuccess: () => setEntryMarkdown('') })
+  }
+  const submitAttempt = (item: ReviewItem) => {
+    const response = responses[item.id]?.trim()
+    if (!response) return
+    const selectedConfidence = confidence[item.id]
+    review.attempt.mutate({ itemId: item.id, body: { response, ...(selectedConfidence ? { confidence: selectedConfidence } : {}) } }, {
+      onSuccess: (attempt) => setRevealed((current) => ({ ...current, [item.id]: attempt })),
+    })
+  }
   return <Tabs.Root id="sb-lesson-tools" defaultValue="notes" className="sb-tools">
-    <Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List>
-    <Tabs.Content value="notes"><label htmlFor="sb-notes">Goal notebook</label><textarea id="sb-notes" value={state.codeNotes} onChange={e => dispatch({ type: 'SET_NOTES', value: e.target.value })} /></Tabs.Content>
+    <Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="review"><Clock3 size={16} /> Review</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List>
+    <Tabs.Content value="notes">
+      <div className="sb-tool-heading"><div><strong>Goal notebook</strong><span>Entries are saved to this goal. New entries are linked to this topic.</span></div></div>
+      {!goalId ? <div className="sb-empty"><NotebookPen /><strong>Select a goal to use its notebook</strong></div>
+        : review.notebook.isPending ? <div className="sb-tool-status" aria-live="polite">Loading notebook…</div>
+          : review.notebook.isError ? <div className="sb-tool-status" role="alert">Notebook unavailable. <Button tone="quiet" onClick={() => void review.notebook.refetch()}>Retry</Button></div>
+            : <>
+              {entries.length === 0 ? <div className="sb-empty sb-empty--compact"><NotebookPen /><strong>No notebook entries yet</strong><span>Save a thought, decision, or question for this goal.</span></div>
+                : <ol className="sb-notebook-list">{entries.map((entry) => <li key={entry.id}><header><span className="sb-entry-kind">{entry.entry_kind}</span>{entry.topic_stable_id && <small>Topic · {entry.topic_stable_id}</small>}{entry.evidence_id && <small>Evidence linked</small>}{entry.source_id && <small>Source linked</small>}</header><p>{entry.markdown}</p>{entry.entry_kind === 'user' && <Button tone="quiet" disabled={review.removeEntry.isPending} onClick={() => review.removeEntry.mutate(entry)}>Delete</Button>}</li>)}</ol>}
+              <label htmlFor="sb-notebook-entry">Add a user entry</label><textarea id="sb-notebook-entry" value={entryMarkdown} onChange={(event) => setEntryMarkdown(event.target.value)} placeholder="Write Markdown notes for this topic…" />
+              {review.createEntry.isError && <p className="sb-tool-error" role="alert">Entry was not saved. Your text is still here.</p>}
+              <div className="sb-tool-actions"><Button disabled={!entryMarkdown.trim() || review.createEntry.isPending} onClick={saveEntry}>{review.createEntry.isPending ? 'Saving…' : 'Save entry'}</Button></div>
+            </>}
+    </Tabs.Content>
+    <Tabs.Content value="review">
+      <div className="sb-tool-heading"><div><strong>Optional review</strong><span>Recall, explain, or apply before the answer is revealed.</span></div></div>
+      {!goalId ? <div className="sb-empty"><Clock3 /><strong>Select a goal to review</strong></div>
+        : review.preferences.isPending || review.reviews.isPending ? <div className="sb-tool-status" aria-live="polite">Loading review queue…</div>
+          : review.preferences.isError || review.reviews.isError ? <div className="sb-tool-status" role="alert">Review queue unavailable. <Button tone="quiet" onClick={() => { void review.preferences.refetch(); void review.reviews.refetch() }}>Retry</Button></div>
+            : !review.preferences.data?.enabled ? <div className="sb-empty sb-empty--compact"><Clock3 /><strong>Review is disabled for this goal</strong><span>You can enable it in Settings. The roadmap remains available.</span></div>
+              : items.length === 0 ? <div className="sb-empty sb-empty--compact"><Check /><strong>No reviews due</strong><span>Continue learning or return later. Review never blocks navigation.</span></div>
+                : <ol className="sb-review-list">{items.map((item) => {
+                  const result = revealed[item.id]
+                  const actionable = item.status === 'ready' || item.status === 'due'
+                  return <li key={item.id}><header><span className="sb-entry-kind">{item.prompt_type}</span><small>{item.status}</small></header><p className="sb-review-prompt">{item.prompt}</p>{item.context && <p className="sb-review-context">Context: {item.context}</p>}
+                    {result ? <section className="sb-review-result" aria-live="polite"><strong>Answer</strong><p>{result.revealed_answer}</p>{result.feedback && <><strong>Feedback</strong><p>{result.feedback}</p></>}{result.correction && <><strong>Correction</strong><p>{result.correction}</p></>}</section>
+                      : item.status === 'generation-failed' ? <div className="sb-tool-status" role="status"><strong>This prompt could not be generated.</strong>{item.failure_reference && <span> Reference: {item.failure_reference}.</span>} <span>{item.retryable ? 'The failure is retryable' : 'The failure is recorded'} and the roadmap remains available.</span> <Button tone="quiet" onClick={() => void review.reviews.refetch()}>Refresh queue</Button></div>
+                        : !actionable ? <p className="sb-review-context">This item is not currently actionable. It does not block the roadmap or change readiness.</p>
+                          : <><label htmlFor={`sb-review-${item.id}`}>Your response</label><textarea id={`sb-review-${item.id}`} value={responses[item.id] ?? ''} onChange={(event) => setResponses((current) => ({ ...current, [item.id]: event.target.value }))} /><label htmlFor={`sb-confidence-${item.id}`}>Confidence · optional</label><select id={`sb-confidence-${item.id}`} value={confidence[item.id] ?? ''} onChange={(event) => setConfidence((current) => ({ ...current, [item.id]: event.target.value as 'low' | 'medium' | 'high' | '' }))}><option value="">Not specified</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select><div className="sb-tool-actions"><Button tone="quiet" disabled={review.dismiss.isPending} onClick={() => review.dismiss.mutate(item.id)}>Dismiss</Button><Button disabled={!responses[item.id]?.trim() || review.attempt.isPending} onClick={() => submitAttempt(item)}>{review.attempt.isPending ? 'Submitting…' : 'Submit response'}</Button></div>{review.dismiss.isError && <p className="sb-tool-error" role="alert">The item was not dismissed. You can retry without a readiness penalty.</p>}{review.attempt.isError && <p className="sb-tool-error" role="alert">Response was not submitted. The answer remains hidden.</p>}</>}
+                  </li>
+                })}</ol>}
+    </Tabs.Content>
     <Tabs.Content value="resources">{sourcesMarkdown
       ? <div className="sb-tool-content"><FileText size={18} /><div><strong>Approved sources</strong><p>{sourcesMarkdown}</p></div></div>
       : <div className="sb-empty"><FileText /><strong>No approved sources yet</strong><span>Check the Sources layer after content is published.</span></div>}

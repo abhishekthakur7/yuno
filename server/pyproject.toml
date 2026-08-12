@@ -78,6 +78,8 @@ containers = [
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
     "yuno.modules.imports",
+    "yuno.modules.notebook_review",
+    "yuno.modules.provenance",
 ]
 layers = [
     "(service)",
@@ -117,6 +119,11 @@ source_modules = [
     "yuno.modules.imports.domain",
     "yuno.modules.imports.ports",
     "yuno.modules.imports.service",
+    "yuno.modules.notebook_review.domain",
+    "yuno.modules.notebook_review.ports",
+    "yuno.modules.notebook_review.service",
+    "yuno.modules.provenance.domain",
+    "yuno.modules.provenance.ports",
 ]
 forbidden_modules = [
     "fastapi",
@@ -153,6 +160,8 @@ modules = [
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
     "yuno.modules.imports",
+    "yuno.modules.notebook_review",
+    "yuno.modules.provenance",
 ]
 ignore_imports = [
     "yuno.modules.identity.service -> yuno.modules.audit.**",
@@ -168,4 +177,6 @@ ignore_imports = [
     "yuno.modules.roadmap.service -> yuno.modules.audit.**",
     "yuno.modules.imports.ports -> yuno.modules.audit.**",
     "yuno.modules.imports.service -> yuno.modules.audit.**",
+    "yuno.modules.notebook_review.ports -> yuno.modules.audit.**",
+    "yuno.modules.notebook_review.service -> yuno.modules.audit.**",
 ]

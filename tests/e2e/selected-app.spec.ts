@@ -106,6 +106,27 @@ test.beforeEach(async ({ page }) => {
   let previewEdits: DiagnosticPreviewEdit[] = []
   let imports: Array<Record<string, unknown>> = []
   let importStatements: Array<Record<string, unknown>> = []
+  let notebookEntries: Array<Record<string, unknown>> = []
+  let reviewPreferences = {
+    enabled: true,
+    duration_minutes: 15,
+    cadence: 'twice-weekly',
+    retrieval_enabled: true,
+    varied_context_enabled: true,
+    scheduling_version: 'fixture-v0',
+    row_version: 1,
+    updated_at: '2026-08-12T00:00:00Z',
+  }
+  let reviewItems: Array<Record<string, unknown>> = [{
+    id: 'review-e2e-1', goal_id: 'goal-default', topic_stable_id: 'idempotency-retry',
+    prompt_ref: 'fixture-review-e2e-1', prompt_type: 'application',
+    prompt: 'Apply the duplicate boundary to a redelivery after commit.',
+    answer: 'Commit the business decision and duplicate marker atomically.',
+    status: 'due', due_at: '2026-08-12T00:00:00Z', interval_label: 'fixture-due',
+    context: 'The acknowledgement was lost after the durable business write.',
+    scheduling_version: 'fixture-v0', failure_reference: null, row_version: 1,
+    created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z',
+  }]
   let projectedTopics = roadmapTopics.map(([stable_id, title]) => ({
     stable_id, title, subject: 'Java / Spring Boot · AWS', level_tag: 'Senior',
     target_capability: 'implement', scope_tags: ['java'], classification: 'unverified' as const,
@@ -165,6 +186,58 @@ test.beforeEach(async ({ page }) => {
     if (action === 'map') await route.fulfill({ json: { statement: importStatements[index], mapping: importStatements[index]!.mapping, topic_imports_hash: { goal_id: 'goal-default', topic_id: 'delivery-contract', graph_version_id: 'graph-1', imports_hash: 'mapped-imports-hash', updated_at: '2026-08-12T00:01:00Z' } } })
     else await route.fulfill({ json: importStatements[index] })
   })
+  await page.route('**/api/v1/notebook/**', async route => {
+    const request = route.request()
+    const entryId = new URL(request.url()).pathname.split('/').at(-1)!
+    const index = notebookEntries.findIndex(item => item.id === entryId)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Not found' } })
+      return
+    }
+    if (request.method() === 'PATCH') {
+      notebookEntries[index] = {
+        ...notebookEntries[index],
+        ...(request.postDataJSON() as Record<string, unknown>),
+        row_version: Number(notebookEntries[index]!.row_version) + 1,
+        updated_at: '2026-08-12T00:02:00Z',
+      }
+      await route.fulfill({ json: notebookEntries[index] })
+      return
+    }
+    notebookEntries.splice(index, 1)
+    await route.fulfill({ status: 204, body: '' })
+  })
+  await page.route('**/api/v1/reviews/**', async route => {
+    const request = route.request()
+    const parts = new URL(request.url()).pathname.split('/')
+    const reviewId = parts.at(-2)!
+    const index = reviewItems.findIndex(item => item.id === reviewId)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Not found' } })
+      return
+    }
+    if (parts.at(-1) === 'attempts') {
+      const body = request.postDataJSON() as { response: string; confidence?: string }
+      const answer = String(reviewItems[index]!.answer)
+      reviewItems[index] = {
+        ...reviewItems[index], status: 'completed', row_version: Number(reviewItems[index]!.row_version) + 1,
+        updated_at: '2026-08-12T00:02:00Z',
+      }
+      await route.fulfill({ status: 201, json: {
+        id: 'review-attempt-e2e-1', goal_id: reviewItems[index]!.goal_id,
+        review_item_id: reviewId, response: body.response, confidence: body.confidence ?? null,
+        feedback: null, correction: null, next_interval_label: null,
+        context_variation: null, context_result: null, scheduling_version: 'fixture-v0',
+        created_at: '2026-08-12T00:02:00Z', review_status: 'completed', revealed_answer: answer,
+      } })
+      return
+    }
+    reviewItems[index] = {
+      ...reviewItems[index], status: 'dismissed', row_version: Number(reviewItems[index]!.row_version) + 1,
+      updated_at: '2026-08-12T00:02:00Z',
+    }
+    await route.fulfill({ json: { ...reviewItems[index], answer: null } })
+  })
   await page.route('**/api/v1/profile', async route => {
     if (route.request().method() === 'PATCH') {
       profile = { ...profile, ...(route.request().postDataJSON() as ProfileUpdate), profile_revision: profile.profile_revision + 1 }
@@ -193,6 +266,51 @@ test.beforeEach(async ({ page }) => {
     const path = new URL(route.request().url()).pathname.split('/')
     if (path.at(-1) === 'overlay-proposals') {
       await route.fulfill({ json: [] })
+      return
+    }
+    if (path.at(-1) === 'notebook') {
+      const scopedGoalId = path.at(-2)!
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as Record<string, unknown>
+        const entry = {
+          id: `notebook-entry-${notebookEntries.length + 1}`, goal_id: scopedGoalId,
+          ...body, evidence_id: body.evidence_id ?? null, source_id: body.source_id ?? null,
+          row_version: 1, created_at: '2026-08-12T00:01:00Z', updated_at: '2026-08-12T00:01:00Z',
+        }
+        notebookEntries = [entry, ...notebookEntries]
+        await route.fulfill({ status: 201, json: entry })
+        return
+      }
+      await route.fulfill({ json: notebookEntries.filter(item => item.goal_id === scopedGoalId) })
+      return
+    }
+    if (path.at(-1) === 'review-preferences') {
+      const scopedGoalId = path.at(-2)!
+      if (route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as Record<string, unknown>
+        reviewPreferences = {
+          ...reviewPreferences,
+          ...body,
+          row_version: reviewPreferences.row_version + 1,
+          updated_at: '2026-08-12T00:02:00Z',
+        }
+        if (body.enabled === false) {
+          reviewItems = reviewItems.map(item => item.goal_id === scopedGoalId && (item.status === 'ready' || item.status === 'due')
+            ? { ...item, status: 'disabled', row_version: Number(item.row_version) + 1 }
+            : item)
+        }
+      }
+      await route.fulfill({ json: { goal_id: scopedGoalId, ...reviewPreferences } })
+      return
+    }
+    if (path.at(-1) === 'reviews') {
+      const scopedGoalId = path.at(-2)!
+      await route.fulfill({ json: {
+        goal_id: scopedGoalId,
+        enabled: reviewPreferences.enabled,
+        scheduling_version: reviewPreferences.scheduling_version,
+        items: reviewItems.filter(item => item.goal_id === scopedGoalId).map(item => ({ ...item, answer: null })),
+      } })
       return
     }
     if (path.at(-1) === 'layers' && path.includes('topics')) {
@@ -384,6 +502,26 @@ async function open(page: Page, route: string) {
   await expect(page.locator('[data-app="yuno-learning"]')).toBeVisible()
 }
 
+function generatedLayerResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    layer: 'Essential', state: 'ready', revision_id: null, markdown: 'Generated ready body.', markdown_hash: 'generated-ready-hash', checkpoint: null,
+    artifact_id: 'artifact-e2e-1', content_origin: 'generated', generation: { job_id: 'generation-job-e2e-1', status: 'succeeded', retryable: false, failure_reference: null }, stale_reason: null,
+    ...overrides,
+  }
+}
+
+function artifactProvenanceFixture() {
+  const source = (id: string, title: string, availability_status: string) => ({ id, origin: 'synthetic-fixture', source_type: 'documentation', title, publisher: 'Fixture publisher', canonical_url: null, license_status: 'synthetic', availability_status, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' })
+  return {
+    artifact_id: 'artifact-e2e-1', current_snapshot_hash: 'snapshot-hash-e2e', stale: true, stale_reasons: ['personalization-snapshot-mismatch'], refs: [],
+    baked_snapshot: { id: 'snapshot-e2e-1', evidence_state_hash: 'evidence-hash-e2e', profile_hash: 'profile-hash-e2e', provider: 'fixture-provider', model: 'fixture-model', generated_at: '2026-08-12T00:00:00Z', schema_version: 'generate-result-v1', contract_version: 'fixture-v0', prompt_template_version: 'fixture-v0', snapshot_hash: 'snapshot-hash-e2e' },
+    claims: [
+      { id: 'claim-e2e-sensitive', claim_text: 'This version-dependent claim needs direct support.', claim_type: 'time-or-version-dependent', sensitive: true, citations: [{ id: 'citation-e2e-1', source: source('source-e2e-active', 'Primary fixture specification', 'available'), source_snapshot_id: 'source-snapshot-e2e-1', locator: 'Section 4', support_kind: 'direct', note: null }, { id: 'citation-e2e-2', source: source('source-e2e-withdrawn', 'Withdrawn fixture advisory', 'withdrawn'), source_snapshot_id: 'source-snapshot-e2e-2', locator: 'Archived section', support_kind: 'historical', note: null }] },
+      { id: 'claim-e2e-routine', claim_text: 'Routine self-contained explanation.', claim_type: 'routine', sensitive: false, citations: [] },
+    ],
+  }
+}
+
 async function learningState(page: Page) {
   return page.evaluate(() => {
     const key = Object.keys(localStorage).filter(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup').at(-1)
@@ -442,10 +580,10 @@ test('malformed bounded draft storage falls back field by field without runtime 
   })
   await expect.poll(async () => {
     const operations = await operationsState(page)
-    return { owner: operations?.owner, review: operations?.review, hasImportState: 'importSource' in operations || 'importStatements' in operations, updates: operations?.acceptedUpdates }
+    return { owner: operations?.owner, hasReviewState: 'review' in operations, hasImportState: 'importSource' in operations || 'importStatements' in operations, updates: operations?.acceptedUpdates }
   }).toEqual({
     owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
-    review: { enabled: true, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
+    hasReviewState: false,
     hasImportState: false,
     updates: [],
   })
@@ -632,6 +770,65 @@ test('roadmap and curriculum selections change and preserve the current lesson',
   await expect(page.getByRole('heading', { level: 1, name: /Implement an idempotency boundary under concurrent retries/i })).toBeVisible()
 })
 
+test('Topic Studio generates absent content through an explicit generating state', async ({ page, diagnostics }) => {
+  void diagnostics
+  let state: 'absent' | 'generating' | 'ready' = 'absent'
+  let generatingReads = 0
+  await page.route('**/api/v1/artifacts/artifact-e2e-1/provenance', route => route.fulfill({ json: artifactProvenanceFixture() }))
+  await page.route('**/api/v1/goals/goal-default/topics/idempotency-retry/generate**', async route => {
+    state = 'generating'
+    await route.fulfill({ status: 202, json: { job_id: 'generation-job-e2e-1', kind: 'generate_topic_content', status: 'queued', enqueued_at: '2026-08-12T00:01:00Z', deduplicated: false } })
+  })
+  await page.route('**/api/v1/goals/goal-default/topics/idempotency-retry/layers', async route => {
+    if (state === 'generating') {
+      generatingReads += 1
+      if (generatingReads > 1) state = 'ready'
+    }
+    const essential = state === 'absent'
+      ? generatedLayerResponse({ state: 'absent', artifact_id: null, markdown: null, markdown_hash: null, content_origin: null, generation: null })
+      : state === 'generating'
+        ? generatedLayerResponse({ state: 'generating', markdown: null, markdown_hash: null, generation: { job_id: 'generation-job-e2e-1', status: 'running', retryable: true, failure_reference: null } })
+        : generatedLayerResponse()
+    await route.fulfill({ json: { goal_id: 'goal-default', graph_version_id: 'graph-1', topic_id: 'idempotency-retry', conversation_scope: 'goal-default:idempotency-retry', layers: [essential] } })
+  })
+
+  await open(page, '/app/topic-studio')
+  await expect(page.getByRole('heading', { name: 'No Essential content yet' })).toBeVisible()
+  await page.getByRole('button', { name: 'Generate Essential' }).click()
+  await expect(page.getByRole('heading', { name: 'Generating Essential' })).toBeVisible()
+  await expect(page.getByText('Generated ready body.')).toBeVisible({ timeout: 5_000 })
+})
+
+test('Topic Studio keeps a stale body through explicit regeneration and exposes source warnings', async ({ page, diagnostics }) => {
+  void diagnostics
+  let regenerating = false
+  let regenerationReads = 0
+  await page.route('**/api/v1/artifacts/artifact-e2e-1/provenance', route => route.fulfill({ json: artifactProvenanceFixture() }))
+  await page.route('**/api/v1/artifacts/artifact-e2e-1/regenerate', async route => {
+    regenerating = true
+    await route.fulfill({ status: 202, json: { job_id: 'regeneration-job-e2e-1', kind: 'regenerate_artifact', status: 'queued', enqueued_at: '2026-08-12T00:02:00Z', deduplicated: false } })
+  })
+  await page.route('**/api/v1/goals/goal-default/topics/idempotency-retry/layers', async route => {
+    if (regenerating) regenerationReads += 1
+    const essential = regenerating && regenerationReads > 1
+      ? generatedLayerResponse({ markdown: 'Regenerated body after explicit action.', markdown_hash: 'regenerated-hash' })
+      : generatedLayerResponse({ state: 'stale', markdown: 'Original stale generated body.', markdown_hash: 'stale-hash', stale_reason: 'personalization-snapshot-mismatch', generation: regenerating ? { job_id: 'regeneration-job-e2e-1', status: 'running', retryable: true, failure_reference: null } : { job_id: 'generation-job-e2e-1', status: 'succeeded', retryable: false, failure_reference: null } })
+    await route.fulfill({ json: { goal_id: 'goal-default', graph_version_id: 'graph-1', topic_id: 'idempotency-retry', conversation_scope: 'goal-default:idempotency-retry', layers: [essential] } })
+  })
+
+  await open(page, '/app/topic-studio')
+  await expect(page.getByText('Original stale generated body.')).toBeVisible()
+  await expect(page.getByText(/existing content remains visible and unchanged/i)).toBeVisible()
+  await page.getByText('About this content').click()
+  await expect(page.getByText('This version-dependent claim needs direct support.')).toBeVisible()
+  await expect(page.getByText('Routine claim · no citation required')).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('Withdrawn fixture advisory is withdrawn')
+  await page.getByRole('button', { name: 'Regenerate', exact: true }).click()
+  await expect(page.getByText('Original stale generated body.')).toBeVisible()
+  await expect(page.getByText('Generating updated content')).toBeVisible()
+  await expect(page.getByText('Regenerated body after explicit action.')).toBeVisible({ timeout: 5_000 })
+})
+
 test('Topic Studio Run is exploratory and Submit alone appends evidence', async ({ page, diagnostics }) => {
   void diagnostics
   await page.setViewportSize({ width: 1366, height: 768 })
@@ -813,6 +1010,8 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   const notesTab = page.getByRole('tab', { name: /Notes/i })
   await notesTab.focus()
   await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: /Review/i })).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('tab', { name: /Resources/i })).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('tab', { name: /Help/i })).toHaveAttribute('aria-selected', 'true')
@@ -925,8 +1124,6 @@ test('focused Mock renders without GlobalHeader or CourseBand at every required 
   }
 })
 
-// Deliberately does not take the `diagnostics` fixture: aborting the API reads
-// is the point of the test, and a blocked request is a console error by design.
 test('a failed backend read shows the route failure state with retry, and leaves not-found unaffected', async ({ page }) => {
   await page.route('**/api/v1/**', route => route.abort())
 
@@ -934,16 +1131,13 @@ test('a failed backend read shows the route failure state with retry, and leaves
   const failure = page.locator('[data-route-state="failure"]')
   await expect(failure).toBeVisible()
   await expect(failure.getByRole('button', { name: 'Retry' })).toBeVisible()
-  // The shell itself survives: the failure replaces the page body only.
   await expect(page.locator('header.app-header')).toBeVisible()
 
-  // Recovery reconciles the authoritative GET resource (spec §2.1).
   await page.unroute('**/api/v1/**')
   await failure.getByRole('button', { name: 'Retry' }).click()
   await expect(page.getByText(/No terminal mock report is available/i)).toBeVisible()
   await expect(page.locator('[data-route-state]')).toHaveCount(0)
 
-  // Not-found is unaffected by backend errors.
   await page.route('**/api/v1/**', route => route.abort())
   await page.goto('/app/home')
   await expect(page.getByRole('heading', { name: /That learning view does not exist/i })).toBeVisible()
