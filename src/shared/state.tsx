@@ -43,7 +43,6 @@ export interface MockTurn {
 export interface LearningState {
   version: 1
   codeDraft: string
-  codeNotes: string
   runResult: RunResult | null
   evidence: readonly EvidenceRecord[]
   practice: {
@@ -64,7 +63,6 @@ export interface LearningState {
 
 export type LearningAction =
   | { type: 'SET_CODE'; value: string }
-  | { type: 'SET_NOTES'; value: string }
   | { type: 'RUN_CHECKS' }
   | { type: 'RESET_CODE' }
   | { type: 'SUBMIT_CODE' }
@@ -83,7 +81,6 @@ export function createInitialState(): LearningState {
   return {
     version: 1,
     codeDraft: STARTER_CODE,
-    codeNotes: 'Assumption: the ledger and reservation write share one database boundary.',
     runResult: null,
     evidence: [],
     practice: {
@@ -141,8 +138,6 @@ export function learningReducer(state: LearningState, action: LearningAction): L
   switch (action.type) {
     case 'SET_CODE':
       return { ...state, codeDraft: action.value, runResult: null }
-    case 'SET_NOTES':
-      return { ...state, codeNotes: action.value }
     case 'RUN_CHECKS':
       return { ...state, runResult: evaluateCode(state.codeDraft) }
     case 'RESET_CODE':
@@ -266,7 +261,6 @@ function hydratePersistedDrafts(value: unknown, initial = createInitialState()):
   return {
     ...initial,
     codeDraft: typeof value.codeDraft === 'string' ? value.codeDraft : initial.codeDraft,
-    codeNotes: typeof value.codeNotes === 'string' ? value.codeNotes : initial.codeNotes,
     runResult,
     evidence,
     practice: {
@@ -302,7 +296,6 @@ export function persistedLearningDrafts(state: LearningState) {
   return {
     version: state.version,
     codeDraft: state.codeDraft,
-    codeNotes: state.codeNotes,
     runResult: state.runResult,
     evidence: state.evidence,
     practice: state.practice,

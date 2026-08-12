@@ -19,7 +19,9 @@ from yuno.shared.domain.clock import Clock
 
 class FixedProgressClock(Clock):
     def now(self) -> datetime:
-        return datetime(2026, 8, 12, 12, tzinfo=UTC)
+        # Keep this safely after repository-generated timestamps so the fixture
+        # cannot become invalid merely because the suite runs later in the day.
+        return datetime(2099, 1, 1, 12, tzinfo=UTC)
 
 
 def _create_peer_goal(client: TestClient, graph_version_id: str, suffix: str) -> str:
@@ -49,10 +51,7 @@ def _memo_counts(engine: Engine, goal_ids: tuple[str, ...]) -> dict[str, int]:
     with engine.connect() as connection:
         return {
             goal_id: connection.execute(
-                text(
-                    "SELECT count(*) FROM goal_progress_memos "
-                    "WHERE goal_id=:goal_id"
-                ),
+                text("SELECT count(*) FROM goal_progress_memos WHERE goal_id=:goal_id"),
                 {"goal_id": goal_id},
             ).scalar_one()
             for goal_id in goal_ids
@@ -82,7 +81,10 @@ def test_progress_memo_invalidation_is_scoped_fanned_out_and_atomic(
     # Assessment and dimension inserts invalidate the source memo, not peer memos.
     with uow_factory() as uow:
         perform_assessment(
-            uow, FakeEvaluationAdapter(), owner_id, evaluation_request,
+            uow,
+            FakeEvaluationAdapter(),
+            owner_id,
+            evaluation_request,
             clock=FixedProgressClock(),
         )
         uow.commit()
@@ -132,10 +134,13 @@ def test_progress_memo_invalidation_is_scoped_fanned_out_and_atomic(
                 "created_at": "2026-08-12T12:00:00.000000Z",
             },
         )
-        assert connection.execute(
-            text("SELECT count(*) FROM goal_progress_memos WHERE goal_id=:goal_id"),
-            {"goal_id": source_id},
-        ).scalar_one() == 0
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM goal_progress_memos WHERE goal_id=:goal_id"),
+                {"goal_id": source_id},
+            ).scalar_one()
+            == 0
+        )
         transaction.rollback()
     finally:
         connection.close()

@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/artifacts/{artifact_id}/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Artifact Provenance */
+        get: operations["artifact_provenance_api_v1_artifacts__artifact_id__provenance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/artifacts/{artifact_id}/regenerate": {
         parameters: {
             query?: never;
@@ -123,6 +140,23 @@ export interface paths {
          *     isn't approved (module docstring).
          */
         get: operations["get_canonical_version_api_v1_canonical_versions__version_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/claims/{claim_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Claim */
+        get: operations["claim_api_v1_claims__claim_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -452,6 +486,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Notebook */
+        get: operations["get_notebook_api_v1_goals__goal_id__notebook_get"];
+        put?: never;
+        /** Post Notebook Entry */
+        post: operations["post_notebook_entry_api_v1_goals__goal_id__notebook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals/{goal_id}/order-constraints": {
         parameters: {
             query?: never;
@@ -496,6 +548,41 @@ export interface paths {
         };
         /** Get Goal Progress */
         get: operations["get_goal_progress_api_v1_goals__goal_id__progress_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/review-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preferences */
+        get: operations["get_preferences_api_v1_goals__goal_id__review_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Preferences */
+        patch: operations["patch_preferences_api_v1_goals__goal_id__review_preferences_patch"];
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reviews */
+        get: operations["get_reviews_api_v1_goals__goal_id__reviews_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -765,6 +852,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notebook/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Notebook */
+        delete: operations["delete_notebook_api_v1_notebook__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Notebook Entry */
+        patch: operations["patch_notebook_entry_api_v1_notebook__entry_id__patch"];
+        trace?: never;
+    };
     "/api/v1/overlay-proposals/{proposal_id}/decision": {
         parameters: {
             query?: never;
@@ -800,6 +905,74 @@ export interface paths {
         patch: operations["update_profile_api_v1_profile_patch"];
         trace?: never;
     };
+    "/api/v1/reviews/{review_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Review Attempt */
+        post: operations["post_review_attempt_api_v1_reviews__review_id__attempts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/{review_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Review Dismiss */
+        post: operations["post_review_dismiss_api_v1_reviews__review_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sources */
+        get: operations["sources_api_v1_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source */
+        get: operations["source_api_v1_sources__source_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/topics/{topic_id}": {
         parameters: {
             query?: never;
@@ -821,6 +994,52 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArtifactProvenanceRefResponse */
+        ArtifactProvenanceRefResponse: {
+            /** Kind */
+            kind: string;
+            /** Reference Id */
+            reference_id: string;
+        };
+        /** ArtifactProvenanceResponse */
+        ArtifactProvenanceResponse: {
+            /** Artifact Id */
+            artifact_id: string;
+            baked_snapshot: components["schemas"]["ArtifactSnapshotResponse"];
+            /** Claims */
+            claims: components["schemas"]["ClaimResponse"][];
+            /** Current Snapshot Hash */
+            current_snapshot_hash: string;
+            /** Refs */
+            refs: components["schemas"]["ArtifactProvenanceRefResponse"][];
+            /** Stale */
+            stale: boolean;
+            /** Stale Reasons */
+            stale_reasons: components["schemas"]["StaleReason"][];
+        };
+        /** ArtifactSnapshotResponse */
+        ArtifactSnapshotResponse: {
+            /** Contract Version */
+            contract_version: string;
+            /** Evidence State Hash */
+            evidence_state_hash: string;
+            /** Generated At */
+            generated_at: string;
+            /** Id */
+            id: string;
+            /** Model */
+            model: string;
+            /** Profile Hash */
+            profile_hash: string;
+            /** Prompt Template Version */
+            prompt_template_version: string;
+            /** Provider */
+            provider: string;
+            /** Schema Version */
+            schema_version: string;
+            /** Snapshot Hash */
+            snapshot_hash: string;
+        };
         /** AssessmentCreateRequest */
         AssessmentCreateRequest: {
             /** Assumptions */
@@ -1037,6 +1256,37 @@ export interface components {
          * @enum {string}
          */
         Capability: "know" | "understand" | "choose" | "implement" | "diagnose" | "defend";
+        /** CitationResponse */
+        CitationResponse: {
+            /** Id */
+            id: string;
+            /** Locator */
+            locator: string;
+            /** Note */
+            note: string | null;
+            source: components["schemas"]["SourceResponse"];
+            /** Source Snapshot Id */
+            source_snapshot_id: string | null;
+            /** Support Kind */
+            support_kind: string;
+        };
+        /** ClaimResponse */
+        ClaimResponse: {
+            /** Citations */
+            citations: components["schemas"]["CitationResponse"][];
+            /** Claim Text */
+            claim_text: string;
+            claim_type: components["schemas"]["ClaimType"];
+            /** Id */
+            id: string;
+            /** Sensitive */
+            sensitive: boolean;
+        };
+        /**
+         * ClaimType
+         * @enum {string}
+         */
+        ClaimType: "fact" | "trade-off" | "routine" | "disputed" | "comparative" | "time-or-version-dependent";
         /**
          * CorrectionType
          * @enum {string}
@@ -1329,6 +1579,11 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * GenerationAttemptStatus
+         * @enum {string}
+         */
+        GenerationAttemptStatus: "queued" | "running" | "succeeded" | "failed" | "quarantined";
         /** GoalCreateRequest */
         GoalCreateRequest: {
             /** Graph Version Id */
@@ -1574,11 +1829,21 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /** LayerGenerationResponse */
+        LayerGenerationResponse: {
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Retryable */
+            retryable: boolean;
+            status: components["schemas"]["GenerationAttemptStatus"] | null;
+        };
         /**
          * LayerState
          * @enum {string}
          */
-        LayerState: "ready" | "empty" | "stale" | "unavailable";
+        LayerState: "ready" | "absent" | "generating" | "stale" | "unavailable";
         /** LearnerCorrectionRequest */
         LearnerCorrectionRequest: {
             classification: components["schemas"]["LearningClassification"];
@@ -1671,6 +1936,56 @@ export interface components {
          * @enum {string}
          */
         MappingState: "unmapped" | "mapped" | "duplicate";
+        /** NotebookEntryCreateRequest */
+        NotebookEntryCreateRequest: {
+            entry_kind: components["schemas"]["NotebookEntryKind"];
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Markdown */
+            markdown: string;
+            /** Source Id */
+            source_id?: string | null;
+            /** Topic Stable Id */
+            topic_stable_id?: string | null;
+        };
+        /**
+         * NotebookEntryKind
+         * @enum {string}
+         */
+        NotebookEntryKind: "auto" | "user";
+        /** NotebookEntryPatchRequest */
+        NotebookEntryPatchRequest: {
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Markdown */
+            markdown?: string | null;
+            /** Source Id */
+            source_id?: string | null;
+            /** Topic Stable Id */
+            topic_stable_id?: string | null;
+        };
+        /** NotebookEntryResponse */
+        NotebookEntryResponse: {
+            /** Created At */
+            created_at: string;
+            entry_kind: components["schemas"]["NotebookEntryKind"];
+            /** Evidence Id */
+            evidence_id: string | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Markdown */
+            markdown: string;
+            /** Row Version */
+            row_version: number;
+            /** Source Id */
+            source_id: string | null;
+            /** Topic Stable Id */
+            topic_stable_id: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
         /** OrderConstraintRequest */
         OrderConstraintRequest: {
             /** After Topic Id */
@@ -1775,6 +2090,144 @@ export interface components {
          * @enum {string}
          */
         ResumeDestination: "/app/learn-roadmap" | "/app/topic-studio" | "/app/interview-hub" | "/app/practice" | "/app/mock";
+        /** ReviewAttemptCreateRequest */
+        ReviewAttemptCreateRequest: {
+            confidence?: components["schemas"]["ReviewConfidence"] | null;
+            /** Context Result */
+            context_result?: string | null;
+            /** Response */
+            response: string;
+        };
+        /** ReviewAttemptResponse */
+        ReviewAttemptResponse: {
+            confidence: components["schemas"]["ReviewConfidence"] | null;
+            /** Context Result */
+            context_result: string | null;
+            /** Context Variation */
+            context_variation: string | null;
+            /** Correction */
+            correction: string | null;
+            /** Created At */
+            created_at: string;
+            /** Feedback */
+            feedback: string | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Next Interval Label */
+            next_interval_label: string | null;
+            /** Response */
+            response: string;
+            /** Revealed Answer */
+            revealed_answer: string;
+            /** Review Item Id */
+            review_item_id: string;
+            review_status: components["schemas"]["ReviewItemStatus"];
+            /** Scheduling Version */
+            scheduling_version: string;
+        };
+        /**
+         * ReviewCadence
+         * @enum {string}
+         */
+        ReviewCadence: "once-weekly" | "twice-weekly" | "three-times-weekly";
+        /**
+         * ReviewConfidence
+         * @enum {string}
+         */
+        ReviewConfidence: "low" | "medium" | "high";
+        /** ReviewItemResponse */
+        ReviewItemResponse: {
+            /** Answer */
+            answer?: string | null;
+            /** Context */
+            context: string | null;
+            /** Created At */
+            created_at: string;
+            /** Due At */
+            due_at: string | null;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Interval Label */
+            interval_label: string | null;
+            /** Prompt */
+            prompt: string;
+            /** Prompt Ref */
+            prompt_ref: string;
+            prompt_type: components["schemas"]["ReviewPromptType"];
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
+            /** Row Version */
+            row_version: number;
+            /** Scheduling Version */
+            scheduling_version: string;
+            status: components["schemas"]["ReviewItemStatus"];
+            /** Topic Stable Id */
+            topic_stable_id: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * ReviewItemStatus
+         * @enum {string}
+         */
+        ReviewItemStatus: "ready" | "due" | "dismissed" | "disabled" | "generation-failed" | "completed";
+        /** ReviewPreferencesPatchRequest */
+        ReviewPreferencesPatchRequest: {
+            cadence?: components["schemas"]["ReviewCadence"] | null;
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Retrieval Enabled */
+            retrieval_enabled?: boolean | null;
+            /** Varied Context Enabled */
+            varied_context_enabled?: boolean | null;
+        };
+        /** ReviewPreferencesResponse */
+        ReviewPreferencesResponse: {
+            cadence: components["schemas"]["ReviewCadence"];
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Goal Id */
+            goal_id: string;
+            /** Retrieval Enabled */
+            retrieval_enabled: boolean;
+            /** Row Version */
+            row_version: number;
+            /** Scheduling Version */
+            scheduling_version: string;
+            /** Updated At */
+            updated_at: string;
+            /** Varied Context Enabled */
+            varied_context_enabled: boolean;
+        };
+        /**
+         * ReviewPromptType
+         * @enum {string}
+         */
+        ReviewPromptType: "recall" | "explanation" | "application";
+        /** ReviewQueueResponse */
+        ReviewQueueResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Goal Id */
+            goal_id: string;
+            /** Items */
+            items: components["schemas"]["ReviewItemResponse"][];
+            /** Scheduling Version */
+            scheduling_version: string;
+        };
         /** RoadmapMutationResponse */
         RoadmapMutationResponse: {
             /**
@@ -1840,6 +2293,38 @@ export interface components {
             /** Topic Stable Id */
             topic_stable_id: string;
         };
+        /**
+         * SourceAvailability
+         * @enum {string}
+         */
+        SourceAvailability: "available" | "unavailable" | "withdrawn";
+        /** SourceResponse */
+        SourceResponse: {
+            availability_status: components["schemas"]["SourceAvailability"];
+            /** Canonical Url */
+            canonical_url: string | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** License Status */
+            license_status: string;
+            /** Origin */
+            origin: string;
+            /** Publisher */
+            publisher: string | null;
+            /** Source Type */
+            source_type: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * StaleReason
+         * @enum {string}
+         */
+        StaleReason: "personalization-snapshot-mismatch" | "cache-key-changed";
         /**
          * TargetCapability
          * @enum {string}
@@ -1908,7 +2393,12 @@ export interface components {
         TopicLayer: "Essential" | "Implementation" | "Internals" | "Production" | "Alternatives" | "Failures" | "Interview" | "Sources";
         /** TopicLayerResponse */
         TopicLayerResponse: {
+            /** Artifact Id */
+            artifact_id?: string | null;
             checkpoint: components["schemas"]["TopicCheckpointResponse"] | null;
+            /** Content Origin */
+            content_origin?: ("authored" | "generated") | null;
+            generation?: components["schemas"]["LayerGenerationResponse"] | null;
             layer: components["schemas"]["TopicLayer"];
             /** Markdown */
             markdown: string | null;
@@ -1916,6 +2406,7 @@ export interface components {
             markdown_hash: string | null;
             /** Revision Id */
             revision_id: string | null;
+            stale_reason?: components["schemas"]["StaleReason"] | null;
             state: components["schemas"]["LayerState"];
         };
         /** TopicLayersResponse */
@@ -1950,6 +2441,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    artifact_provenance_api_v1_artifacts__artifact_id__provenance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactProvenanceResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     regenerate_artifact_api_v1_artifacts__artifact_id__regenerate_post: {
         parameters: {
             query?: never;
@@ -2172,6 +2694,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CanonicalVersionDetailResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    claim_api_v1_claims__claim_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResponse"];
                 };
             };
             /** @description Default Response */
@@ -2959,6 +3512,74 @@ export interface operations {
             };
         };
     };
+    get_notebook_api_v1_goals__goal_id__notebook_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotebookEntryResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_notebook_entry_api_v1_goals__goal_id__notebook_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotebookEntryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotebookEntryResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_order_constraint_api_v1_goals__goal_id__order_constraints_post: {
         parameters: {
             query?: never;
@@ -3091,6 +3712,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoalProgressResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_preferences_api_v1_goals__goal_id__review_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPreferencesResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_preferences_api_v1_goals__goal_id__review_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPreferencesPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPreferencesResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_reviews_api_v1_goals__goal_id__reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewQueueResponse"];
                 };
             };
             /** @description Default Response */
@@ -3640,6 +4360,75 @@ export interface operations {
             };
         };
     };
+    delete_notebook_api_v1_notebook__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_notebook_entry_api_v1_notebook__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotebookEntryPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotebookEntryResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_overlay_proposal_decision_api_v1_overlay_proposals__proposal_id__decision_post: {
         parameters: {
             query?: never;
@@ -3728,6 +4517,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearnerProfileResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_review_attempt_api_v1_reviews__review_id__attempts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAttemptCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewAttemptResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_review_dismiss_api_v1_reviews__review_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sources_api_v1_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    source_api_v1_sources__source_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
                 };
             };
             /** @description Default Response */

@@ -26,6 +26,8 @@ import type { ImportStatement, JobRef } from '../../shared/api/imports'
 import { useImports } from '../../shared/use-imports'
 import { useProfileGoals } from '../../shared/use-profile-goals'
 import { useRoadmap } from '../../shared/use-roadmap'
+import { useReviewPreferences } from '../../shared/use-notebook-review'
+import type { ReviewPreferencesPatch } from '../../shared/api/notebook-review'
 import './operations.css'
 
 export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'search' | 'jobs' | 'settings'
@@ -37,7 +39,6 @@ interface OperationsState {
   owner: { name: string; role: string }
   progress: 'detailed' | 'simple'
   reducedMotion: boolean
-  review: { enabled: boolean; duration: number; cadence: string; retrieval: boolean; variedContext: boolean }
   updateDecision: 'pending' | 'accepted' | 'postponed' | 'dismissed'
   acceptedUpdates: string[]
   acceptedConflictResolution: 'overlay-kept' | 'canonical-adopted' | null
@@ -52,7 +53,6 @@ const DEFAULT_STATE: OperationsState = {
   owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
   progress: 'detailed',
   reducedMotion: false,
-  review: { enabled: true, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
   updateDecision: 'pending',
   acceptedUpdates: [],
   acceptedConflictResolution: null,
@@ -70,7 +70,6 @@ function isStringArray(value: unknown): value is string[] {
 function hydrateOperationsState(value: unknown): OperationsState | null {
   if (!isRecord(value) || value.version !== 1) return null
   const owner = isRecord(value.owner) ? value.owner : {}
-  const review = isRecord(value.review) ? value.review : {}
   return {
     version: 1,
     goalVersion: value.goalVersion === '2026.08' ? '2026.08' : DEFAULT_STATE.goalVersion,
@@ -80,13 +79,6 @@ function hydrateOperationsState(value: unknown): OperationsState | null {
     },
     progress: value.progress === 'simple' || value.progress === 'detailed' ? value.progress : DEFAULT_STATE.progress,
     reducedMotion: typeof value.reducedMotion === 'boolean' ? value.reducedMotion : DEFAULT_STATE.reducedMotion,
-    review: {
-      enabled: typeof review.enabled === 'boolean' ? review.enabled : DEFAULT_STATE.review.enabled,
-      duration: typeof review.duration === 'number' && Number.isFinite(review.duration) ? review.duration : DEFAULT_STATE.review.duration,
-      cadence: typeof review.cadence === 'string' ? review.cadence : DEFAULT_STATE.review.cadence,
-      retrieval: typeof review.retrieval === 'boolean' ? review.retrieval : DEFAULT_STATE.review.retrieval,
-      variedContext: typeof review.variedContext === 'boolean' ? review.variedContext : DEFAULT_STATE.review.variedContext,
-    },
     updateDecision: value.updateDecision === 'accepted' || value.updateDecision === 'postponed' || value.updateDecision === 'dismissed' || value.updateDecision === 'pending' ? value.updateDecision : DEFAULT_STATE.updateDecision,
     acceptedUpdates: isStringArray(value.acceptedUpdates) ? value.acceptedUpdates : DEFAULT_STATE.acceptedUpdates,
     acceptedConflictResolution: value.acceptedConflictResolution === 'overlay-kept' || value.acceptedConflictResolution === 'canonical-adopted' || value.acceptedConflictResolution === null ? value.acceptedConflictResolution : DEFAULT_STATE.acceptedConflictResolution,
@@ -297,6 +289,18 @@ function GlobalProfileSettings() {
   return <section className="so-panel" aria-labelledby="so-global-profile-title"><div className="so-panel-head"><div><UserRound size={20} /><h2 id="so-global-profile-title">Global learner profile</h2></div><span className="so-chip so-chip--gray">All goals</span></div><label>Experience<textarea value={experience} onChange={(event) => setExperience(event.target.value)} /></label><label>Strengths<textarea value={strengths} onChange={(event) => setStrengths(event.target.value)} /></label><label>Weaknesses or gaps<textarea value={weaknesses} onChange={(event) => setWeaknesses(event.target.value)} /></label><p className="so-help">This profile is global. Progress, evidence, and roadmap decisions remain isolated inside each goal.</p>{workspace.saveProfile.isError && <p className="so-error" role="alert">The profile changed or could not be saved. Reload the latest revision and try again.</p>}<Button disabled={unchanged || workspace.saveProfile.isPending} onClick={() => workspace.saveProfile.mutate({ update: { experience: experience || null, strengths: strengths || null, weaknesses: weaknesses || null }, revision: profile.profile_revision })}>{workspace.saveProfile.isPending ? 'Saving…' : workspace.saveProfile.isSuccess && unchanged ? 'Saved' : 'Save profile'}</Button></section>
 }
 
+export function ReviewPreferencesPanel({ goalId }: { goalId: string | null }) {
+  const review = useReviewPreferences(goalId)
+  const preferences = review.preferences.data
+  const save = (patch: Partial<ReviewPreferencesPatch>) => {
+    if (preferences) review.save.mutate({ current: preferences, patch })
+  }
+  if (!goalId) return <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div></div><p>Select a current goal to configure its review queue.</p><p className="so-help">Review preferences belong to one goal and never block its roadmap.</p></section>
+  if (review.preferences.isPending) return <section className="so-panel so-settings-wide" aria-live="polite"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div></div><p>Loading review preferences…</p></section>
+  if (!preferences || review.preferences.isError) return <section className="so-panel so-settings-wide" role="alert"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div></div><p>Review preferences are unavailable. No browser defaults were substituted.</p><Button tone="secondary" onClick={() => void review.preferences.refetch()}>Retry</Button></section>
+  return <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div><label className="so-switch"><input type="checkbox" checked={preferences.enabled} disabled={review.save.isPending} onChange={(event) => save({ enabled: event.target.checked })} /><span>{preferences.enabled ? 'Enabled' : 'Disabled'}</span></label></div><div className="so-review-controls" aria-disabled={!preferences.enabled}><label>Session length<select disabled={!preferences.enabled || review.save.isPending} value={preferences.duration_minutes} onChange={(event) => save({ duration_minutes: Number(event.target.value) })}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={25}>25 minutes</option></select></label><label>Cadence<select disabled={!preferences.enabled || review.save.isPending} value={preferences.cadence} onChange={(event) => save({ cadence: event.target.value as NonNullable<ReviewPreferencesPatch['cadence']> })}><option value="once-weekly">Once a week</option><option value="twice-weekly">Twice a week</option><option value="three-times-weekly">Three times a week</option></select></label><label className="so-check"><input type="checkbox" disabled={!preferences.enabled || review.save.isPending} checked={preferences.retrieval_enabled} onChange={(event) => save({ retrieval_enabled: event.target.checked })} /> Retrieval prompts</label><label className="so-check"><input type="checkbox" disabled={!preferences.enabled || review.save.isPending} checked={preferences.varied_context_enabled} onChange={(event) => save({ varied_context_enabled: event.target.checked })} /> Varied contexts</label></div><p className="so-help">Disabling or dismissing review never blocks the roadmap and carries no readiness penalty. Scheduling rules: {preferences.scheduling_version}.</p>{review.save.isPending && <p className="so-help" role="status">Saving review preferences…</p>}{review.save.isSuccess && <p className="so-help" role="status">Review preferences saved.</p>}{review.save.isError && <p className="so-error" role="alert">Preferences were not saved. Reload the latest revision and try again.</p>}</section>
+}
+
 function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
   const { currentGoal } = useProfileGoals()
   const imports = useImports(currentGoal?.id ?? null, null).imports
@@ -305,15 +309,15 @@ function SettingsPage({ state, setState, navigate }: { state: OperationsState; s
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
   }
   return <>
-    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile applies across every goal. Goal progress and evidence remain isolated; other prototype preferences on this page are local to this browser." />
+    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile applies across every goal. Review preferences are saved per goal; display and accessibility choices remain local to this browser." />
     <div className="so-settings-grid">
       <GlobalProfileSettings />
       <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div><fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" checked={state.progress === 'detailed'} onChange={() => setState((s) => ({ ...s, progress: 'detailed' }))} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, and evidence links.</small></span></label><label><input type="radio" name="progress" checked={state.progress === 'simple'} onChange={() => setState((s) => ({ ...s, progress: 'simple' }))} /><span><strong>Simple</strong><small>Condensed display only; underlying local fixture data is not deleted.</small></span></label></fieldset></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div><label className="so-switch"><input type="checkbox" checked={state.review.enabled} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, enabled: event.target.checked } }))} /><span>{state.review.enabled ? 'Enabled' : 'Disabled'}</span></label></div><div className="so-review-controls" aria-disabled={!state.review.enabled}><label>Session length<select disabled={!state.review.enabled} value={state.review.duration} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, duration: Number(event.target.value) } }))}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={25}>25 minutes</option></select></label><label>Cadence<select disabled={!state.review.enabled} value={state.review.cadence} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, cadence: event.target.value } }))}><option>Once a week</option><option>Twice a week</option><option>Three times a week</option></select></label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.retrieval} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, retrieval: event.target.checked } }))} /> Retrieval prompts</label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.variedContext} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, variedContext: event.target.checked } }))} /> Varied contexts</label></div><p className="so-help">Disabling or dismissing review never blocks the roadmap and carries no readiness penalty.</p></section>
+      <ReviewPreferencesPanel goalId={currentGoal?.id ?? null} />
       <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>
       <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div>{!currentGoal ? <p>Select a current goal to review its imports.</p> : imports.isPending ? <p>Loading the current goal’s server imports…</p> : imports.isError ? <><p role="alert">The imports summary is unavailable. No browser count was substituted.</p><Button tone="secondary" onClick={() => void imports.refetch()}>Retry summary</Button></> : <p>{imports.data?.length ?? 0} preserved import{imports.data?.length === 1 ? '' : 's'} for {currentGoal.name}; {(imports.data ?? []).filter(item => item.status === 'failed' || item.status === 'cancelled').length} need attention.</p>}<Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Not connected</span></div><div className="so-network-grid"><article><strong>Model providers</strong><p>No Codex, Claude, or other provider adapter is configured or invoked by these pages.</p></article><article><strong>Source retrieval</strong><p>No external documentation or citation source is fetched.</p></article><article><strong>Local runner</strong><p>No Java process, subprocess sandbox, or execution service is present.</p></article></div><p className="so-help">This prototype makes no strict-offline guarantee for the wider application; these operational pages themselves use bundled data and localStorage.</p></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads this prototype’s remaining local operational preferences and update decisions. Server imports are not represented as exported here.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns the remaining local operational preferences to fixture defaults. It does not delete server imports.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Profile, preferences, disputes, and canonical update choices stored by these pages will be replaced with fixture defaults. Server imports remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
+      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads local display, accessibility, dispute, and update-decision state. Server imports and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local display, accessibility, dispute, and update-decision state to defaults. Server imports and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local display, accessibility, dispute, and canonical update choices will be replaced with fixture defaults. Server imports and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
     </div>
   </>
 }

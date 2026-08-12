@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from yuno.api.contracts import (
@@ -21,10 +21,18 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
 )
-from yuno.modules.learning_content.domain import LayerDocument, TopicLayer
+from yuno.modules.learning_content.domain import (
+    GenerationAttempt,
+    LayerDocument,
+    TopicLayer,
+)
 from yuno.modules.learning_content.ports import LearningContentUnitOfWork
-from yuno.modules.learning_content.service import get_layer, get_topic, list_layers
-from yuno.shared.application.jobs import JobDispatcher, JobRequest
+from yuno.modules.learning_content.service import (
+    get_topic,
+    list_layers,
+    reserve_generation,
+)
+from yuno.shared.application.jobs import JobDispatcher, JobRef, JobRequest
 from yuno.shared.domain.errors import NotFoundError
 
 router = APIRouter(tags=["learning-content"])
@@ -58,11 +66,20 @@ def get_topic_layers(
     topic_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
+    request: Request,
 ) -> TopicLayersResponse:
     goal = uow.profiles_goals.get_goal(owner_id, goal_id)
     if goal is None:
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
-    layers = list_layers(uow, owner_id, goal_id, topic_id)
+    adapter = request.app.state.generation_adapter
+    layers = list_layers(
+        uow,
+        owner_id,
+        goal_id,
+        topic_id,
+        getattr(adapter, "provider", None),
+        getattr(adapter, "model", None),
+    )
     return TopicLayersResponse(
         goal_id=goal_id,
         graph_version_id=goal.graph_version_id,
@@ -82,8 +99,23 @@ def get_topic_layer(
     layer: TopicLayer,
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
+    request: Request,
 ) -> TopicLayerResponse:
-    return _layer_response(get_layer(uow, owner_id, goal_id, topic_id, layer))
+    adapter = request.app.state.generation_adapter
+    return _layer_response(
+        next(
+            item
+            for item in list_layers(
+                uow,
+                owner_id,
+                goal_id,
+                topic_id,
+                getattr(adapter, "provider", None),
+                getattr(adapter, "model", None),
+            )
+            if item.layer is layer
+        )
+    )
 
 
 @router.post(
@@ -100,21 +132,12 @@ def generate_topic_layer(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
 ) -> JSONResponse:
-    list_layers(uow, owner_id, goal_id, topic_id)
+    ref, attempt, dispatch = reserve_generation(
+        uow, owner_id, goal_id, topic_id, layer, key
+    )
+    uow.commit()
     return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                kind="generate_topic_content",
-                owner_id=owner_id,
-                payload={
-                    "goal_id": goal_id,
-                    "topic_id": topic_id,
-                    "layer": layer.value,
-                },
-                dedupe_key=f"{goal_id}:{topic_id}:{layer.value}",
-                idempotency_key=key,
-            )
-        )
+        _enqueue_generation(ref, attempt, dispatch, dispatcher, owner_id, key)
     )
 
 
@@ -126,18 +149,46 @@ def generate_topic_layer(
 def regenerate_artifact(
     artifact_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
 ) -> JSONResponse:
+    artifact = uow.learning_content.get_artifact(owner_id, artifact_id)
+    if artifact is None:
+        raise NotFoundError("The generated artifact was not found.")
+    ref, attempt, dispatch = reserve_generation(
+        uow,
+        owner_id,
+        artifact.goal_id,
+        artifact.topic_stable_id,
+        artifact.layer,
+        key,
+        force=True,
+    )
+    uow.commit()
     return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                kind="regenerate_artifact",
-                owner_id=owner_id,
-                payload={"artifact_id": artifact_id},
-                dedupe_key=artifact_id,
-                idempotency_key=key,
-            )
+        _enqueue_generation(ref, attempt, dispatch, dispatcher, owner_id, key)
+    )
+
+
+def _enqueue_generation(
+    ref: JobRef,
+    attempt: GenerationAttempt,
+    dispatch: bool,
+    dispatcher: JobDispatcher,
+    owner_id: str,
+    key: str,
+) -> JobRef:
+    if not dispatch:
+        return ref
+    return dispatcher.enqueue(
+        JobRequest(
+            "generate_topic_content",
+            owner_id,
+            {"attempt_id": attempt.id},
+            attempt.artifact_id,
+            key,
+            requested_job_id=attempt.job_id,
         )
     )
 
@@ -165,4 +216,8 @@ def _layer_response(layer: LayerDocument) -> TopicLayerResponse:
             if checkpoint is not None
             else None
         ),
+        artifact_id=layer.artifact_id,
+        content_origin=layer.content_origin,
+        generation=layer.generation,
+        stale_reason=layer.stale_reason,
     )

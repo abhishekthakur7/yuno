@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from yuno.modules.diagnostics.domain import (
     DiagnosticAction,
@@ -27,7 +29,20 @@ from yuno.modules.imports.domain import (
     MappingState,
     TrustState,
 )
-from yuno.modules.learning_content.domain import Capability, LayerState, TopicLayer
+from yuno.modules.learning_content.domain import (
+    Capability,
+    GenerationAttemptStatus,
+    LayerState,
+    StaleReason,
+    TopicLayer,
+)
+from yuno.modules.notebook_review.domain import (
+    NotebookEntryKind,
+    ReviewCadence,
+    ReviewConfidence,
+    ReviewItemStatus,
+    ReviewPromptType,
+)
 from yuno.modules.profiles_goals.domain import (
     GoalPath,
     GoalStatus,
@@ -35,6 +50,7 @@ from yuno.modules.profiles_goals.domain import (
     TargetCapability,
     TargetLevel,
 )
+from yuno.modules.provenance.domain import ClaimType, SourceAvailability
 from yuno.modules.roadmap.domain import (
     CorrectionType,
     LearningClassification,
@@ -114,6 +130,128 @@ class LearningStateExplanationsResponse(BaseModel):
     effective_now: str
     input_hash: str
     authoritative: bool = False
+
+
+class NotebookEntryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entry_kind: NotebookEntryKind
+    markdown: str
+    topic_stable_id: str | None = None
+    evidence_id: str | None = None
+    source_id: str | None = None
+
+
+class NotebookEntryPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    markdown: str | None = None
+    topic_stable_id: str | None = None
+    evidence_id: str | None = None
+    source_id: str | None = None
+
+    @field_validator("markdown")
+    @classmethod
+    def reject_null_markdown(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("markdown cannot be null when supplied")
+        return value
+
+
+class NotebookEntryResponse(BaseModel):
+    id: str
+    goal_id: str
+    topic_stable_id: str | None
+    evidence_id: str | None
+    source_id: str | None
+    entry_kind: NotebookEntryKind
+    markdown: str
+    row_version: int
+    created_at: str
+    updated_at: str
+
+
+class ReviewPreferencesPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool | None = None
+    duration_minutes: int | None = None
+    cadence: ReviewCadence | None = None
+    retrieval_enabled: bool | None = None
+    varied_context_enabled: bool | None = None
+
+    @field_validator(
+        "enabled",
+        "duration_minutes",
+        "cadence",
+        "retrieval_enabled",
+        "varied_context_enabled",
+    )
+    @classmethod
+    def reject_null_preferences(cls, value: object | None) -> object:
+        if value is None:
+            raise ValueError("review preference cannot be null when supplied")
+        return value
+
+
+class ReviewPreferencesResponse(BaseModel):
+    goal_id: str
+    enabled: bool
+    duration_minutes: int
+    cadence: ReviewCadence
+    retrieval_enabled: bool
+    varied_context_enabled: bool
+    scheduling_version: str
+    row_version: int
+    updated_at: str
+
+
+class ReviewItemResponse(BaseModel):
+    id: str
+    goal_id: str
+    topic_stable_id: str
+    prompt_ref: str
+    prompt_type: ReviewPromptType
+    prompt: str
+    answer: str | None = None
+    status: ReviewItemStatus
+    due_at: str | None
+    interval_label: str | None
+    context: str | None
+    scheduling_version: str
+    failure_reference: str | None
+    retryable: bool = False
+    row_version: int
+    created_at: str
+    updated_at: str
+
+
+class ReviewQueueResponse(BaseModel):
+    goal_id: str
+    enabled: bool
+    scheduling_version: str
+    items: list[ReviewItemResponse]
+
+
+class ReviewAttemptCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    response: str
+    confidence: ReviewConfidence | None = None
+    context_result: str | None = None
+
+
+class ReviewAttemptResponse(BaseModel):
+    id: str
+    goal_id: str
+    review_item_id: str
+    response: str
+    confidence: ReviewConfidence | None
+    feedback: str | None
+    correction: str | None
+    next_interval_label: str | None
+    context_variation: str | None
+    context_result: str | None
+    scheduling_version: str
+    created_at: str
+    review_status: ReviewItemStatus
+    revealed_answer: str
 
 
 class ImportCreateRequest(BaseModel):
@@ -376,6 +514,13 @@ class TopicCheckpointResponse(BaseModel):
     limitation: str
 
 
+class LayerGenerationResponse(BaseModel):
+    job_id: str | None
+    status: GenerationAttemptStatus | None
+    retryable: bool
+    failure_reference: str | None
+
+
 class TopicLayerResponse(BaseModel):
     layer: TopicLayer
     state: LayerState
@@ -383,6 +528,68 @@ class TopicLayerResponse(BaseModel):
     markdown: str | None
     markdown_hash: str | None
     checkpoint: TopicCheckpointResponse | None
+    artifact_id: str | None = None
+    content_origin: Literal["authored", "generated"] | None = None
+    generation: LayerGenerationResponse | None = None
+    stale_reason: StaleReason | None = None
+
+
+class SourceResponse(BaseModel):
+    id: str
+    origin: str
+    source_type: str
+    title: str
+    publisher: str | None
+    canonical_url: str | None
+    license_status: str
+    availability_status: SourceAvailability
+    created_at: str
+    updated_at: str
+
+
+class CitationResponse(BaseModel):
+    id: str
+    source: SourceResponse
+    source_snapshot_id: str | None
+    locator: str
+    support_kind: str
+    note: str | None
+
+
+class ClaimResponse(BaseModel):
+    id: str
+    claim_text: str
+    claim_type: ClaimType
+    sensitive: bool
+    citations: list[CitationResponse]
+
+
+class ArtifactSnapshotResponse(BaseModel):
+    id: str
+    evidence_state_hash: str
+    profile_hash: str
+    provider: str
+    model: str
+    generated_at: str
+    schema_version: str
+    contract_version: str
+    prompt_template_version: str
+    snapshot_hash: str
+
+
+class ArtifactProvenanceRefResponse(BaseModel):
+    kind: str
+    reference_id: str
+
+
+class ArtifactProvenanceResponse(BaseModel):
+    artifact_id: str
+    baked_snapshot: ArtifactSnapshotResponse
+    current_snapshot_hash: str
+    stale: bool
+    stale_reasons: list[StaleReason]
+    refs: list[ArtifactProvenanceRefResponse]
+    claims: list[ClaimResponse]
 
 
 class TopicLayersResponse(BaseModel):

@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from yuno.shared.domain.errors import DomainValidationError
+from yuno.shared.domain.hashing import hash_payload
+
+EMPTY_IMPORTS_HASH = hash_payload([])
+FIXTURE_PROMPT_TEMPLATE_VERSION = "fixture-v0"
+GENERATION_SCHEMA_VERSION = "generate-result-v1"
+GENERATION_CONTRACT_VERSION = "fixture-v0"
 
 
 class TopicLayer(StrEnum):
@@ -30,9 +36,234 @@ class Capability(StrEnum):
 
 class LayerState(StrEnum):
     READY = "ready"
-    EMPTY = "empty"
+    ABSENT = "absent"
+    GENERATING = "generating"
     STALE = "stale"
     UNAVAILABLE = "unavailable"
+
+
+class ArtifactState(StrEnum):
+    GENERATING = "generating"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class GenerationAttemptStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    QUARANTINED = "quarantined"
+
+
+class StaleReason(StrEnum):
+    PERSONALIZATION_SNAPSHOT_MISMATCH = "personalization-snapshot-mismatch"
+    CACHE_KEY_CHANGED = "cache-key-changed"
+
+
+@dataclass(frozen=True)
+class D3CacheKey:
+    canonical_graph_version: str
+    topic_id: str
+    goal_id: str
+    layer: TopicLayer
+    topic_mapped_approved_imports_hash: str
+    prompt_template_version: str
+
+
+def d3_cache_key_hash(key: D3CacheKey) -> str:
+    values = {
+        "canonical_graph_version": key.canonical_graph_version,
+        "topic_id": key.topic_id,
+        "goal_id": key.goal_id,
+        "layer": key.layer.value,
+        "topic_mapped_approved_imports_hash": key.topic_mapped_approved_imports_hash,
+        "prompt_template_version": key.prompt_template_version,
+    }
+    if any(not str(value).strip() for value in values.values()):
+        raise DomainValidationError("Every D3 cache-key component must be non-blank.")
+    return hash_payload(values)
+
+
+def personalization_is_stale(
+    baked_snapshot_hash: str, current_snapshot_hash: str
+) -> bool:
+    """Pure D3 comparison; mismatch never authorizes replacing the cached body."""
+    return baked_snapshot_hash != current_snapshot_hash
+
+
+def evaluate_artifact_staleness(
+    baked_cache_key_hash: str,
+    current_cache_key_hash: str,
+    baked_snapshot_hash: str,
+    current_snapshot_hash: str,
+) -> tuple[StaleReason, ...]:
+    reasons = []
+    if baked_cache_key_hash != current_cache_key_hash:
+        reasons.append(StaleReason.CACHE_KEY_CHANGED)
+    if baked_snapshot_hash != current_snapshot_hash:
+        reasons.append(StaleReason.PERSONALIZATION_SNAPSHOT_MISMATCH)
+    return tuple(reasons)
+
+
+@dataclass(frozen=True)
+class GeneratedArtifact:
+    id: str
+    owner_id: str
+    goal_id: str
+    graph_version_id: str
+    topic_stable_id: str
+    layer: TopicLayer
+    artifact_type: str
+    imports_hash: str
+    prompt_template_version: str
+    cache_key_hash: str
+    state: ArtifactState
+    body: str | None
+    body_hash: str | None
+    current_snapshot_id: str | None
+    producing_job_id: str | None
+    last_attempt_id: str | None
+    last_job_id: str | None
+    last_attempt_status: GenerationAttemptStatus | None
+    failure_reference: str | None
+    retryable: bool
+    row_version: int
+    created_at: str
+    updated_at: str
+    generated_at: str | None
+
+
+@dataclass(frozen=True)
+class GenerationAttempt:
+    id: str
+    owner_id: str
+    goal_id: str
+    artifact_id: str
+    cache_key_hash: str
+    job_id: str
+    kind: str
+    status: GenerationAttemptStatus
+    request_hash: str
+    result_hash: str | None
+    failure_classification: str | None
+    failure_reference: str | None
+    retryable: bool
+    created_at: str
+    started_at: str | None
+    completed_at: str | None
+
+
+@dataclass(frozen=True)
+class GenerateRequest:
+    owner_id: str
+    goal_id: str
+    topic_id: str
+    layer: TopicLayer
+    graph_version: str
+    imports_hash: str
+    prompt_template_version: str
+    profile_hash: str
+    evidence_state_hash: str
+
+
+@dataclass(frozen=True)
+class GenerateResult:
+    body: str
+    provider: str
+    model: str
+    contract_version: str
+    schema_version: str
+    generated_at: str
+    provenance_refs: tuple[tuple[str, str], ...] = ()
+    claims: tuple[GeneratedClaim, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GeneratedCitation:
+    source_id: str
+    source_snapshot_id: str | None
+    locator: str
+    support_kind: str
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class GeneratedClaim:
+    claim_text: str
+    claim_type: str
+    sensitive: bool = False
+    citations: tuple[GeneratedCitation, ...] = ()
+
+
+@dataclass(frozen=True)
+class GenerationIdempotencyRecord:
+    id: str
+    owner_id: str
+    operation: str
+    idempotency_key: str
+    request_hash: str
+    attempt_id: str
+    job_id: str
+    response_json: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class GenerationSnapshot:
+    id: str
+    owner_id: str
+    goal_id: str
+    artifact_id: str
+    attempt_id: str
+    evidence_state_hash: str
+    profile_hash: str
+    provider: str
+    model: str
+    generated_at: str
+    schema_version: str
+    contract_version: str
+    prompt_template_version: str
+    snapshot_hash: str
+
+
+@dataclass(frozen=True)
+class GenerationProvenanceRef:
+    id: str
+    owner_id: str
+    goal_id: str
+    artifact_id: str
+    snapshot_id: str
+    ref_kind: str
+    reference_id: str
+
+
+@dataclass(frozen=True)
+class GenerationClaimRecord:
+    id: str
+    owner_id: str
+    goal_id: str | None
+    content_revision_id: str | None
+    generated_artifact_id: str | None
+    snapshot_id: str | None
+    claim_text: str
+    claim_type: str
+    sensitive: bool
+    status: str
+
+
+@dataclass(frozen=True)
+class GenerationCitationRecord:
+    id: str
+    owner_id: str
+    goal_id: str
+    claim_id: str
+    source_id: str
+    source_snapshot_id: str | None
+    locator: str
+    support_kind: str
+    note: str | None
 
 
 @dataclass(frozen=True)
@@ -56,6 +287,10 @@ class LayerDocument:
     markdown: str | None
     markdown_hash: str | None
     checkpoint: Checkpoint | None
+    artifact_id: str | None = None
+    content_origin: str | None = None
+    generation: dict[str, object] | None = None
+    stale_reason: StaleReason | None = None
 
 
 @dataclass(frozen=True)

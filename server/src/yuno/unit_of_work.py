@@ -38,8 +38,14 @@ from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
 from yuno.modules.imports.ports import ImportRepository
 from yuno.modules.imports.repository import SqlAlchemyImportRepository
+from yuno.modules.learning_content.ports import LearningContentRepository
+from yuno.modules.learning_content.repository import SqlAlchemyLearningContentRepository
+from yuno.modules.notebook_review.ports import NotebookReviewRepository
+from yuno.modules.notebook_review.repository import SqlAlchemyNotebookReviewRepository
 from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
 from yuno.modules.profiles_goals.repository import SqlAlchemyProfilesGoalsRepository
+from yuno.modules.provenance.ports import SourceRepository
+from yuno.modules.provenance.repository import SqlAlchemySourceRepository
 from yuno.modules.roadmap.ports import RoadmapRepository
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
 from yuno.shared.application.unit_of_work import UnitOfWork, UnitOfWorkFactory
@@ -81,7 +87,10 @@ class SqlAlchemyUnitOfWork:
     diagnostics: DiagnosticsRepository
     evidence: EvidenceRepository
     imports: ImportRepository
+    learning_content: LearningContentRepository
+    notebook_review: NotebookReviewRepository
     profiles_goals: ProfilesGoalsRepository
+    provenance: SourceRepository
     roadmap: RoadmapRepository
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
@@ -102,7 +111,10 @@ class SqlAlchemyUnitOfWork:
         self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
         self.evidence = SqlAlchemyEvidenceRepository(self._session)
         self.imports = SqlAlchemyImportRepository(self._session)
+        self.learning_content = SqlAlchemyLearningContentRepository(self._session)
+        self.notebook_review = SqlAlchemyNotebookReviewRepository(self._session)
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
+        self.provenance = SqlAlchemySourceRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
         return self
 

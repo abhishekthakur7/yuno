@@ -17,11 +17,15 @@ from yuno.api.routes.evidence import run_assessment_job, run_reevaluation_job
 from yuno.api.routes.imports import router as imports_router
 from yuno.api.routes.imports import run_import_parse_job
 from yuno.api.routes.learning_content import router as learning_content_router
+from yuno.api.routes.notebook_review import router as notebook_review_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
+from yuno.api.routes.provenance import router as provenance_router
 from yuno.api.routes.roadmap import router as roadmap_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
 from yuno.modules.identity.service import ensure_local_owner
+from yuno.modules.learning_content.service import run_generation
+from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
 from yuno.shared.domain.clock import SystemClock
 from yuno.shared.infrastructure.alembic_guard import require_single_head
@@ -57,13 +61,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             dispatcher = InProcessJobDispatcher()
 
-            def unavailable_generation(_request: object) -> None:
-                raise RuntimeError("Live generation is not configured.")
+            class UnavailableGenerationAdapter:
+                provider = "unavailable"
+                model = "unavailable"
 
-            dispatcher.register("generate_topic_content", unavailable_generation)
-            dispatcher.register("regenerate_artifact", unavailable_generation)
+                def generate(self, _request: object) -> None:
+                    raise RuntimeError("Live generation is not configured.")
+
+            app.state.generation_adapter = UnavailableGenerationAdapter()
             dispatcher.register(
-                "parse_import", lambda request: run_import_parse_job(request, uow_factory)
+                "generate_topic_content",
+                lambda request: run_generation(
+                    uow_factory,
+                    app.state.generation_adapter,
+                    request.owner_id,
+                    str(request.payload["attempt_id"]),
+                ),
+            )
+            dispatcher.register(
+                "parse_import",
+                lambda request: run_import_parse_job(request, uow_factory),
             )
             dispatcher.register(
                 "reprocess_import",
@@ -95,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.settings = resolved_settings
             app.state.head_revision = head_revision
             app.state.clock = SystemClock()
+            app.state.review_scheduler = FixtureReviewScheduler()
 
             yield
         finally:
@@ -117,6 +135,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(imports_router)
     api_router.include_router(roadmap_router)
     api_router.include_router(evidence_router)
+    api_router.include_router(notebook_review_router)
+    api_router.include_router(provenance_router)
     app.include_router(api_router)
 
     register_exception_handlers(app)

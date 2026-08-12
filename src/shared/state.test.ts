@@ -63,12 +63,13 @@ describe('shared learner behavior', () => {
   it('serializes only the bounded draft slices that remain browser-backed', () => {
     const persisted = persistedLearningDrafts(createInitialState())
     expect(Object.keys(persisted).sort()).toEqual([
-      'codeDraft', 'codeNotes', 'evidence', 'mock', 'practice', 'runResult', 'version',
+      'codeDraft', 'evidence', 'mock', 'practice', 'runResult', 'version',
     ])
     expect(persisted).not.toHaveProperty('onboarding')
     expect(persisted).not.toHaveProperty('roadmap')
     expect(persisted).not.toHaveProperty('roadmapOrder')
     expect(persisted).not.toHaveProperty('currentLessonId')
+    expect(persisted).not.toHaveProperty('codeNotes')
   })
 
 })
