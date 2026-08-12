@@ -21,6 +21,8 @@ from yuno.modules.evidence_evaluation.domain import (
     DimensionOutcome,
     DisputeStatus,
     ProgressClassification,
+    ReevaluationStatus,
+    TransferClassification,
 )
 from yuno.modules.imports.domain import (
     ImportStatus,
@@ -58,6 +60,7 @@ from yuno.modules.roadmap.domain import (
     OverlayProposalState,
     OverlayProposalType,
 )
+from yuno.modules.settings_data.domain import ProgressDisplay
 from yuno.shared.application.jobs import JobRef, JobStatus
 
 
@@ -130,6 +133,16 @@ class LearningStateExplanationsResponse(BaseModel):
     effective_now: str
     input_hash: str
     authoritative: bool = False
+
+
+class OwnerSettingsPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    progress_display: ProgressDisplay
+
+
+class OwnerSettingsResponse(BaseModel):
+    progress_display: ProgressDisplay
+    row_version: int
 
 
 class NotebookEntryCreateRequest(BaseModel):
@@ -422,12 +435,23 @@ class EvidenceResponse(BaseModel):
     summary: str
     origin: str
     created_at: str
+    active_assessment_id: str | None
+
+
+class EvidenceTransferResponse(BaseModel):
+    id: str
+    target_goal_id: str
+    learning_state_id: str
+    classification: TransferClassification
+    rationale: str
+    created_at: str
 
 
 class EvidenceDetailResponse(EvidenceResponse):
     content: str | None
     content_version: str | None
     tombstoned: bool
+    transfers: list[EvidenceTransferResponse]
 
 
 class AssessmentCreateRequest(BaseModel):
@@ -450,6 +474,27 @@ class AssessmentDimensionResponse(BaseModel):
     outcome: DimensionOutcome
     rationale: str
     evidence_refs: list[str]
+
+
+class ReevaluationRequestResponse(BaseModel):
+    id: str
+    dispute_id: str
+    status: ReevaluationStatus
+    job_id: str
+    resulting_assessment_id: str | None
+    failure_reference: str | None
+    requested_at: str
+    completed_at: str | None
+
+
+class AssessmentDisputeDetailResponse(BaseModel):
+    id: str
+    reason: str
+    status: DisputeStatus
+    requested_at: str
+    resolved_at: str | None
+    resolution_note: str | None
+    reevaluation: ReevaluationRequestResponse | None
 
 
 class AssessmentResponse(BaseModel):
@@ -481,6 +526,7 @@ class AssessmentResponse(BaseModel):
     derivation_excluded: bool
     created_at: str
     dimensions: list[AssessmentDimensionResponse]
+    disputes: list[AssessmentDisputeDetailResponse]
 
 
 class AssessmentDisputeRequest(BaseModel):

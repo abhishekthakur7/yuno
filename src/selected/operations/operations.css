@@ -3,6 +3,9 @@
 @media(prefers-reduced-motion:reduce){.so-page *,.so-dialog-overlay{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}.so-spin{animation:none!important}}.so-reduced-motion *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}.so-reduced-motion .so-spin{animation:none!important}
 
 .so-page{overflow-wrap:anywhere}
+.so-tombstone-warning{border-left:4px solid var(--so-amber)}
+.so-region-failure{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid #d8b1aa;background:#fff5f3}
+.so-region-failure p{margin:0;color:#783934}
 .so-page img,.so-page svg{max-width:100%}
 .so-statement-list article.is-muted{opacity:1;background:#f4f6f5}
 .so-statement-list article.is-muted .so-original{color:#526158}
@@ -25,7 +28,7 @@
 .so-dialog{--so-line:#d9e2dc;--so-muted:#526158;--so-green-dark:#154d37;color:#18251f;overflow-wrap:anywhere}
 .so-dialog button:focus-visible{outline:3px solid #80b9a0;outline-offset:3px}
 .so-dialog.so-no-motion,.so-dialog-overlay.so-no-motion{animation:none!important;transition:none!important}
-@media(max-width:760px){.so-practice-summary,.so-handoff{align-items:stretch;flex-direction:column}.so-practice-summary .so-button,.so-handoff .so-button{width:100%}.so-sticky-actions>div{grid-template-columns:1fr 1fr}.so-facts{grid-template-columns:minmax(90px,35%) minmax(0,1fr)}.so-update-summary{overflow:hidden}.so-dialog{max-height:calc(100dvh - 28px);overflow:auto}.so-select-change{margin:-8px 0 0 -8px}}
+@media(max-width:760px){.so-practice-summary,.so-handoff,.so-region-failure{align-items:stretch;flex-direction:column}.so-practice-summary .so-button,.so-handoff .so-button,.so-region-failure .so-button{width:100%}.so-sticky-actions>div{grid-template-columns:1fr 1fr}.so-facts{grid-template-columns:minmax(90px,35%) minmax(0,1fr)}.so-update-summary{overflow:hidden}.so-dialog{max-height:calc(100dvh - 28px);overflow:auto}.so-select-change{margin:-8px 0 0 -8px}}
 
 .so-page h1{font-family:inherit;font-size:clamp(32px,4vw,43px);font-weight:720}
 .so-evidence-hero h2{font-family:inherit;font-size:28px;font-weight:680}

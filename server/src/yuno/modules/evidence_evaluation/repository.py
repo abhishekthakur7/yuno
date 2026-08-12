@@ -88,7 +88,7 @@ class SqlAlchemyEvidenceRepository(SqlAlchemyRepository):
         rows = self._session.scalars(
             owner_scoped_select(EvidenceRow, owner_id)
             .where(EvidenceRow.goal_id == goal_id)
-            .order_by(EvidenceRow.id)
+            .order_by(EvidenceRow.created_at, EvidenceRow.id)
         ).all()
         return tuple(_evidence(row) for row in rows)
 
@@ -255,6 +255,16 @@ class SqlAlchemyEvidenceRepository(SqlAlchemyRepository):
             )
         ).one_or_none()
         return _dispute(row) if row else None
+
+    def list_disputes(
+        self, owner_id: str, assessment_id: str
+    ) -> Sequence[AssessmentDispute]:
+        rows = self._session.scalars(
+            owner_scoped_select(AssessmentDisputeRow, owner_id)
+            .where(AssessmentDisputeRow.assessment_id == assessment_id)
+            .order_by(AssessmentDisputeRow.requested_at, AssessmentDisputeRow.id)
+        ).all()
+        return tuple(_dispute(row) for row in rows)
 
     def add_reevaluation_request(
         self, request: ReevaluationRequest

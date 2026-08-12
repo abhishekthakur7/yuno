@@ -122,7 +122,6 @@ def _seed(uow_factory: UnitOfWorkFactory):
 def test_transfer_and_delete_are_conservative_exact_and_atomic(
     client, uow_factory: UnitOfWorkFactory, engine
 ) -> None:
-    del client
     owner_id, source_id, target_id, evidence_id = _seed(uow_factory)
     with uow_factory() as uow:
         ref = transfer_evidence(
@@ -136,6 +135,19 @@ def test_transfer_and_delete_are_conservative_exact_and_atomic(
             recommended_depth="Implementation",
         )
         uow.commit()
+
+    detail = client.get(f"/api/v1/evidence/{evidence_id}")
+    assert detail.status_code == 200
+    assert detail.json()["transfers"] == [
+        {
+            "id": ref.id,
+            "target_goal_id": target_id,
+            "learning_state_id": ref.learning_state_id,
+            "classification": "partial",
+            "rationale": "Useful experience, but the target bar is higher.",
+            "created_at": ref.created_at,
+        }
+    ]
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM evidence")) == 1

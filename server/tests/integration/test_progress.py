@@ -86,25 +86,6 @@ def test_database_invalidates_memo_and_rejects_correction_branches(client: TestC
     assert recovered["input_hash"] != "stale"
 
 
-def test_progress_display_is_presentation_only_no_data_loss(client: TestClient, engine: Engine, uow_factory: UnitOfWorkFactory):
-    client.app.state.clock = FixedClock()
-    goal_id = _goal(client, uow_factory)
-    assert client.get(f"/api/v1/goals/{goal_id}/progress").status_code == 200
-    with engine.connect() as connection:
-        before = {
-            table: connection.execute(text(f"SELECT * FROM {table} ORDER BY 1")).all()
-            for table in ("evidence", "assessments", "goal_progress_memos")
-        }
-    assert client.get(f"/api/v1/goals/{goal_id}/progress", params={"progress_display": "simple"}).status_code == 200
-    assert client.get(f"/api/v1/goals/{goal_id}/progress", params={"progress_display": "detailed"}).status_code == 200
-    with engine.connect() as connection:
-        after = {
-            table: connection.execute(text(f"SELECT * FROM {table} ORDER BY 1")).all()
-            for table in ("evidence", "assessments", "goal_progress_memos")
-        }
-    assert before == after
-
-
 def test_memo_hits_within_fixture_day_and_invalidates_at_day_boundary(
     client: TestClient, engine: Engine, uow_factory: UnitOfWorkFactory
 ):

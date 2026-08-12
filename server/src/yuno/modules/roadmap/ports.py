@@ -105,6 +105,16 @@ class ProgressTransferView:
     created_at: str
 
 
+@dataclass(frozen=True)
+class EvidenceTransferView:
+    id: str
+    target_goal_id: str
+    learning_state_id: str
+    classification: str
+    rationale: str
+    created_at: str
+
+
 class TransferLearningStateView(Protocol):
     id: str
     owner_id: str

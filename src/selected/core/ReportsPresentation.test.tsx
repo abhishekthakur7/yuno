@@ -1,0 +1,96 @@
+import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({ workspace: {} as any, settings: {} as any }))
+vi.mock('../../shared/use-profile-goals', () => ({ useProfileGoals: () => ({ currentGoal: { id: 'goal-1', name: 'Goal' } }) }))
+vi.mock('../../shared/use-evidence', () => ({ useGoalEvidenceReport: () => mocks.workspace }))
+vi.mock('../../shared/use-settings', () => ({ useOwnerSettings: () => mocks.settings }))
+
+import { LearningStateProvider } from '../../shared/state'
+import { Reports } from './CorePages'
+
+const query = (data: unknown) => ({ data, isPending: false, isError: false, refetch: vi.fn() })
+
+beforeEach(() => {
+  const values = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key), clear: () => values.clear() } })
+  mocks.workspace = {
+    evidence: query([]), entries: [], progress: query(undefined),
+  }
+  mocks.settings = { settings: query({ progress_display: 'detailed' }), saveProgressDisplay: { mutate: vi.fn(), isPending: false, isError: false } }
+})
+
+describe('learning Reports presentation', () => {
+  it('places its conclusion and next action before report disclosures', () => {
+    const { container } = render(<LearningStateProvider scope="reports-presentation"><Reports navigate={vi.fn()} /></LearningStateProvider>)
+    const conclusion = screen.getByRole('heading', { name: 'No terminal mock report is available.' })
+    const nextAction = screen.getByRole('heading', { name: /Finish the active mock/i })
+    const firstDisclosure = container.querySelector('details')!
+    expect(conclusion.compareDocumentPosition(firstDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nextAction.compareDocumentPosition(firstDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('aggregates source warnings and keeps per-entry failures retryable', () => {
+    const evidence = { id: 'evidence-1', summary: 'Atomic duplicate handling', evidence_type: 'lab', capability: 'implement', origin: 'learner' }
+    const retryDetail = vi.fn()
+    const retryAssessment = vi.fn()
+    const retrySources = vi.fn()
+    mocks.workspace = {
+      ...mocks.workspace,
+      evidence: query([evidence]),
+      entries: [{ evidence, detail: { ...query(undefined), isError: true, refetch: retryDetail }, assessment: { ...query(undefined), isError: true, refetch: retryAssessment }, assessmentHistory: query([]), sources: { ...query([{ id: 'source-1', title: 'Withdrawn guide', availability_status: 'withdrawn' }]), unavailable: [{ id: 'source-1', title: 'Withdrawn guide', availability_status: 'withdrawn' }], refetch: retrySources } }],
+    }
+    render(<LearningStateProvider scope="reports-failures"><Reports navigate={vi.fn()} /></LearningStateProvider>)
+    expect(screen.getByText(/Tombstoned source warning/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Withdrawn guide/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Retry evidence evidence-1 detail/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Retry evidence evidence-1 assessment/i })).toBeInTheDocument()
+  })
+
+  it('discloses assessment revisions with rubric and dispute history for each evidence entry', () => {
+    const evidence = { id: 'evidence-1', summary: 'Atomic duplicate handling', evidence_type: 'lab', capability: 'implement', origin: 'learner' }
+    const prior = { id: 'assessment-0', created_at: '2026-08-11T09:00:00Z', state: 'feedback-ready', feedback: 'Prior assessment found a retry gap.', predecessor_assessment_id: null, dimensions: [{ dimension_id: 'correctness', outcome: 'factual-correction', rationale: 'The retry boundary was incomplete.' }], disputes: [{ id: 'dispute-1', status: 'resolved', reason: 'The artifact included a transaction guard.', reevaluation: { status: 'succeeded' } }] }
+    const current = { id: 'assessment-1', created_at: '2026-08-12T09:00:00Z', state: 'ambiguity-unresolved', feedback: 'Current assessment preserves one ambiguity.', predecessor_assessment_id: 'assessment-0', ambiguities: ['Acknowledgement timing is not observable.'], dimensions: [{ dimension_id: 'correctness', outcome: 'ambiguity-unresolved', rationale: 'Atomicity is supported; timing is unknown.' }], disputes: [] }
+    mocks.workspace = {
+      ...mocks.workspace,
+      evidence: query([evidence]),
+      entries: [{ evidence, detail: query(undefined), assessment: query(current), assessmentHistory: query([current, prior]), sources: { ...query([]), unavailable: [] } }],
+    }
+    render(<LearningStateProvider scope="reports-history"><Reports navigate={vi.fn()} /></LearningStateProvider>)
+    expect(screen.getByText('Assessment history (2)')).toBeInTheDocument()
+    expect(screen.getByText('Prior assessment found a retry gap.')).toBeInTheDocument()
+    expect(screen.getByText(/2026-08-11T09:00:00Z · feedback-ready/)).toBeInTheDocument()
+    expect(screen.getByText('Original assessment')).toBeInTheDocument()
+    expect(screen.getByText(/correctness · factual-correction/)).toBeInTheDocument()
+    expect(screen.getByText('The retry boundary was incomplete.')).toBeInTheDocument()
+    expect(screen.getByText(/The artifact included a transaction guard/)).toHaveTextContent(/Re-evaluation succeeded/)
+  })
+
+  it('shows pending per-entry reads as loading instead of empty', () => {
+    const evidence = { id: 'evidence-1', summary: 'Atomic duplicate handling', evidence_type: 'lab', capability: 'implement', origin: 'learner' }
+    mocks.workspace = {
+      ...mocks.workspace,
+      evidence: query([evidence]),
+      entries: [{
+        evidence,
+        detail: { ...query(undefined), isPending: true },
+        assessment: { ...query(undefined), isPending: true },
+        assessmentHistory: { ...query([]), isPending: true },
+        sources: { ...query([]), unavailable: [], isPending: true },
+      }],
+    }
+    render(<LearningStateProvider scope="reports-pending"><Reports navigate={vi.fn()} /></LearningStateProvider>)
+    expect(screen.getByText('Loading evidence detail…')).toBeInTheDocument()
+    expect(screen.getByText('Loading assessment…')).toBeInTheDocument()
+    expect(screen.getByText('Loading assessment history…')).toBeInTheDocument()
+    expect(screen.getByText('Loading cited sources…')).toBeInTheDocument()
+    expect(screen.queryByText('No assessment attached.')).not.toBeInTheDocument()
+  })
+
+  it('does not present a pending evidence list as an empty report region', () => {
+    mocks.workspace = { ...mocks.workspace, evidence: { ...query(undefined), isPending: true } }
+    render(<LearningStateProvider scope="reports-list-pending"><Reports navigate={vi.fn()} /></LearningStateProvider>)
+    expect(screen.getByText('Loading submitted lab evidence…')).toBeInTheDocument()
+    expect(screen.queryByText('No submitted lab evidence.')).not.toBeInTheDocument()
+  })
+})

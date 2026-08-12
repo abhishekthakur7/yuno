@@ -939,6 +939,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_api_v1_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Settings */
+        patch: operations["update_settings_api_v1_settings_patch"];
+        trace?: never;
+    };
     "/api/v1/sources": {
         parameters: {
             query?: never;
@@ -1075,6 +1093,21 @@ export interface components {
             /** Rationale */
             rationale: string;
         };
+        /** AssessmentDisputeDetailResponse */
+        AssessmentDisputeDetailResponse: {
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            reevaluation: components["schemas"]["ReevaluationRequestResponse"] | null;
+            /** Requested At */
+            requested_at: string;
+            /** Resolution Note */
+            resolution_note: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            status: components["schemas"]["DisputeStatus"];
+        };
         /** AssessmentDisputeRequest */
         AssessmentDisputeRequest: {
             /** Reason */
@@ -1115,6 +1148,8 @@ export interface components {
             derivation_excluded: boolean;
             /** Dimensions */
             dimensions: components["schemas"]["AssessmentDimensionResponse"][];
+            /** Disputes */
+            disputes: components["schemas"]["AssessmentDisputeDetailResponse"][];
             /** Evaluation Method */
             evaluation_method: string;
             /** Evidence Id */
@@ -1523,6 +1558,8 @@ export interface components {
         };
         /** EvidenceDetailResponse */
         EvidenceDetailResponse: {
+            /** Active Assessment Id */
+            active_assessment_id: string | null;
             /** Capability */
             capability: string;
             /** Content */
@@ -1547,9 +1584,13 @@ export interface components {
             tombstoned: boolean;
             /** Topic Stable Id */
             topic_stable_id: string;
+            /** Transfers */
+            transfers: components["schemas"]["EvidenceTransferResponse"][];
         };
         /** EvidenceResponse */
         EvidenceResponse: {
+            /** Active Assessment Id */
+            active_assessment_id: string | null;
             /** Capability */
             capability: string;
             /** Created At */
@@ -1568,6 +1609,20 @@ export interface components {
             summary: string;
             /** Topic Stable Id */
             topic_stable_id: string;
+        };
+        /** EvidenceTransferResponse */
+        EvidenceTransferResponse: {
+            classification: components["schemas"]["TransferClassification"];
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Learning State Id */
+            learning_state_id: string;
+            /** Rationale */
+            rationale: string;
+            /** Target Goal Id */
+            target_goal_id: string;
         };
         /**
          * FieldError
@@ -2070,6 +2125,16 @@ export interface components {
          * @enum {string}
          */
         OverlayProposalType: "recommendation" | "emphasis" | "example" | "exercise" | "ordering" | "bridge";
+        /** OwnerSettingsPatchRequest */
+        OwnerSettingsPatchRequest: {
+            progress_display: components["schemas"]["ProgressDisplay"];
+        };
+        /** OwnerSettingsResponse */
+        OwnerSettingsResponse: {
+            progress_display: components["schemas"]["ProgressDisplay"];
+            /** Row Version */
+            row_version: number;
+        };
         /**
          * ProgressClassification
          * @enum {string}
@@ -2085,6 +2150,34 @@ export interface components {
             /** Uncertainty */
             uncertainty: string;
         };
+        /**
+         * ProgressDisplay
+         * @enum {string}
+         */
+        ProgressDisplay: "detailed" | "simple";
+        /** ReevaluationRequestResponse */
+        ReevaluationRequestResponse: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Dispute Id */
+            dispute_id: string;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Requested At */
+            requested_at: string;
+            /** Resulting Assessment Id */
+            resulting_assessment_id: string | null;
+            status: components["schemas"]["ReevaluationStatus"];
+        };
+        /**
+         * ReevaluationStatus
+         * @enum {string}
+         */
+        ReevaluationStatus: "requested" | "completed" | "failed";
         /**
          * ResumeDestination
          * @enum {string}
@@ -2422,6 +2515,11 @@ export interface components {
             /** Topic Id */
             topic_id: string;
         };
+        /**
+         * TransferClassification
+         * @enum {string}
+         */
+        TransferClassification: "likely-known" | "partial" | "unverified" | "new";
         /**
          * TrustState
          * @enum {string}
@@ -4587,6 +4685,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewItemResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_settings_api_v1_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerSettingsResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_settings_api_v1_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerSettingsPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerSettingsResponse"];
                 };
             };
             /** @description Default Response */

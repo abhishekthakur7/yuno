@@ -2,16 +2,12 @@ import { MOCK_FIXTURE_DRAFT, REFERENCE_CODE } from './model'
 import { createInitialState, learningReducer, persistedLearningDrafts } from './state'
 
 describe('shared learner behavior', () => {
-  it('keeps exploratory Run separate from evidence-producing Submit', () => {
+  it('keeps static fixture results separate from server-backed evidence', () => {
     let state = createInitialState()
     state = learningReducer(state, { type: 'SET_CODE', value: REFERENCE_CODE })
     state = learningReducer(state, { type: 'RUN_CHECKS' })
     expect(state.runResult?.status).toBe('passed')
-    expect(state.evidence).toHaveLength(0)
-
-    state = learningReducer(state, { type: 'SUBMIT_CODE' })
-    expect(state.evidence).toHaveLength(1)
-    expect(state.evidence[0]?.limitation).toContain('no Java or AWS runtime behavior')
+    expect(state).not.toHaveProperty('evidence')
   })
 
   it('reveals practice help only on request and feedback only after submit', () => {
@@ -63,7 +59,7 @@ describe('shared learner behavior', () => {
   it('serializes only the bounded draft slices that remain browser-backed', () => {
     const persisted = persistedLearningDrafts(createInitialState())
     expect(Object.keys(persisted).sort()).toEqual([
-      'codeDraft', 'evidence', 'mock', 'practice', 'runResult', 'version',
+      'codeDraft', 'mock', 'practice', 'runResult', 'version',
     ])
     expect(persisted).not.toHaveProperty('onboarding')
     expect(persisted).not.toHaveProperty('roadmap')
