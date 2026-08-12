@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
+from yuno.config import Settings
 from yuno.modules.identity.ports import IdentityUnitOfWork
 from yuno.shared.application.jobs import JobDispatcher
 from yuno.shared.domain.errors import (
@@ -53,6 +54,10 @@ def get_owner_id(uow: Annotated[IdentityUnitOfWork, Depends(get_unit_of_work)]) 
 def get_job_dispatcher(request: Request) -> JobDispatcher:
     """Return the process-wide `JobDispatcher` built at startup."""
     return request.app.state.dispatcher
+
+
+def get_settings_dependency(request: Request) -> Settings:
+    return request.app.state.settings
 
 
 def idempotency_key(

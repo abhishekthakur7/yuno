@@ -11,8 +11,38 @@ export type OrderConstraint = components['schemas']['OrderConstraintRequest']
 export type SkipDecision = components['schemas']['SkipDecisionRequest']
 export type DepthOverride = components['schemas']['DepthOverrideRequest']
 
+export type OverlayProposalType = components['schemas']['OverlayProposalType']
+export type OverlayProposalState = components['schemas']['OverlayProposalState']
+export type OverlayProposalDecision = components['schemas']['OverlayDecisionType']
+export type OverlayProposal = components['schemas']['OverlayProposalResponse']
+export type OverlayProposalCreate = components['schemas']['OverlayProposalCreateRequest']
+export type OverlayProposalDecisionInput = components['schemas']['OverlayProposalDecisionRequest']
+
 function failure(error: components['schemas']['ErrorResponse'] | undefined, status: number): never {
   throw new ApiError(error?.message ?? 'The roadmap could not be saved', status)
+}
+
+export function overlayProposalsQueryOptions(goalId: string | null) {
+  return queryOptions({
+    queryKey: ['goals', goalId, 'overlay-proposals'],
+    enabled: Boolean(goalId),
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/goals/{goal_id}/overlay-proposals', {
+        params: { path: { goal_id: goalId! } },
+      })
+      if (error || !data) throw new ApiError(error?.message ?? 'Recommendations could not be loaded.', response.status)
+      return data
+    },
+  })
+}
+
+export async function decideOverlayProposal(proposal: OverlayProposal, body: OverlayProposalDecisionInput) {
+  const params = { path: { proposal_id: proposal.id }, header: { 'Idempotency-Key': crypto.randomUUID() } }
+  const result = proposal.proposal_type === 'bridge'
+    ? await client.POST('/api/v1/bridges/{proposal_id}/decision', { params, body })
+    : await client.POST('/api/v1/overlay-proposals/{proposal_id}/decision', { params, body })
+  if (result.error || !result.data) throw new ApiError(result.error?.message ?? 'The recommendation decision could not be saved.', result.response.status)
+  return result.data
 }
 
 export function roadmapQueryOptions(goalId: string | null) {

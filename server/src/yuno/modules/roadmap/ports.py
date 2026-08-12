@@ -5,10 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from yuno.modules.audit.ports import AuditRepository
 from yuno.modules.roadmap.domain import (
     LearnerCorrection,
     LearningState,
     OverlayEntry,
+    OverlayProposal,
+    OverlayProposalDecision,
     PersonalOverlay,
     RoadmapIdempotencyRecord,
 )
@@ -24,6 +27,33 @@ class RoadmapRepository(Protocol):
     def list_overlay_entries(
         self, owner_id: str, goal_id: str
     ) -> Sequence[OverlayEntry]: ...
+    def add_proposal(self, proposal: OverlayProposal) -> OverlayProposal: ...
+    def get_proposal(
+        self, owner_id: str, proposal_id: str
+    ) -> OverlayProposal | None: ...
+    def get_pending_proposal_by_hash(
+        self, owner_id: str, goal_id: str, content_hash: str
+    ) -> OverlayProposal | None: ...
+    def list_proposals(
+        self, owner_id: str, goal_id: str
+    ) -> Sequence[OverlayProposal]: ...
+    def count_pending_proposals(self, owner_id: str, goal_id: str) -> int: ...
+    def update_proposal_state(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        expected_state: str,
+        *,
+        state: str,
+        state_reason: str | None,
+        decided_at: str,
+    ) -> OverlayProposal | None: ...
+    def append_proposal_decision(
+        self, decision: OverlayProposalDecision
+    ) -> OverlayProposalDecision: ...
+    def list_proposal_decisions(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[OverlayProposalDecision]: ...
     def add_learning_state(self, state: LearningState) -> LearningState: ...
     def list_learning_states(
         self, owner_id: str, goal_id: str
@@ -129,3 +159,4 @@ class RoadmapUnitOfWork(UnitOfWork, Protocol):
     roadmap: RoadmapRepository
     profiles_goals: GoalReadRepository
     canonical: CanonicalReadRepository
+    audit: AuditRepository

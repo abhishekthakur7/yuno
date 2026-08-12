@@ -26,7 +26,7 @@ import {
   type TopicLayerName,
 } from '../../shared/api/learning-content'
 import { useTopicContent } from '../../shared/use-topic-content'
-import type { LearnerCorrection } from '../../shared/api/roadmap'
+import type { LearnerCorrection, OverlayProposal, OverlayProposalDecision } from '../../shared/api/roadmap'
 import type { InterviewMode } from '../app-model'
 import './core.css'
 
@@ -361,7 +361,7 @@ export function Onboarding({ navigate }: PageProps) {
 export function Roadmap({ navigate }: PageProps) {
   const workspace = useProfileGoals()
   const goal = workspace.currentGoal
-  const roadmap = useRoadmap(goal?.id ?? null)
+  const roadmap = useRoadmap(goal?.id ?? null, true)
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([CURRENT_LESSON_ID]))
   const toggle = (id: string) => setOpen(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next })
   const openLesson = (lessonId: string) => {
@@ -389,7 +389,9 @@ export function Roadmap({ navigate }: PageProps) {
   {roadmap.checkpointSaved && <p className="sb-refreshing-note" role="status">Checkpoint saved.</p>}
   {(roadmap.roadmap.isError || roadmap.learningStates.isError) && <div className="sb-action-error" role="alert"><span>The latest roadmap refresh failed. Your last accepted projection is still shown.</span><Button tone="secondary" onClick={() => { void roadmap.roadmap.refetch(); void roadmap.learningStates.refetch() }}>Retry</Button></div>}
   {mutationError && <div className="sb-action-error" role="alert">{mutationError instanceof ApiError ? mutationError.message : 'The roadmap change was rejected.'}</div>}
-  <section className="sb-roadmap-list" aria-label="Editable roadmap">{topics.map((topic, index) => {
+  <ProposalPanel roadmap={roadmap} />
+  {topics.length === 0 && <section className="sb-roadmap-empty" aria-live="polite"><BookOpen aria-hidden="true" /><h2>No roadmap topics are available</h2><p>The approved graph for this goal has no topics to show.</p></section>}
+  {topics.length > 0 && <section className="sb-roadmap-list" aria-label="Editable roadmap">{topics.map((topic, index) => {
     const learningState = roadmap.learningStates.data?.find(item => item.topic_stable_id === topic.stable_id)
     const classification = learningState?.corrected_classification ?? topic.classification
     const previous = topics[index - 1]
@@ -405,8 +407,61 @@ export function Roadmap({ navigate }: PageProps) {
           <div className="sb-order"><button disabled={!previous} onClick={() => previous && confirmMutation(`Move ${topic.title} earlier?`, () => roadmap.order.mutate({ before_topic_id: topic.stable_id, after_topic_id: previous.stable_id, reason: 'Learner roadmap order' }))} aria-label={`Move ${topic.title} earlier`}><ArrowUp size={16} /></button><button disabled={!next} onClick={() => next && confirmMutation(`Move ${topic.title} later?`, () => roadmap.order.mutate({ before_topic_id: next.stable_id, after_topic_id: topic.stable_id, reason: 'Learner roadmap order' }))} aria-label={`Move ${topic.title} later`}><ArrowDown size={16} /></button></div>
         </div>
       </article></div>
-  })}</section>
+  })}</section>}
   </main>
+}
+
+function proposalLabel(type: OverlayProposal['proposal_type']) {
+  if (type === 'bridge') return 'Bridge proposal'
+  return `${type[0]!.toUpperCase()}${type.slice(1)} proposal`
+}
+
+function payloadText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return value.map(payloadText).filter(Boolean).join(', ')
+  if (value && typeof value === 'object') return Object.entries(value).map(([key, item]) => `${key.replaceAll('_', ' ')}: ${payloadText(item)}`).join('; ')
+  return ''
+}
+
+function ProposalPanel({ roadmap }: { roadmap: ReturnType<typeof useRoadmap> }) {
+  const [reasons, setReasons] = useState<Record<string, string>>({})
+  const proposals = roadmap.proposals.data ?? []
+  const decide = (proposal: OverlayProposal, decision: OverlayProposalDecision) => {
+    const reason = reasons[proposal.id]?.trim()
+    roadmap.decideProposal.mutate({ proposal, input: { decision, ...(reason ? { reason } : {}) } })
+  }
+  const decisionError = roadmap.decideProposal.error
+  const staleError = decisionError instanceof ApiError && decisionError.status === 409
+
+  return <section className="sb-proposals" aria-labelledby="sb-proposals-title">
+    <div className="sb-section-title"><div><span className="sb-kicker">Explicit approval required</span><h2 id="sb-proposals-title">Recommendations and bridges</h2></div>{!roadmap.proposals.isPending && !roadmap.proposals.isError && <span>{proposals.length} {proposals.length === 1 ? 'proposal' : 'proposals'}</span>}</div>
+    <p className="sb-proposals-intro">These suggestions are annotations only. Your roadmap changes only when you accept a recommendation or add a bridge.</p>
+    {roadmap.proposals.isPending && <div className="sb-proposal-state" aria-live="polite"><RefreshCcw aria-hidden="true" /><div><strong>Loading recommendations</strong><p>Fetching proposals without changing your roadmap.</p></div></div>}
+    {roadmap.proposals.isError && <div className="sb-action-error" role="alert"><span>Recommendations could not be loaded. Your accepted roadmap is still available below.</span><Button tone="secondary" onClick={() => void roadmap.proposals.refetch()}>Retry</Button></div>}
+    {decisionError && <div className="sb-action-error" role="alert"><span>{staleError ? 'This proposal is stale and was not applied. ' : ''}{decisionError instanceof ApiError ? decisionError.message : 'The proposal decision was not saved.'}</span><Button tone="secondary" onClick={() => void roadmap.proposals.refetch()}>Reload proposals</Button></div>}
+    {!roadmap.proposals.isPending && !roadmap.proposals.isError && proposals.length === 0 && <div className="sb-proposal-state"><Lightbulb aria-hidden="true" /><div><strong>No recommendations waiting</strong><p>Your current accepted roadmap remains unchanged.</p></div></div>}
+    <div className="sb-proposal-list">{proposals.map(proposal => {
+      const knownKeys = new Set(['title', 'why', 'explanation', 'reason', 'relationship', 'proposed_placement'])
+      const title = payloadText(proposal.payload.title) || proposalLabel(proposal.proposal_type)
+      const why = payloadText(proposal.payload.why ?? proposal.payload.explanation ?? proposal.payload.reason)
+      const details = Object.entries(proposal.payload).filter(([key, value]) => !knownKeys.has(key) && payloadText(value))
+      const pending = proposal.state === 'awaiting-learner-decision'
+      return <article key={proposal.id} className={`sb-proposal ${pending ? 'is-pending' : ''}`}>
+        <header><div><span className="sb-chip">{proposalLabel(proposal.proposal_type)}</span><h3>{title}</h3></div><span className={`sb-proposal-status is-${proposal.state}`}>{proposal.state.replaceAll('-', ' ')}</span></header>
+        {why && <p className="sb-proposal-why"><strong>Why this is suggested</strong>{why}</p>}
+        {proposal.proposal_type === 'bridge' && <dl className="sb-proposal-facts">
+          <div><dt>Relationship</dt><dd>{payloadText(proposal.payload.relationship) || 'Not specified'}</dd></div>
+          <div><dt>Proposed placement</dt><dd>{payloadText(proposal.payload.proposed_placement) || 'Not specified'}</dd></div>
+        </dl>}
+        {details.length > 0 && <dl className="sb-proposal-facts">{details.map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{payloadText(value)}</dd></div>)}</dl>}
+        <small className="sb-proposal-version">Generated against {proposal.generated_against_graph_version_id}{proposal.topic_stable_id ? ` · Topic ${proposal.topic_stable_id}` : ''}{proposal.deduplicated ? ' · Duplicate collapsed' : ''}</small>
+        {proposal.state_reason && <p className="sb-proposal-reason" role={proposal.state === 'rejected-stale' ? 'alert' : undefined}><strong>{proposal.state === 'rejected-stale' ? 'Not applied' : 'Decision explanation'}</strong>{proposal.state_reason}</p>}
+        {(proposal.decisions?.length ?? 0) > 0 && <details className="sb-proposal-history"><summary>Decision history ({proposal.decisions!.length})</summary><ol>{proposal.decisions!.map(item => <li key={item.id}><strong>{item.decision}</strong>{item.reason && <span> — {item.reason}</span>}<small>{item.decided_at}</small></li>)}</ol></details>}
+        {pending && <div className="sb-proposal-decision"><label htmlFor={`proposal-reason-${proposal.id}`}>Optional reason<input id={`proposal-reason-${proposal.id}`} value={reasons[proposal.id] ?? ''} onChange={event => setReasons(current => ({ ...current, [proposal.id]: event.target.value }))} placeholder="Add context for this decision" /></label><div><Button disabled={roadmap.decideProposal.isPending} onClick={() => decide(proposal, proposal.proposal_type === 'bridge' ? 'add' : 'accept')}>{proposal.proposal_type === 'bridge' ? 'Add bridge' : 'Accept'}</Button><Button tone="secondary" disabled={roadmap.decideProposal.isPending} onClick={() => decide(proposal, 'postpone')}>Postpone</Button><Button tone="quiet" disabled={roadmap.decideProposal.isPending} onClick={() => decide(proposal, 'dismiss')}>Dismiss</Button></div><small>Nothing changes until you choose an action.</small></div>}
+      </article>
+    })}</div>
+  </section>
 }
 
 function Curriculum({ navigate, close }: PageProps & { close?: () => void }) {

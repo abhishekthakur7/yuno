@@ -104,6 +104,8 @@ test.beforeEach(async ({ page }) => {
   let goals = [goalFixture()]
   let diagnostic: DiagnosticSession | null = null
   let previewEdits: DiagnosticPreviewEdit[] = []
+  let imports: Array<Record<string, unknown>> = []
+  let importStatements: Array<Record<string, unknown>> = []
   let projectedTopics = roadmapTopics.map(([stable_id, title]) => ({
     stable_id, title, subject: 'Java / Spring Boot · AWS', level_tag: 'Senior',
     target_capability: 'implement', scope_tags: ['java'], classification: 'unverified' as const,
@@ -111,6 +113,58 @@ test.beforeEach(async ({ page }) => {
     has_transferred_evidence: false, explanation: 'Fixture projection', pending_proposals: [], conflicts: [],
   }))
   const correctedClassifications = new Map<string, 'likely-known' | 'partial' | 'unverified' | 'new'>()
+  await page.route('**/api/v1/imports**', async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const parts = url.pathname.split('/')
+    const importId = parts.at(-1)
+    if (url.pathname.endsWith('/parse') || url.pathname.endsWith('/reprocess')) {
+      const id = parts.at(-2)!
+      const record = imports.find(item => item.id === id)
+      if (record) {
+        record.status = 'parsed-untrusted'
+        record.parser_version = 'markdown-v1'
+        record.row_version = Number(record.row_version) + 1
+        if (importStatements.length === 0) importStatements = [
+          { id: 'statement-1', import_id: id, sequence: 1, parser_version: 'markdown-v1', original_text: 'SQS may redeliver the same message after a durable commit.', original_hash: 'statement-hash-1', normalized_text: 'sqs may redeliver the same message after a durable commit', normalized_hash: 'normalized-hash-1', confidence: .98, duplicate_of_statement_id: null, trust_state: 'untrusted', mapping_state: 'unmapped', corrected_text: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z', mapping: null },
+          { id: 'statement-2', import_id: id, sequence: 2, parser_version: 'markdown-v1', original_text: 'A lookup before a write does not arbitrate concurrent requests.', original_hash: 'statement-hash-2', normalized_text: 'a lookup before a write does not arbitrate concurrent requests', normalized_hash: 'normalized-hash-2', confidence: .94, duplicate_of_statement_id: null, trust_state: 'untrusted', mapping_state: 'unmapped', corrected_text: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z', mapping: null },
+        ]
+      }
+      await route.fulfill({ status: 202, json: { job_id: 'import-job-1', kind: url.pathname.endsWith('/parse') ? 'parse_import' : 'reprocess_import', status: 'queued', enqueued_at: '2026-08-12T00:00:00Z', deduplicated: false } })
+      return
+    }
+    if (url.pathname.endsWith('/statements')) {
+      await route.fulfill({ json: importStatements.filter(item => item.import_id === parts.at(-2)) })
+      return
+    }
+    if (request.method() === 'POST' && url.pathname.endsWith('/imports')) {
+      const body = request.postDataJSON() as { goal_id: string; import_type: string; original_content: string }
+      const created = { id: `import-${imports.length + 1}`, ...body, original_hash: 'exact-original-hash', parser_version: 'pending', status: 'selected', failure_code: null, failure_reference: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' }
+      imports = [created, ...imports]
+      await route.fulfill({ status: 201, json: created })
+      return
+    }
+    if (importId?.startsWith('import-')) {
+      await route.fulfill({ json: imports.find(item => item.id === importId) })
+      return
+    }
+    await route.fulfill({ json: imports.filter(item => !url.searchParams.get('goal_id') || item.goal_id === url.searchParams.get('goal_id')) })
+  })
+  await page.route('**/api/v1/import-statements/**', async route => {
+    const request = route.request()
+    const parts = new URL(request.url()).pathname.split('/')
+    const action = parts.at(-1)!
+    const statementId = parts.at(-2)!
+    const index = importStatements.findIndex(item => item.id === statementId)
+    const current = importStatements[index]!
+    if (action === 'map') {
+      const body = request.postDataJSON() as { goal_id: string; topic_id: string }
+      importStatements[index] = { ...current, mapping_state: 'mapped', row_version: Number(current.row_version) + 1, mapping: { ...body, graph_version_id: 'graph-1', decision: 'approved', accepted_at: '2026-08-12T00:01:00Z', revoked_at: null } }
+    } else if (action === 'verify') importStatements[index] = { ...current, trust_state: 'verified', row_version: Number(current.row_version) + 1 }
+    else if (action === 'dismiss') importStatements[index] = { ...current, trust_state: 'dismissed', row_version: Number(current.row_version) + 1 }
+    if (action === 'map') await route.fulfill({ json: { statement: importStatements[index], mapping: importStatements[index]!.mapping, topic_imports_hash: { goal_id: 'goal-default', topic_id: 'delivery-contract', graph_version_id: 'graph-1', imports_hash: 'mapped-imports-hash', updated_at: '2026-08-12T00:01:00Z' } } })
+    else await route.fulfill({ json: importStatements[index] })
+  })
   await page.route('**/api/v1/profile', async route => {
     if (route.request().method() === 'PATCH') {
       profile = { ...profile, ...(route.request().postDataJSON() as ProfileUpdate), profile_revision: profile.profile_revision + 1 }
@@ -137,6 +191,10 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'overlay-proposals') {
+      await route.fulfill({ json: [] })
+      return
+    }
     if (path.at(-1) === 'layers' && path.includes('topics')) {
       const scopedGoalId = path.at(-4)!
       const topicId = path.at(-2)!
@@ -384,11 +442,11 @@ test('malformed bounded draft storage falls back field by field without runtime 
   })
   await expect.poll(async () => {
     const operations = await operationsState(page)
-    return { owner: operations?.owner, review: operations?.review, imports: operations?.importStatements, updates: operations?.acceptedUpdates }
+    return { owner: operations?.owner, review: operations?.review, hasImportState: 'importSource' in operations || 'importStatements' in operations, updates: operations?.acceptedUpdates }
   }).toEqual({
     owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
     review: { enabled: true, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
-    imports: [],
+    hasImportState: false,
     updates: [],
   })
 })
@@ -658,17 +716,30 @@ test('Evidence is unavailable before submission and derives its conclusion from 
   await expect(page).toHaveURL(/\/app\/practice$/)
 })
 
-test('parsed imports remain personal untrusted material and cannot create evidence or completion', async ({ page, diagnostics }) => {
+test('server-parsed imports stay exact and untrusted while learner decisions remain personal', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/imports')
   const source = '# Notes\n- SQS may redeliver the same message after a durable commit.\n- A lookup before a write does not arbitrate concurrent requests.'
   await page.getByRole('textbox', { name: /Paste Markdown or plain text/i }).fill(source)
-  await page.getByRole('button', { name: /Parse locally/i }).click()
+  await page.getByRole('button', { name: /Save and queue parse/i }).click()
+  await expect(page.getByText(/receipt does not claim parsing completed/i)).toBeVisible()
   await expect(page.getByText(/Parsed as untrusted/i)).toBeVisible()
-  await expect(page.getByText(/^untrusted$/i)).toHaveCount(2)
-  await expect(page.getByText(/Mapping is a learner decision, not verification/i)).toBeVisible()
-  await expect.poll(async () => (await operationsState(page))?.importStatements.every((item: { decision: string }) => item.decision === 'untrusted')).toBe(true)
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: /Preserved original text/i })).toHaveValue(source)
+  await expect(page.getByText('exact-original-hash')).toBeVisible()
+  const first = page.getByText(/“SQS may redeliver the same message/i).locator('xpath=ancestor::article')
+  const topic = first.getByRole('combobox', { name: /Map to an approved topic/i })
+  await expect(topic.getByRole('option')).toHaveText(['Not mapped', ...roadmapTopics.map(([, title]) => title)])
+  await topic.selectOption('delivery-contract')
+  await first.getByRole('button', { name: 'Map' }).click()
+  await first.getByRole('button', { name: /Verify as mine/i }).click()
+  await page.getByText(/“A lookup before a write/i).locator('xpath=ancestor::article').getByRole('button', { name: /Dismiss/i }).click()
+  await expect(page.getByText(/Mapping and verification are personal decisions/i)).toBeVisible()
   await expect.poll(async () => (await learningState(page))?.evidence.length).toBe(0)
+  await expect.poll(async () => {
+    const state = await operationsState(page)
+    return 'importSource' in state || 'importStatements' in state
+  }).toBe(false)
 })
 
 test('canonical curriculum updates stay pending until an explicit acceptance action', async ({ page, diagnostics }) => {
@@ -784,12 +855,12 @@ test('navigation drawer and destructive dialog restore focus to their triggers',
   await expect(tools).toBeFocused()
 
   await open(page, '/app/settings')
-  const deleteImports = page.getByRole('button', { name: /Delete imports/i }).first()
-  await deleteImports.click()
-  const dialog = page.getByRole('alertdialog', { name: /Delete all imported material/i })
+  const resetPages = page.getByRole('button', { name: /Reset local pages/i }).first()
+  await resetPages.click()
+  const dialog = page.getByRole('alertdialog', { name: /Reset operational pages/i })
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: /Cancel/i }).click()
-  await expect(deleteImports).toBeFocused()
+  await expect(resetPages).toBeFocused()
 })
 
 test('reduced-motion preference suppresses non-essential motion', async ({ page, diagnostics }) => {

@@ -77,6 +77,7 @@ containers = [
     "yuno.modules.evidence_evaluation",
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
+    "yuno.modules.imports",
 ]
 layers = [
     "(service)",
@@ -112,6 +113,10 @@ source_modules = [
     "yuno.modules.learning_content.service",
     "yuno.modules.roadmap.domain",
     "yuno.modules.roadmap.ports",
+    "yuno.modules.roadmap.service",
+    "yuno.modules.imports.domain",
+    "yuno.modules.imports.ports",
+    "yuno.modules.imports.service",
 ]
 forbidden_modules = [
     "fastapi",
@@ -147,6 +152,7 @@ modules = [
     "yuno.modules.evidence_evaluation",
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
+    "yuno.modules.imports",
 ]
 ignore_imports = [
     "yuno.modules.identity.service -> yuno.modules.audit.**",
@@ -158,4 +164,8 @@ ignore_imports = [
     "yuno.modules.diagnostics.service -> yuno.modules.audit.**",
     "yuno.modules.evidence_evaluation.ports -> yuno.modules.audit.**",
     "yuno.modules.evidence_evaluation.service -> yuno.modules.audit.**",
+    "yuno.modules.roadmap.ports -> yuno.modules.audit.**",
+    "yuno.modules.roadmap.service -> yuno.modules.audit.**",
+    "yuno.modules.imports.ports -> yuno.modules.audit.**",
+    "yuno.modules.imports.service -> yuno.modules.audit.**",
 ]

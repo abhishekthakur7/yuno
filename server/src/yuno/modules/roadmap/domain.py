@@ -15,6 +15,32 @@ class OverlayEntryType(StrEnum):
     ORDER_CONSTRAINT = "order_constraint"
     SKIP = "skip"
     DEPTH = "depth"
+    BRIDGE = "bridge"
+    RECOMMENDATION = "recommendation"
+
+
+class OverlayProposalType(StrEnum):
+    RECOMMENDATION = "recommendation"
+    EMPHASIS = "emphasis"
+    EXAMPLE = "example"
+    EXERCISE = "exercise"
+    ORDERING = "ordering"
+    BRIDGE = "bridge"
+
+
+class OverlayProposalState(StrEnum):
+    AWAITING_DECISION = "awaiting-learner-decision"
+    ACCEPTED = "accepted"
+    POSTPONED = "postponed"
+    DISMISSED = "dismissed"
+    REJECTED_STALE = "rejected-stale"
+
+
+class OverlayDecisionType(StrEnum):
+    ACCEPT = "accept"
+    ADD = "add"
+    POSTPONE = "postpone"
+    DISMISS = "dismiss"
 
 
 class LearningClassification(StrEnum):
@@ -74,6 +100,33 @@ class OverlayEntry:
     approved_at: str
     supersedes_entry_id: str | None = None
     content_hash: str = ""
+
+
+@dataclass(frozen=True)
+class OverlayProposal:
+    id: str
+    owner_id: str
+    goal_id: str
+    generated_against_graph_version_id: str
+    topic_stable_id: str | None
+    proposal_type: OverlayProposalType
+    payload: dict[str, object]
+    content_hash: str
+    state: OverlayProposalState
+    state_reason: str | None
+    created_at: str
+    decided_at: str | None = None
+
+
+@dataclass(frozen=True)
+class OverlayProposalDecision:
+    id: str
+    owner_id: str
+    goal_id: str
+    proposal_id: str
+    decision: OverlayDecisionType
+    reason: str | None
+    decided_at: str
 
 
 @dataclass(frozen=True)
@@ -144,6 +197,43 @@ class RoadmapProjection:
 
 class InvalidOrderConstraintError(ConflictError):
     code = "invalid_order_constraint"
+
+
+class ProposalStaleError(ConflictError):
+    code = "proposal_stale"
+
+
+def validate_proposal_payload(
+    proposal_type: OverlayProposalType,
+    topic_stable_id: str | None,
+    payload: Mapping[str, object],
+) -> None:
+    if proposal_type is OverlayProposalType.BRIDGE:
+        if topic_stable_id is None:
+            raise DomainValidationError("A bridge proposal must identify a topic.")
+        for field in ("why", "relationship"):
+            value = payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise DomainValidationError(
+                    f"A bridge proposal requires a non-empty '{field}'."
+                )
+        placement = payload.get("proposed_placement")
+        if (
+            placement is None
+            or (isinstance(placement, str) and not placement.strip())
+            or (isinstance(placement, Mapping) and not placement)
+            or not isinstance(placement, (str, Mapping))
+        ):
+            raise DomainValidationError(
+                "A bridge proposal requires a non-empty 'proposed_placement'."
+            )
+    if proposal_type is OverlayProposalType.ORDERING:
+        for field in ("before_topic_id", "after_topic_id"):
+            value = payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise DomainValidationError(
+                    f"An ordering proposal requires a non-empty '{field}'."
+                )
 
 
 def project_roadmap(

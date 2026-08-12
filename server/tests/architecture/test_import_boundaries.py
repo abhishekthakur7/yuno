@@ -54,6 +54,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.evidence_evaluation",
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
+    "yuno.modules.imports",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {"fastapi", "starlette", "sqlalchemy", "alembic", "pydantic", "subprocess"}
@@ -80,6 +81,10 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.learning_content.service",
     "yuno.modules.roadmap.domain",
     "yuno.modules.roadmap.ports",
+    "yuno.modules.roadmap.service",
+    "yuno.modules.imports.domain",
+    "yuno.modules.imports.ports",
+    "yuno.modules.imports.service",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -90,6 +95,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.evidence_evaluation",
     "yuno.modules.learning_content",
     "yuno.modules.roadmap",
+    "yuno.modules.imports",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
@@ -163,6 +169,10 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.diagnostics.service -> yuno.modules.audit.**",
         "yuno.modules.evidence_evaluation.ports -> yuno.modules.audit.**",
         "yuno.modules.evidence_evaluation.service -> yuno.modules.audit.**",
+        "yuno.modules.roadmap.ports -> yuno.modules.audit.**",
+        "yuno.modules.roadmap.service -> yuno.modules.audit.**",
+        "yuno.modules.imports.ports -> yuno.modules.audit.**",
+        "yuno.modules.imports.service -> yuno.modules.audit.**",
     }
 
 

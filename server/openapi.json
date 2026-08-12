@@ -1262,6 +1262,350 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "ImportCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "import_type": {
+            "$ref": "#/components/schemas/ImportType"
+          },
+          "original_content": {
+            "title": "Original Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "import_type",
+          "original_content"
+        ],
+        "title": "ImportCreateRequest",
+        "type": "object"
+      },
+      "ImportRecordResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "import_type": {
+            "$ref": "#/components/schemas/ImportType"
+          },
+          "original_content": {
+            "title": "Original Content",
+            "type": "string"
+          },
+          "original_hash": {
+            "title": "Original Hash",
+            "type": "string"
+          },
+          "parser_version": {
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ImportStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "import_type",
+          "original_content",
+          "original_hash",
+          "parser_version",
+          "status",
+          "failure_code",
+          "failure_reference",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImportRecordResponse",
+        "type": "object"
+      },
+      "ImportStatementMapRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "topic_id"
+        ],
+        "title": "ImportStatementMapRequest",
+        "type": "object"
+      },
+      "ImportStatementMapResponse": {
+        "properties": {
+          "mapping": {
+            "$ref": "#/components/schemas/ImportStatementMappingResponse"
+          },
+          "statement": {
+            "$ref": "#/components/schemas/ImportStatementResponse"
+          },
+          "topic_imports_hash": {
+            "$ref": "#/components/schemas/TopicImportHashResponse"
+          }
+        },
+        "required": [
+          "statement",
+          "mapping",
+          "topic_imports_hash"
+        ],
+        "title": "ImportStatementMapResponse",
+        "type": "object"
+      },
+      "ImportStatementMappingResponse": {
+        "properties": {
+          "accepted_at": {
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/MappingDecision"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "topic_id",
+          "graph_version_id",
+          "decision",
+          "accepted_at",
+          "revoked_at"
+        ],
+        "title": "ImportStatementMappingResponse",
+        "type": "object"
+      },
+      "ImportStatementPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "corrected_text": {
+            "title": "Corrected Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "corrected_text"
+        ],
+        "title": "ImportStatementPatchRequest",
+        "type": "object"
+      },
+      "ImportStatementResponse": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "corrected_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected Text"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duplicate_of_statement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Statement Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "import_id": {
+            "title": "Import Id",
+            "type": "string"
+          },
+          "mapping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportStatementMappingResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mapping_state": {
+            "$ref": "#/components/schemas/MappingState"
+          },
+          "normalized_hash": {
+            "title": "Normalized Hash",
+            "type": "string"
+          },
+          "normalized_text": {
+            "title": "Normalized Text",
+            "type": "string"
+          },
+          "original_hash": {
+            "title": "Original Hash",
+            "type": "string"
+          },
+          "original_text": {
+            "title": "Original Text",
+            "type": "string"
+          },
+          "parser_version": {
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "trust_state": {
+            "$ref": "#/components/schemas/TrustState"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "import_id",
+          "sequence",
+          "parser_version",
+          "original_text",
+          "original_hash",
+          "normalized_text",
+          "normalized_hash",
+          "confidence",
+          "duplicate_of_statement_id",
+          "trust_state",
+          "mapping_state",
+          "corrected_text",
+          "row_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImportStatementResponse",
+        "type": "object"
+      },
+      "ImportStatus": {
+        "enum": [
+          "selected",
+          "parsing",
+          "parsed-untrusted",
+          "learner-review",
+          "applied",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ImportStatus",
+        "type": "string"
+      },
+      "ImportType": {
+        "enum": [
+          "markdown",
+          "plain_text"
+        ],
+        "title": "ImportType",
+        "type": "string"
+      },
       "JobRefResponse": {
         "description": "Mirrors `application.jobs.JobRef` \u2014 the `202` enqueue response body\nevery async endpoint returns via `accepted_job`.",
         "properties": {
@@ -1507,6 +1851,23 @@
         "title": "LearningStateResponse",
         "type": "object"
       },
+      "MappingDecision": {
+        "enum": [
+          "approved",
+          "revoked"
+        ],
+        "title": "MappingDecision",
+        "type": "string"
+      },
+      "MappingState": {
+        "enum": [
+          "unmapped",
+          "mapped",
+          "duplicate"
+        ],
+        "title": "MappingState",
+        "type": "string"
+      },
       "OrderConstraintRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1536,6 +1897,227 @@
         ],
         "title": "OrderConstraintRequest",
         "type": "object"
+      },
+      "OverlayDecisionType": {
+        "enum": [
+          "accept",
+          "add",
+          "postpone",
+          "dismiss"
+        ],
+        "title": "OverlayDecisionType",
+        "type": "string"
+      },
+      "OverlayProposalCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_against_graph_version_id": {
+            "title": "Generated Against Graph Version Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "proposal_type": {
+            "$ref": "#/components/schemas/OverlayProposalType"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "generated_against_graph_version_id",
+          "proposal_type",
+          "payload"
+        ],
+        "title": "OverlayProposalCreateRequest",
+        "type": "object"
+      },
+      "OverlayProposalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/OverlayDecisionType"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "OverlayProposalDecisionRequest",
+        "type": "object"
+      },
+      "OverlayProposalDecisionResponse": {
+        "properties": {
+          "decided_at": {
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/OverlayDecisionType"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id",
+          "decision",
+          "reason",
+          "decided_at"
+        ],
+        "title": "OverlayProposalDecisionResponse",
+        "type": "object"
+      },
+      "OverlayProposalResponse": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/OverlayProposalDecisionResponse"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "deduplicated": {
+            "default": false,
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "generated_against_graph_version_id": {
+            "title": "Generated Against Graph Version Id",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "proposal_type": {
+            "$ref": "#/components/schemas/OverlayProposalType"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OverlayProposalState"
+          },
+          "state_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Reason"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "generated_against_graph_version_id",
+          "topic_stable_id",
+          "proposal_type",
+          "payload",
+          "content_hash",
+          "state",
+          "state_reason",
+          "created_at",
+          "decided_at"
+        ],
+        "title": "OverlayProposalResponse",
+        "type": "object"
+      },
+      "OverlayProposalState": {
+        "enum": [
+          "awaiting-learner-decision",
+          "accepted",
+          "postponed",
+          "dismissed",
+          "rejected-stale"
+        ],
+        "title": "OverlayProposalState",
+        "type": "string"
+      },
+      "OverlayProposalType": {
+        "enum": [
+          "recommendation",
+          "emphasis",
+          "example",
+          "exercise",
+          "ordering",
+          "bridge"
+        ],
+        "title": "OverlayProposalType",
+        "type": "string"
       },
       "ResumeDestination": {
         "enum": [
@@ -1860,6 +2442,39 @@
         "title": "TopicDetailResponse",
         "type": "object"
       },
+      "TopicImportHashResponse": {
+        "properties": {
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "imports_hash": {
+            "title": "Imports Hash",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "graph_version_id",
+          "topic_id",
+          "imports_hash",
+          "updated_at"
+        ],
+        "title": "TopicImportHashResponse",
+        "type": "object"
+      },
       "TopicLayer": {
         "enum": [
           "Essential",
@@ -1973,6 +2588,15 @@
         "title": "TopicLayersResponse",
         "type": "object"
       },
+      "TrustState": {
+        "enum": [
+          "untrusted",
+          "verified",
+          "dismissed"
+        ],
+        "title": "TrustState",
+        "type": "string"
+      },
       "UntrustedSeedKind": {
         "enum": [
           "notes",
@@ -2044,6 +2668,74 @@
         "summary": "Regenerate Artifact",
         "tags": [
           "learning-content"
+        ]
+      }
+    },
+    "/api/v1/bridges/{proposal_id}/decision": {
+      "post": {
+        "operationId": "post_bridge_decision_api_v1_bridges__proposal_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlayProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayProposalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Bridge Decision",
+        "tags": [
+          "roadmap"
         ]
       }
     },
@@ -3186,6 +3878,128 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/overlay-proposals": {
+      "get": {
+        "operationId": "get_overlay_proposals_api_v1_goals__goal_id__overlay_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OverlayProposalResponse"
+                  },
+                  "title": "Response Get Overlay Proposals Api V1 Goals  Goal Id  Overlay Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Overlay Proposals",
+        "tags": [
+          "roadmap"
+        ]
+      },
+      "post": {
+        "operationId": "post_overlay_proposal_api_v1_goals__goal_id__overlay_proposals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlayProposalCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayProposalResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayProposalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Overlay Proposal",
+        "tags": [
+          "roadmap"
+        ]
+      }
+    },
     "/api/v1/goals/{goal_id}/roadmap": {
       "get": {
         "operationId": "get_goal_roadmap_api_v1_goals__goal_id__roadmap_get",
@@ -3510,6 +4324,704 @@
         "summary": "Health",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/import-statements/{statement_id}": {
+      "patch": {
+        "operationId": "patch_import_statement_api_v1_import_statements__statement_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "statement_id",
+            "required": true,
+            "schema": {
+              "title": "Statement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportStatementPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Patch Import Statement",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/import-statements/{statement_id}/dismiss": {
+      "post": {
+        "operationId": "post_import_statement_dismiss_api_v1_import_statements__statement_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "statement_id",
+            "required": true,
+            "schema": {
+              "title": "Statement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import Statement Dismiss",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/import-statements/{statement_id}/map": {
+      "post": {
+        "operationId": "post_import_statement_map_api_v1_import_statements__statement_id__map_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "statement_id",
+            "required": true,
+            "schema": {
+              "title": "Statement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportStatementMapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatementMapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import Statement Map",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/import-statements/{statement_id}/verify": {
+      "post": {
+        "operationId": "post_import_statement_verify_api_v1_import_statements__statement_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "statement_id",
+            "required": true,
+            "schema": {
+              "title": "Statement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import Statement Verify",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports": {
+      "get": {
+        "operationId": "get_imports_api_v1_imports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "goal_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportRecordResponse"
+                  },
+                  "title": "Response Get Imports Api V1 Imports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Imports",
+        "tags": [
+          "imports"
+        ]
+      },
+      "post": {
+        "operationId": "post_import_api_v1_imports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{import_id}": {
+      "get": {
+        "operationId": "get_import_record_api_v1_imports__import_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Import Record",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{import_id}/parse": {
+      "post": {
+        "operationId": "post_import_parse_api_v1_imports__import_id__parse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import Parse",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{import_id}/reprocess": {
+      "post": {
+        "operationId": "post_import_reprocess_api_v1_imports__import_id__reprocess_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Import Reprocess",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{import_id}/statements": {
+      "get": {
+        "operationId": "get_import_statements_api_v1_imports__import_id__statements_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportStatementResponse"
+                  },
+                  "title": "Response Get Import Statements Api V1 Imports  Import Id  Statements Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Import Statements",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/overlay-proposals/{proposal_id}/decision": {
+      "post": {
+        "operationId": "post_overlay_proposal_decision_api_v1_overlay_proposals__proposal_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlayProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlayProposalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Overlay Proposal Decision",
+        "tags": [
+          "roadmap"
         ]
       }
     },

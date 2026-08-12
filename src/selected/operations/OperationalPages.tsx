@@ -18,27 +18,19 @@ import {
   Settings2,
   ShieldAlert,
   SlidersHorizontal,
-  Trash2,
   UserRound,
   X,
 } from 'lucide-react'
 import { useLearningState } from '../../shared/state'
+import type { ImportStatement, JobRef } from '../../shared/api/imports'
+import { useImports } from '../../shared/use-imports'
 import { useProfileGoals } from '../../shared/use-profile-goals'
+import { useRoadmap } from '../../shared/use-roadmap'
 import './operations.css'
 
 export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'search' | 'jobs' | 'settings'
 
 type Navigate = (page: string) => void
-type ImportDecision = 'untrusted' | 'mapped' | 'dismissed' | 'corrected'
-
-interface ImportStatement {
-  id: string
-  original: string
-  correction: string
-  decision: ImportDecision
-  topic: string
-}
-
 interface OperationsState {
   version: 1
   goalVersion: '2026.07' | '2026.08'
@@ -46,8 +38,6 @@ interface OperationsState {
   progress: 'detailed' | 'simple'
   reducedMotion: boolean
   review: { enabled: boolean; duration: number; cadence: string; retrieval: boolean; variedContext: boolean }
-  importSource: string
-  importStatements: ImportStatement[]
   updateDecision: 'pending' | 'accepted' | 'postponed' | 'dismissed'
   acceptedUpdates: string[]
   acceptedConflictResolution: 'overlay-kept' | 'canonical-adopted' | null
@@ -63,8 +53,6 @@ const DEFAULT_STATE: OperationsState = {
   progress: 'detailed',
   reducedMotion: false,
   review: { enabled: true, duration: 15, cadence: 'Twice a week', retrieval: true, variedContext: true },
-  importSource: '',
-  importStatements: [],
   updateDecision: 'pending',
   acceptedUpdates: [],
   acceptedConflictResolution: null,
@@ -83,14 +71,6 @@ function hydrateOperationsState(value: unknown): OperationsState | null {
   if (!isRecord(value) || value.version !== 1) return null
   const owner = isRecord(value.owner) ? value.owner : {}
   const review = isRecord(value.review) ? value.review : {}
-  const importStatements = Array.isArray(value.importStatements)
-    ? value.importStatements.filter((item): item is ImportStatement => isRecord(item)
-      && typeof item.id === 'string'
-      && typeof item.original === 'string'
-      && typeof item.correction === 'string'
-      && (item.decision === 'untrusted' || item.decision === 'mapped' || item.decision === 'dismissed' || item.decision === 'corrected')
-      && typeof item.topic === 'string')
-    : DEFAULT_STATE.importStatements
   return {
     version: 1,
     goalVersion: value.goalVersion === '2026.08' ? '2026.08' : DEFAULT_STATE.goalVersion,
@@ -107,8 +87,6 @@ function hydrateOperationsState(value: unknown): OperationsState | null {
       retrieval: typeof review.retrieval === 'boolean' ? review.retrieval : DEFAULT_STATE.review.retrieval,
       variedContext: typeof review.variedContext === 'boolean' ? review.variedContext : DEFAULT_STATE.review.variedContext,
     },
-    importSource: typeof value.importSource === 'string' ? value.importSource : DEFAULT_STATE.importSource,
-    importStatements,
     updateDecision: value.updateDecision === 'accepted' || value.updateDecision === 'postponed' || value.updateDecision === 'dismissed' || value.updateDecision === 'pending' ? value.updateDecision : DEFAULT_STATE.updateDecision,
     acceptedUpdates: isStringArray(value.acceptedUpdates) ? value.acceptedUpdates : DEFAULT_STATE.acceptedUpdates,
     acceptedConflictResolution: value.acceptedConflictResolution === 'overlay-kept' || value.acceptedConflictResolution === 'canonical-adopted' || value.acceptedConflictResolution === null ? value.acceptedConflictResolution : DEFAULT_STATE.acceptedConflictResolution,
@@ -178,16 +156,64 @@ function EvidencePage({ state, setState, navigate }: { state: OperationsState; s
   </>
 }
 
-function parseImport(source: string): ImportStatement[] {
-  return source.split(/\n+/).map((line) => line.trim().replace(/^[-*+#>\d.()\s]+/, '').trim()).filter((line) => line.length > 8).map((line, index) => ({ id: `statement-${index + 1}`, original: line, correction: line, decision: 'untrusted', topic: '' }))
+function ImportStatementReview({ statement, topics, goalId, workspace }: { statement: ImportStatement; topics: { stable_id: string; title: string }[]; goalId: string; workspace: ReturnType<typeof useImports> }) {
+  const [correctedText, setCorrectedText] = useState(statement.corrected_text ?? statement.original_text)
+  const [topicId, setTopicId] = useState(statement.mapping?.topic_id ?? '')
+  const busy = workspace.correct.isPending || workspace.map.isPending || workspace.verify.isPending || workspace.dismiss.isPending
+  const decisionError = workspace.correct.isError || workspace.map.isError || workspace.verify.isError || workspace.dismiss.isError
+  return <article className={statement.trust_state === 'dismissed' ? 'is-muted' : ''}>
+    <div className="so-statement-number">{statement.sequence}</div>
+    <div>
+      <div className="so-provenance-chips"><span className="so-chip">{statement.trust_state}</span><span className="so-chip so-chip--gray">{statement.mapping_state}</span>{statement.duplicate_of_statement_id && <span className="so-chip so-chip--amber">Duplicate</span>}</div>
+      <p className="so-original">“{statement.original_text}”</p>
+      <dl className="so-import-provenance"><dt>Original hash</dt><dd>{statement.original_hash}</dd><dt>Normalized hash</dt><dd>{statement.normalized_hash}</dd><dt>Parser</dt><dd>{statement.parser_version} · confidence {Math.round(statement.confidence * 100)}%</dd>{statement.duplicate_of_statement_id && <><dt>Duplicate of</dt><dd>{statement.duplicate_of_statement_id}</dd></>}</dl>
+      <label>Corrected wording<textarea disabled={busy || statement.trust_state === 'dismissed'} value={correctedText} onChange={(event) => setCorrectedText(event.target.value)} /></label>
+      <Button tone="quiet" disabled={busy || statement.trust_state === 'dismissed' || !correctedText.trim() || correctedText === (statement.corrected_text ?? statement.original_text)} onClick={() => workspace.correct.mutate({ statement, body: { corrected_text: correctedText } })}>Save correction</Button>
+      <label>Map to an approved topic in this goal<select disabled={busy || statement.trust_state === 'dismissed' || statement.mapping_state === 'duplicate'} value={topicId} onChange={(event) => setTopicId(event.target.value)}><option value="">Not mapped</option>{topics.map(topic => <option key={topic.stable_id} value={topic.stable_id}>{topic.title}</option>)}</select></label>
+      {statement.mapping && <p className="so-help">Mapped to {statement.mapping.topic_id} against graph {statement.mapping.graph_version_id}. This is a personal association only.</p>}
+      {decisionError && <p className="so-error" role="alert">That decision was not saved. The statement remains unchanged; retry when ready.</p>}
+    </div>
+    <div className="so-row-actions">
+      <Button tone="quiet" disabled={busy || !topicId || statement.trust_state === 'dismissed' || statement.mapping_state === 'duplicate'} onClick={() => workspace.map.mutate({ statement, body: { goal_id: goalId, topic_id: topicId } })}>Map</Button>
+      <Button tone="quiet" disabled={busy || statement.trust_state !== 'untrusted'} onClick={() => workspace.verify.mutate(statement)}><Check size={15} /> Verify as mine</Button>
+      <Button tone="quiet" disabled={busy || statement.trust_state === 'dismissed'} onClick={() => workspace.dismiss.mutate(statement)}><X size={15} /> Dismiss</Button>
+    </div>
+  </article>
 }
 
-function ImportsPage({ state, setState }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>> }) {
-  const updateStatement = (id: string, patch: Partial<ImportStatement>) => setState((s) => ({ ...s, importStatements: s.importStatements.map((item) => item.id === id ? { ...item, ...patch } : item) }))
+export function ImportsPage() {
+  const { currentGoal } = useProfileGoals()
+  const roadmap = useRoadmap(currentGoal?.id ?? null)
+  const [selectedImportId, setSelectedImportId] = useState<string | null>(null)
+  const workspace = useImports(currentGoal?.id ?? null, selectedImportId)
+  const [source, setSource] = useState('')
+  const [importType, setImportType] = useState<'markdown' | 'plain_text'>('markdown')
+  const [job, setJob] = useState<JobRef | null>(null)
+  const imports = workspace.imports.data ?? []
+  useEffect(() => {
+    if (!selectedImportId && imports[0]) setSelectedImportId(imports[0].id)
+  }, [imports, selectedImportId])
+  const selected = workspace.selectedImport.data
+  const topics = (roadmap.roadmap.data?.topics ?? []).map(topic => ({ stable_id: topic.stable_id, title: topic.title }))
+  const saveAndParse = async () => {
+    if (!currentGoal || !source) return
+    const created = await workspace.create.mutateAsync({ goal_id: currentGoal.id, import_type: importType, original_content: source })
+    setSelectedImportId(created.id)
+    setSource('')
+    const accepted = await workspace.parse.mutateAsync(created.id)
+    setJob(accepted)
+  }
   return <>
-    <PageHead eyebrow="Local import review" title="Bring notes in as untrusted material" description="Markdown and plain text stay on this device in this prototype. Parsing proposes statements; it never creates truth, evidence, or completion." />
-    <section className="so-panel so-import-box"><label htmlFor="so-import-source"><span className="so-kicker">Original source</span><strong>Paste Markdown or plain text</strong></label><textarea id="so-import-source" value={state.importSource} onChange={(event) => setState((s) => ({ ...s, importSource: event.target.value }))} placeholder={'# Messaging notes\n- SQS may redeliver messages.\n- Acknowledgement should happen after the durable decision.'} /><div className="so-inline-actions"><span>The original is preserved exactly for inspection.</span><Button disabled={!state.importSource.trim()} onClick={() => setState((s) => ({ ...s, importStatements: parseImport(s.importSource) }))}><Import size={17} /> Parse locally</Button></div></section>
-    {state.importStatements.length === 0 ? <div className="so-empty"><FileText size={28} /><h2>No statements to review</h2><p>Paste notes above, then run the deterministic local parser. Headings and short fragments are ignored.</p></div> : <section aria-labelledby="so-review-title"><div className="so-section-head"><div><span className="so-kicker">Parsed as untrusted</span><h2 id="so-review-title">Review {state.importStatements.length} proposed statements</h2></div><span>{state.importStatements.filter((item) => item.decision !== 'untrusted').length} decided</span></div><div className="so-statement-list">{state.importStatements.map((item) => <article key={item.id} className={item.decision === 'dismissed' ? 'is-muted' : ''}><div className="so-statement-number">{item.id.replace('statement-', '')}</div><div><span className="so-chip">{item.decision}</span><p className="so-original">“{item.original}”</p>{item.decision === 'corrected' && <label>Corrected wording<textarea value={item.correction} onChange={(event) => updateStatement(item.id, { correction: event.target.value })} /></label>}<label>Map to topic<select disabled={item.decision === 'dismissed'} value={item.topic} onChange={(event) => updateStatement(item.id, { topic: event.target.value, decision: event.target.value ? 'mapped' : 'untrusted' })}><option value="">Not mapped</option><option value="delivery-contract">Message delivery contract</option><option value="idempotency-retry">Idempotency under retries</option><option value="dead-letter">Dead-letter recovery</option></select></label></div><div className="so-row-actions">{item.decision === 'dismissed' ? <Button tone="quiet" onClick={() => updateStatement(item.id, { decision: item.topic ? 'mapped' : 'untrusted' })}>Restore</Button> : <><Button tone="quiet" onClick={() => updateStatement(item.id, { decision: 'corrected' })}>Correct</Button><Button tone="quiet" onClick={() => updateStatement(item.id, { decision: 'dismissed' })}><X size={15} /> Dismiss</Button></>}</div></article>)}</div><Disclosure><strong>Mapping is a learner decision, not verification.</strong><p>Mapped text may inform a future proposal only after review. It remains personal imported material and does not alter canonical lessons or progress.</p></Disclosure></section>}
+    <PageHead eyebrow="Import review" title="Bring notes in as untrusted material" description="The server preserves your exact original and parses it asynchronously. No import action creates canonical truth, evidence, completion, or a new topic." />
+    {!currentGoal ? <div className="so-empty"><FileText size={28} /><h2>Select a current goal first</h2><p>Imports need a goal so every mapping can be checked against that goal’s approved graph.</p></div> : <>
+      <section className="so-panel so-import-box"><label htmlFor="so-import-source"><span className="so-kicker">New original</span><strong>Paste Markdown or plain text</strong></label><label>Format<select value={importType} onChange={(event) => setImportType(event.target.value as 'markdown' | 'plain_text')}><option value="markdown">Markdown</option><option value="plain_text">Plain text</option></select></label><textarea id="so-import-source" value={source} onChange={(event) => setSource(event.target.value)} placeholder={'# Messaging notes\n- SQS may redeliver messages.'} /><div className="so-inline-actions"><span>The exact text is immutable after saving.</span><Button disabled={!source || workspace.create.isPending || workspace.parse.isPending} onClick={() => void saveAndParse()}><Import size={17} /> {workspace.create.isPending || workspace.parse.isPending ? 'Saving and queueing…' : 'Save and queue parse'}</Button></div>{(workspace.create.isError || workspace.parse.isError) && <p className="so-error" role="alert">The original or parse job could not be saved. Review the text and retry.</p>}</section>
+      {job && <div className="so-decision-banner" aria-live="polite"><Clock3 size={18} /><div><strong>Parse job {job.status}</strong><p>Job {job.job_id} ({job.kind}) was accepted at {job.enqueued_at}{job.deduplicated ? ' and matched an existing active job' : ''}. This receipt does not claim parsing completed.</p></div><Button tone="secondary" onClick={() => void workspace.refreshSelected()}>Refresh import</Button></div>}
+      {workspace.imports.isPending ? <div className="so-empty"><Clock3 size={28} /><h2>Loading imports…</h2></div> : workspace.imports.isError ? <div className="so-empty"><AlertTriangle size={28} /><h2>Imports unavailable</h2><p>No local fixture was substituted.</p><Button tone="secondary" onClick={() => void workspace.imports.refetch()}>Retry</Button></div> : imports.length === 0 ? <div className="so-empty"><FileText size={28} /><h2>No imports yet</h2><p>Save an exact original above to queue server-side parsing.</p></div> : <>
+        <section className="so-panel so-import-picker"><label htmlFor="so-import-picker"><span className="so-kicker">Saved originals</span><strong>Choose an import to inspect</strong></label><select id="so-import-picker" value={selectedImportId ?? ''} onChange={(event) => { setSelectedImportId(event.target.value); setJob(null) }}>{imports.map(item => <option key={item.id} value={item.id}>{item.import_type} · {item.status} · {item.original_hash.slice(0, 12)}</option>)}</select></section>
+        {workspace.selectedImport.isPending ? <div className="so-empty"><Clock3 size={28} /><h2>Loading preserved original…</h2></div> : workspace.selectedImport.isError || !selected ? <div className="so-empty"><AlertTriangle size={28} /><h2>Original unavailable</h2><Button tone="secondary" onClick={() => void workspace.selectedImport.refetch()}>Retry</Button></div> : <section className="so-panel so-import-original"><div className="so-panel-head"><div><FileText size={20} /><h2>Preserved original</h2></div><span className={`so-chip ${selected.status === 'failed' || selected.status === 'cancelled' ? 'so-chip--amber' : 'so-chip--gray'}`}>{selected.status}</span></div><textarea readOnly aria-label="Preserved original text" value={selected.original_content} /><dl className="so-facts"><dt>SHA-256</dt><dd>{selected.original_hash}</dd><dt>Parser</dt><dd>{selected.parser_version ?? 'Not parsed yet'}</dd><dt>Failure</dt><dd>{selected.failure_code ? `${selected.failure_code}${selected.failure_reference ? ` · ${selected.failure_reference}` : ''}` : 'None reported'}</dd></dl><div className="so-inline-actions"><span>Original content remains inspectable even if parsing fails.</span>{selected.status === 'failed' || selected.status === 'cancelled' ? <Button tone="secondary" disabled={workspace.parse.isPending} onClick={() => workspace.parse.mutate(selected.id, { onSuccess: setJob })}>Retry parse</Button> : <Button tone="secondary" disabled={workspace.reprocess.isPending} onClick={() => workspace.reprocess.mutate(selected.id, { onSuccess: setJob })}>Reprocess unmapped</Button>}</div></section>}
+        {workspace.statements.isPending ? <div className="so-empty"><Clock3 size={28} /><h2>Loading statements…</h2></div> : workspace.statements.isError ? <div className="so-empty"><AlertTriangle size={28} /><h2>Statements unavailable</h2><p>The original remains preserved.</p><Button tone="secondary" onClick={() => void workspace.statements.refetch()}>Retry</Button></div> : (workspace.statements.data ?? []).length === 0 ? <div className="so-empty"><FileText size={28} /><h2>No statements available</h2><p>The parse may still be queued, may have failed, or may have produced no statements. Refresh the import to inspect its current status.</p></div> : <section aria-labelledby="so-review-title"><div className="so-section-head"><div><span className="so-kicker">Parsed as untrusted</span><h2 id="so-review-title">Review {(workspace.statements.data ?? []).length} ordered statements</h2></div><span>{(workspace.statements.data ?? []).filter(item => item.trust_state !== 'untrusted').length} decided</span></div><div className="so-statement-list">{(workspace.statements.data ?? []).map(statement => <ImportStatementReview key={statement.id} statement={statement} topics={topics} goalId={currentGoal.id} workspace={workspace} />)}</div><Disclosure><strong>Mapping and verification are personal decisions, not factual or editorial authority.</strong><p>Imported material cannot alter canonical lessons, create evidence, establish completion, or expand the approved graph.</p></Disclosure></section>}
+      </>}
+    </>}
   </>
 }
 
@@ -272,6 +298,8 @@ function GlobalProfileSettings() {
 }
 
 function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
+  const { currentGoal } = useProfileGoals()
+  const imports = useImports(currentGoal?.id ?? null, null).imports
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), scope: 'application prototype local operations state', ...state }, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
@@ -283,9 +311,9 @@ function SettingsPage({ state, setState, navigate }: { state: OperationsState; s
       <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div><fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" checked={state.progress === 'detailed'} onChange={() => setState((s) => ({ ...s, progress: 'detailed' }))} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, and evidence links.</small></span></label><label><input type="radio" name="progress" checked={state.progress === 'simple'} onChange={() => setState((s) => ({ ...s, progress: 'simple' }))} /><span><strong>Simple</strong><small>Condensed display only; underlying local fixture data is not deleted.</small></span></label></fieldset></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div><label className="so-switch"><input type="checkbox" checked={state.review.enabled} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, enabled: event.target.checked } }))} /><span>{state.review.enabled ? 'Enabled' : 'Disabled'}</span></label></div><div className="so-review-controls" aria-disabled={!state.review.enabled}><label>Session length<select disabled={!state.review.enabled} value={state.review.duration} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, duration: Number(event.target.value) } }))}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={25}>25 minutes</option></select></label><label>Cadence<select disabled={!state.review.enabled} value={state.review.cadence} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, cadence: event.target.value } }))}><option>Once a week</option><option>Twice a week</option><option>Three times a week</option></select></label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.retrieval} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, retrieval: event.target.checked } }))} /> Retrieval prompts</label><label className="so-check"><input type="checkbox" disabled={!state.review.enabled} checked={state.review.variedContext} onChange={(event) => setState((s) => ({ ...s, review: { ...s.review, variedContext: event.target.checked } }))} /> Varied contexts</label></div><p className="so-help">Disabling or dismissing review never blocks the roadmap and carries no readiness penalty.</p></section>
       <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>
-      <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div><p>{state.importStatements.length} parsed statement{state.importStatements.length === 1 ? '' : 's'} stored in this browser.</p><Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
+      <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div>{!currentGoal ? <p>Select a current goal to review its imports.</p> : imports.isPending ? <p>Loading the current goal’s server imports…</p> : imports.isError ? <><p role="alert">The imports summary is unavailable. No browser count was substituted.</p><Button tone="secondary" onClick={() => void imports.refetch()}>Retry summary</Button></> : <p>{imports.data?.length ?? 0} preserved import{imports.data?.length === 1 ? '' : 's'} for {currentGoal.name}; {(imports.data ?? []).filter(item => item.status === 'failed' || item.status === 'cancelled').length} need attention.</p>}<Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
       <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Not connected</span></div><div className="so-network-grid"><article><strong>Model providers</strong><p>No Codex, Claude, or other provider adapter is configured or invoked by these pages.</p></article><article><strong>Source retrieval</strong><p>No external documentation or citation source is fetched.</p></article><article><strong>Local runner</strong><p>No Java process, subprocess sandbox, or execution service is present.</p></article></div><p className="so-help">This prototype makes no strict-offline guarantee for the wider application; these operational pages themselves use bundled data and localStorage.</p></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads this prototype’s profile, preferences, import text, review decisions, and update decision.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Delete imported material</strong><p>Removes original import text and parsed statements from this browser.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><Trash2 size={16} /> Delete imports</Button>} title="Delete all imported material?" description="This removes the preserved original and every parsed statement from this browser. This prototype has no recovery service." confirm="Delete imports" onConfirm={() => setState((s) => ({ ...s, importSource: '', importStatements: [] }))} /></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns these operational pages to fixture defaults. Other application data is outside this control.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Profile, preferences, disputes, import material, and canonical update choices stored by these pages will be replaced with fixture defaults." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
+      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads this prototype’s remaining local operational preferences and update decisions. Server imports are not represented as exported here.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns the remaining local operational preferences to fixture defaults. It does not delete server imports.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Profile, preferences, disputes, and canonical update choices stored by these pages will be replaced with fixture defaults. Server imports remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
     </div>
   </>
 }
@@ -294,7 +322,7 @@ export function OperationalPageView({ page, navigate }: { page: OperationalPage;
   const [state, setState] = useOperationsState()
   const pages: Record<OperationalPage, React.ReactNode> = {
     evidence: <EvidencePage state={state} setState={setState} navigate={navigate} />,
-    imports: <ImportsPage state={state} setState={setState} />,
+    imports: <ImportsPage />,
     'canonical-updates': <CanonicalUpdatesPage state={state} setState={setState} />,
     search: <SearchPage navigate={navigate} />,
     jobs: <JobsPage />,

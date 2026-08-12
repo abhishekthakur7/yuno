@@ -10,6 +10,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from yuno.shared.infrastructure.base import (
@@ -49,10 +52,12 @@ class OverlayEntryRow(Base):
     __tablename__ = "overlay_entries"
     __table_args__ = (
         CheckConstraint(
-            "entry_type IN ('order_constraint','skip','depth')", name="entry_type_valid"
+            "entry_type IN ('order_constraint','skip','depth','bridge','recommendation')",
+            name="entry_type_valid",
         ),
         CheckConstraint(
-            "source IN ('learner','diagnostic_confirmation')", name="source_valid"
+            "source IN ('learner','diagnostic_confirmation','overlay_proposal')",
+            name="source_valid",
         ),
         CheckConstraint("json_valid(value_json)", name="value_json_valid"),
         ForeignKeyConstraint(
@@ -102,6 +107,102 @@ class OverlayEntryRow(Base):
         Text, ForeignKey("overlay_entries.id")
     )
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class OverlayProposalRow(Base):
+    __tablename__ = "overlay_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "proposal_type IN ('recommendation','emphasis','example','exercise','ordering','bridge')",
+            name="proposal_type_valid",
+        ),
+        CheckConstraint(
+            "state IN ('awaiting-learner-decision','accepted','postponed','dismissed','rejected-stale')",
+            name="state_valid",
+        ),
+        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
+        CheckConstraint(
+            "json_type(payload_json) = 'object'", name="payload_json_object"
+        ),
+        ForeignKeyConstraint(
+            ["goal_id", "owner_id"],
+            ["goal_workspaces.id", "goal_workspaces.owner_id"],
+            name="fk_overlay_proposals_goal_owner",
+        ),
+        UniqueConstraint(
+            "id", "owner_id", "goal_id", name="uq_overlay_proposals_id_owner_goal"
+        ),
+        Index(
+            "uq_overlay_proposals_pending_goal_hash",
+            "goal_id",
+            "content_hash",
+            unique=True,
+            sqlite_where=sql_text("state = 'awaiting-learner-decision'"),
+        ),
+        Index(
+            "ix_overlay_proposals_owner_goal_state_created",
+            "owner_id",
+            "goal_id",
+            "state",
+            "created_at",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_against_graph_version_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("editorial_approvals.graph_version_id"), nullable=False
+    )
+    topic_stable_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposal_type: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(Text, nullable=False)
+    state_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = utc_timestamp_column()
+    decided_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
+
+
+class OverlayProposalDecisionRow(Base):
+    __tablename__ = "overlay_proposal_decisions"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('accept','add','postpone','dismiss')", name="decision_valid"
+        ),
+        ForeignKeyConstraint(
+            ["goal_id", "owner_id"],
+            ["goal_workspaces.id", "goal_workspaces.owner_id"],
+            name="fk_overlay_proposal_decisions_goal_owner",
+        ),
+        ForeignKeyConstraint(
+            ["proposal_id", "owner_id", "goal_id"],
+            [
+                "overlay_proposals.id",
+                "overlay_proposals.owner_id",
+                "overlay_proposals.goal_id",
+            ],
+            name="fk_overlay_proposal_decisions_proposal_owner_goal",
+        ),
+        UniqueConstraint(
+            "id",
+            "owner_id",
+            "goal_id",
+            name="uq_overlay_proposal_decisions_id_owner_goal",
+        ),
+        Index(
+            "ix_overlay_proposal_decisions_owner_proposal_decided",
+            "owner_id",
+            "proposal_id",
+            "decided_at",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    proposal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[str] = utc_timestamp_column()
 
 
 class LearningStateRow(Base):

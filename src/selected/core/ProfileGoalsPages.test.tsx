@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +13,9 @@ const goal = (id: string, name: string): GoalWorkspace => ({ id, name, path: 'le
 const diagnosticSession = (patch: Partial<DiagnosticSession> = {}): DiagnosticSession => ({
   id: 'diagnostic-1', captured_graph_version_id: 'graph-1', question_set_version: 'diagnostic-fixture-v1', setup_inputs: { path: 'learn', subject: 'Distributed systems', role: null, target_level: 'Senior', target_capability: 'implement', goal_name: 'Reliable consumers' }, state: 'in-progress', untrusted_seed_kind: null, untrusted_seed_text: null, seed_skipped: false, diagnostic_skipped: false, answers: [], next_question: { ref: 'delivery-contract', prompt: 'What can standard queue delivery guarantee?', sequence: 1, adaptive_context_version: 'diagnostic-fixture-v1' }, started_at: '2026-08-12T00:00:00Z', paused_at: null, expires_at: null, failure_code: null, failure_reference: null, confirmed_goal_id: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z', ...patch,
 })
+const roadmapProjection = { goal_id: 'a', graph_version_id: 'graph-1', projection_version: 'projection-1', state: 'ready', topics: [{ stable_id: 'delivery-contract', title: 'Delivery contracts', subject: 'Queues', level_tag: 'Senior', target_capability: 'implement', scope_tags: [], classification: 'unverified', recommended_depth: 'Implementation', depth_override: null, is_skipped: false, has_transferred_evidence: false, explanation: 'Saved projection', pending_proposals: [], conflicts: [] }] }
+const bridgeProposal = (patch: Record<string, unknown> = {}) => ({ id: 'proposal-1', goal_id: 'a', generated_against_graph_version_id: 'graph-1', topic_stable_id: 'delivery-contract', proposal_type: 'bridge', payload: { title: 'Add a retry bridge', why: 'Your diagnostic showed a gap between delivery and recovery.', relationship: 'prepares for', proposed_placement: 'After Delivery contracts' }, content_hash: 'hash-1', state: 'awaiting-learner-decision', state_reason: null, created_at: '2026-08-12T00:00:00Z', decided_at: null, deduplicated: false, decisions: [], ...patch })
+const recommendationProposal = (id: string, title: string) => ({ ...bridgeProposal({ id, proposal_type: 'recommendation', topic_stable_id: null, payload: { title, why: `Why ${title}` }, content_hash: `hash-${id}` }) })
 
 function json(value: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }))
@@ -34,6 +37,127 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('profile-backed goal pages', () => {
+  it('shows bridge explanations and sends an explicit add decision with its reason', async () => {
+    let decision: { url: string; body: unknown; idempotencyKey: string | null } | null = null
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (request.url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (request.url.endsWith('/learning-states')) return json([])
+      if (request.url.endsWith('/roadmap')) return json(roadmapProjection)
+      if (request.url.endsWith('/goals/a/overlay-proposals')) return json([bridgeProposal()])
+      if (request.url.endsWith('/bridges/proposal-1/decision') && request.method === 'POST') {
+        decision = { url: request.url, body: await request.json(), idempotencyKey: request.headers.get('Idempotency-Key') }
+        return json(bridgeProposal({ state: 'accepted', decisions: [{ id: 'decision-1', decision: 'add', reason: 'Needed before retries', decided_at: '2026-08-12T00:01:00Z' }] }))
+      }
+      return json({}, 404)
+    }))
+    renderPage(<Roadmap navigate={vi.fn()} />)
+
+    expect(await screen.findByRole('heading', { name: 'Add a retry bridge' })).toBeInTheDocument()
+    expect(screen.getByText(/diagnostic showed a gap/i)).toBeInTheDocument()
+    expect(screen.getByText('prepares for')).toBeInTheDocument()
+    expect(screen.getByText('After Delivery contracts')).toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Optional reason' }), 'Needed before retries')
+    await userEvent.click(screen.getByRole('button', { name: 'Add bridge' }))
+
+    await waitFor(() => expect(decision).not.toBeNull())
+    expect(decision!.url).toMatch(/\/api\/v1\/bridges\/proposal-1\/decision$/)
+    expect(decision!.body).toEqual({ decision: 'add', reason: 'Needed before retries' })
+    expect(decision!.idempotencyKey).toBeTruthy()
+  })
+
+  it('keeps the roadmap visible and explains a stale proposal rejection', async () => {
+    let stale = false
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (request.url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (request.url.endsWith('/learning-states')) return json([])
+      if (request.url.endsWith('/roadmap')) return json(roadmapProjection)
+      if (request.url.endsWith('/goals/a/overlay-proposals')) return json([bridgeProposal(stale ? { state: 'rejected-stale', state_reason: 'Generated against graph-1, but this goal now uses graph-2.' } : {})])
+      if (request.url.endsWith('/bridges/proposal-1/decision') && request.method === 'POST') {
+        stale = true
+        return json({ message: 'Generated against graph-1, but this goal now uses graph-2.' }, 409)
+      }
+      return json({}, 404)
+    }))
+    renderPage(<Roadmap navigate={vi.fn()} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Add bridge' }))
+
+    expect(await screen.findByText(/This proposal is stale and was not applied/i)).toBeInTheDocument()
+    expect(await screen.findByText('Generated against graph-1, but this goal now uses graph-2.')).toBeInTheDocument()
+    expect(screen.getByText('Delivery contracts')).toBeInTheDocument()
+  })
+
+  it('offers and records accept, postpone, and dismiss for overlay proposals', async () => {
+    const decisions: Array<{ id: string; decision: string }> = []
+    const proposals = [recommendationProposal('accept-me', 'Accept this'), recommendationProposal('postpone-me', 'Postpone this'), recommendationProposal('dismiss-me', 'Dismiss this')]
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (request.url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (request.url.endsWith('/learning-states')) return json([])
+      if (request.url.endsWith('/roadmap')) return json(roadmapProjection)
+      if (request.url.endsWith('/goals/a/overlay-proposals')) return json(proposals)
+      const match = request.url.match(/\/overlay-proposals\/(.+)\/decision$/)
+      if (match && request.method === 'POST') {
+        const body = await request.json() as { decision: string }
+        decisions.push({ id: match[1]!, decision: body.decision })
+        return json(proposals.find(item => item.id === match[1]))
+      }
+      return json({}, 404)
+    }))
+    renderPage(<Roadmap navigate={vi.fn()} />)
+
+    const acceptCard = (await screen.findByRole('heading', { name: 'Accept this' })).closest('article')!
+    const postponeCard = screen.getByRole('heading', { name: 'Postpone this' }).closest('article')!
+    const dismissCard = screen.getByRole('heading', { name: 'Dismiss this' }).closest('article')!
+    await userEvent.click(within(acceptCard).getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(decisions).toHaveLength(1))
+    await userEvent.click(within(postponeCard).getByRole('button', { name: 'Postpone' }))
+    await waitFor(() => expect(decisions).toHaveLength(2))
+    await userEvent.click(within(dismissCard).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(decisions).toHaveLength(3))
+
+    expect(decisions).toEqual([{ id: 'accept-me', decision: 'accept' }, { id: 'postpone-me', decision: 'postpone' }, { id: 'dismiss-me', decision: 'dismiss' }])
+  })
+
+  it('shows proposal loading, empty, and isolated error states', async () => {
+    let resolveProposals: ((value: Response) => void) | undefined
+    const proposalResponse = new Promise<Response>(resolve => { resolveProposals = resolve })
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestFrom(input, init).url
+      if (url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (url.endsWith('/learning-states')) return json([])
+      if (url.endsWith('/roadmap')) return json(roadmapProjection)
+      if (url.endsWith('/overlay-proposals')) return proposalResponse
+      return json({}, 404)
+    }))
+    renderPage(<Roadmap navigate={vi.fn()} />)
+    expect(await screen.findByText('Loading recommendations')).toBeInTheDocument()
+    expect(screen.getByText('Delivery contracts')).toBeInTheDocument()
+    resolveProposals!(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    expect(await screen.findByText('No recommendations waiting')).toBeInTheDocument()
+  })
+
+  it('retains accepted topics when proposal loading fails', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestFrom(input, init).url
+      if (url.endsWith('/profile')) return json({ ...profile, current_goal_id: 'a' })
+      if (url.endsWith('/goals')) return json([goal('a', 'Messaging reliability')])
+      if (url.endsWith('/learning-states')) return json([])
+      if (url.endsWith('/roadmap')) return json(roadmapProjection)
+      if (url.endsWith('/overlay-proposals')) return json({ message: 'Unavailable' }, 503)
+      return json({}, 404)
+    }))
+    renderPage(<Roadmap navigate={vi.fn()} />)
+    expect(await screen.findByText(/Recommendations could not be loaded/i)).toBeInTheDocument()
+    expect(screen.getByText('Delivery contracts')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
   it('keeps the accepted roadmap visible when a background refresh fails', async () => {
     let roadmapFails = false
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

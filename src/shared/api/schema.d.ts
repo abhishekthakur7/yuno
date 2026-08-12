@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bridges/{proposal_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Bridge Decision */
+        post: operations["post_bridge_decision_api_v1_bridges__proposal_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/canonical/versions": {
         parameters: {
             query?: never;
@@ -332,6 +349,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/overlay-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Overlay Proposals */
+        get: operations["get_overlay_proposals_api_v1_goals__goal_id__overlay_proposals_get"];
+        put?: never;
+        /** Post Overlay Proposal */
+        post: operations["post_overlay_proposal_api_v1_goals__goal_id__overlay_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals/{goal_id}/roadmap": {
         parameters: {
             query?: never;
@@ -433,6 +468,177 @@ export interface paths {
         get: operations["health_api_v1_health_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-statements/{statement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Import Statement */
+        patch: operations["patch_import_statement_api_v1_import_statements__statement_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/import-statements/{statement_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Import Statement Dismiss */
+        post: operations["post_import_statement_dismiss_api_v1_import_statements__statement_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-statements/{statement_id}/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Import Statement Map */
+        post: operations["post_import_statement_map_api_v1_import_statements__statement_id__map_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-statements/{statement_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Import Statement Verify */
+        post: operations["post_import_statement_verify_api_v1_import_statements__statement_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Imports */
+        get: operations["get_imports_api_v1_imports_get"];
+        put?: never;
+        /** Post Import */
+        post: operations["post_import_api_v1_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Import Record */
+        get: operations["get_import_record_api_v1_imports__import_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/parse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Import Parse */
+        post: operations["post_import_parse_api_v1_imports__import_id__parse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Import Reprocess */
+        post: operations["post_import_reprocess_api_v1_imports__import_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{import_id}/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Import Statements */
+        get: operations["get_import_statements_api_v1_imports__import_id__statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/overlay-proposals/{proposal_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Overlay Proposal Decision */
+        post: operations["post_overlay_proposal_decision_api_v1_overlay_proposals__proposal_id__decision_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -891,6 +1097,115 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** ImportCreateRequest */
+        ImportCreateRequest: {
+            /** Goal Id */
+            goal_id?: string | null;
+            import_type: components["schemas"]["ImportType"];
+            /** Original Content */
+            original_content: string;
+        };
+        /** ImportRecordResponse */
+        ImportRecordResponse: {
+            /** Created At */
+            created_at: string;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Goal Id */
+            goal_id: string | null;
+            /** Id */
+            id: string;
+            import_type: components["schemas"]["ImportType"];
+            /** Original Content */
+            original_content: string;
+            /** Original Hash */
+            original_hash: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Row Version */
+            row_version: number;
+            status: components["schemas"]["ImportStatus"];
+            /** Updated At */
+            updated_at: string;
+        };
+        /** ImportStatementMapRequest */
+        ImportStatementMapRequest: {
+            /** Goal Id */
+            goal_id: string;
+            /** Topic Id */
+            topic_id: string;
+        };
+        /** ImportStatementMapResponse */
+        ImportStatementMapResponse: {
+            mapping: components["schemas"]["ImportStatementMappingResponse"];
+            statement: components["schemas"]["ImportStatementResponse"];
+            topic_imports_hash: components["schemas"]["TopicImportHashResponse"];
+        };
+        /** ImportStatementMappingResponse */
+        ImportStatementMappingResponse: {
+            /** Accepted At */
+            accepted_at: string;
+            decision: components["schemas"]["MappingDecision"];
+            /** Goal Id */
+            goal_id: string;
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Topic Id */
+            topic_id: string;
+        };
+        /** ImportStatementPatchRequest */
+        ImportStatementPatchRequest: {
+            /** Corrected Text */
+            corrected_text: string;
+        };
+        /** ImportStatementResponse */
+        ImportStatementResponse: {
+            /** Confidence */
+            confidence: number;
+            /** Corrected Text */
+            corrected_text: string | null;
+            /** Created At */
+            created_at: string;
+            /** Duplicate Of Statement Id */
+            duplicate_of_statement_id: string | null;
+            /** Id */
+            id: string;
+            /** Import Id */
+            import_id: string;
+            mapping?: components["schemas"]["ImportStatementMappingResponse"] | null;
+            mapping_state: components["schemas"]["MappingState"];
+            /** Normalized Hash */
+            normalized_hash: string;
+            /** Normalized Text */
+            normalized_text: string;
+            /** Original Hash */
+            original_hash: string;
+            /** Original Text */
+            original_text: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Row Version */
+            row_version: number;
+            /** Sequence */
+            sequence: number;
+            trust_state: components["schemas"]["TrustState"];
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * ImportStatus
+         * @enum {string}
+         */
+        ImportStatus: "selected" | "parsing" | "parsed-untrusted" | "learner-review" | "applied" | "failed" | "cancelled";
+        /**
+         * ImportType
+         * @enum {string}
+         */
+        ImportType: "markdown" | "plain_text";
         /**
          * JobRefResponse
          * @description Mirrors `application.jobs.JobRef` — the `202` enqueue response body
@@ -972,6 +1287,16 @@ export interface components {
             /** Topic Stable Id */
             topic_stable_id: string;
         };
+        /**
+         * MappingDecision
+         * @enum {string}
+         */
+        MappingDecision: "approved" | "revoked";
+        /**
+         * MappingState
+         * @enum {string}
+         */
+        MappingState: "unmapped" | "mapped" | "duplicate";
         /** OrderConstraintRequest */
         OrderConstraintRequest: {
             /** After Topic Id */
@@ -981,6 +1306,81 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /**
+         * OverlayDecisionType
+         * @enum {string}
+         */
+        OverlayDecisionType: "accept" | "add" | "postpone" | "dismiss";
+        /** OverlayProposalCreateRequest */
+        OverlayProposalCreateRequest: {
+            /** Generated Against Graph Version Id */
+            generated_against_graph_version_id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            proposal_type: components["schemas"]["OverlayProposalType"];
+            /** Topic Stable Id */
+            topic_stable_id?: string | null;
+        };
+        /** OverlayProposalDecisionRequest */
+        OverlayProposalDecisionRequest: {
+            decision: components["schemas"]["OverlayDecisionType"];
+            /** Reason */
+            reason?: string | null;
+        };
+        /** OverlayProposalDecisionResponse */
+        OverlayProposalDecisionResponse: {
+            /** Decided At */
+            decided_at: string;
+            decision: components["schemas"]["OverlayDecisionType"];
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+        };
+        /** OverlayProposalResponse */
+        OverlayProposalResponse: {
+            /** Content Hash */
+            content_hash: string;
+            /** Created At */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decisions */
+            decisions?: components["schemas"]["OverlayProposalDecisionResponse"][];
+            /**
+             * Deduplicated
+             * @default false
+             */
+            deduplicated: boolean;
+            /** Generated Against Graph Version Id */
+            generated_against_graph_version_id: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            proposal_type: components["schemas"]["OverlayProposalType"];
+            state: components["schemas"]["OverlayProposalState"];
+            /** State Reason */
+            state_reason: string | null;
+            /** Topic Stable Id */
+            topic_stable_id: string | null;
+        };
+        /**
+         * OverlayProposalState
+         * @enum {string}
+         */
+        OverlayProposalState: "awaiting-learner-decision" | "accepted" | "postponed" | "dismissed" | "rejected-stale";
+        /**
+         * OverlayProposalType
+         * @enum {string}
+         */
+        OverlayProposalType: "recommendation" | "emphasis" | "example" | "exercise" | "ordering" | "bridge";
         /**
          * ResumeDestination
          * @enum {string}
@@ -1099,6 +1499,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** TopicImportHashResponse */
+        TopicImportHashResponse: {
+            /** Goal Id */
+            goal_id: string;
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Imports Hash */
+            imports_hash: string;
+            /** Topic Id */
+            topic_id: string;
+            /** Updated At */
+            updated_at: string;
+        };
         /**
          * TopicLayer
          * @enum {string}
@@ -1129,6 +1542,11 @@ export interface components {
             /** Topic Id */
             topic_id: string;
         };
+        /**
+         * TrustState
+         * @enum {string}
+         */
+        TrustState: "untrusted" | "verified" | "dismissed";
         /**
          * UntrustedSeedKind
          * @enum {string}
@@ -1163,6 +1581,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_bridge_decision_api_v1_bridges__proposal_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlayProposalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayProposalResponse"];
                 };
             };
             /** @description Default Response */
@@ -1880,6 +2335,83 @@ export interface operations {
             };
         };
     };
+    get_overlay_proposals_api_v1_goals__goal_id__overlay_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayProposalResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_overlay_proposal_api_v1_goals__goal_id__overlay_proposals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlayProposalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayProposalResponse"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayProposalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_goal_roadmap_api_v1_goals__goal_id__roadmap_get: {
         parameters: {
             query?: never;
@@ -2065,6 +2597,381 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_import_statement_api_v1_import_statements__statement_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                statement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportStatementPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatementResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_statement_dismiss_api_v1_import_statements__statement_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                statement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatementResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_statement_map_api_v1_import_statements__statement_id__map_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                statement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportStatementMapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatementMapResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_statement_verify_api_v1_import_statements__statement_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string | null;
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                statement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatementResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_imports_api_v1_imports_get: {
+        parameters: {
+            query?: {
+                goal_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRecordResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_api_v1_imports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRecordResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_import_record_api_v1_imports__import_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRecordResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_parse_api_v1_imports__import_id__parse_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_import_reprocess_api_v1_imports__import_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_import_statements_api_v1_imports__import_id__statements_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportStatementResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_overlay_proposal_decision_api_v1_overlay_proposals__proposal_id__decision_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlayProposalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayProposalResponse"];
                 };
             };
             /** @description Default Response */

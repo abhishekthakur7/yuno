@@ -5,23 +5,34 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from yuno.api.contracts import (
     DepthOverrideRequest,
     LearnerCorrectionRequest,
     LearningStateResponse,
     OrderConstraintRequest,
+    OverlayProposalCreateRequest,
+    OverlayProposalDecisionRequest,
+    OverlayProposalDecisionResponse,
+    OverlayProposalResponse,
     RoadmapMutationResponse,
     RoadmapResponse,
     RoadmapTopicResponse,
     SkipDecisionRequest,
 )
-from yuno.api.dependencies import get_owner_id, get_unit_of_work, idempotency_key
+from yuno.api.dependencies import (
+    get_owner_id,
+    get_settings_dependency,
+    get_unit_of_work,
+    idempotency_key,
+)
+from yuno.config import Settings
 from yuno.modules.roadmap.domain import (
     LearnerCorrection,
     OverlayEntry,
     OverlayEntryType,
+    ProposalStaleError,
     RoadmapIdempotencyRecord,
     RoadmapRelation,
     RoadmapTopic,
@@ -34,12 +45,97 @@ from yuno.modules.roadmap.ports import (
     GoalView,
     RoadmapUnitOfWork,
 )
+from yuno.modules.roadmap.service import create_proposal, decide_proposal
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import IdempotencyConflictError, NotFoundError
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 
 router = APIRouter(tags=["roadmap"])
+
+
+@router.get(
+    "/goals/{goal_id}/overlay-proposals",
+    response_model=list[OverlayProposalResponse],
+)
+def get_overlay_proposals(
+    goal_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+) -> list[OverlayProposalResponse]:
+    _goal(uow, owner_id, goal_id)
+    return [
+        _proposal_response(uow, owner_id, proposal)
+        for proposal in uow.roadmap.list_proposals(owner_id, goal_id)
+    ]
+
+
+@router.post(
+    "/goals/{goal_id}/overlay-proposals",
+    response_model=OverlayProposalResponse,
+    status_code=201,
+    responses={200: {"model": OverlayProposalResponse}},
+)
+def post_overlay_proposal(
+    goal_id: str,
+    body: OverlayProposalCreateRequest,
+    response: Response,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+    key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
+) -> OverlayProposalResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
+    operation = f"overlay-proposal-create:{goal_id}"
+    request_hash = hash_payload(body.model_dump(mode="json"))
+    if replay := _proposal_replay(uow, owner_id, operation, key, request_hash):
+        response.status_code = 200
+        return replay
+    proposal, deduplicated = create_proposal(
+        uow,
+        owner_id,
+        goal_id,
+        generated_against_graph_version_id=body.generated_against_graph_version_id,
+        topic_stable_id=body.topic_stable_id,
+        proposal_type=body.proposal_type,
+        payload=body.payload,
+        pending_cap=settings.overlay_proposal_pending_cap,
+    )
+    result = _proposal_response(uow, owner_id, proposal, deduplicated=deduplicated)
+    _save_proposal_response(
+        uow, owner_id, goal_id, operation, key, request_hash, result
+    )
+    response.status_code = 200 if deduplicated else 201
+    uow.commit()
+    return result
+
+
+@router.post(
+    "/overlay-proposals/{proposal_id}/decision",
+    response_model=OverlayProposalResponse,
+)
+def post_overlay_proposal_decision(
+    proposal_id: str,
+    body: OverlayProposalDecisionRequest,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> OverlayProposalResponse:
+    return _decide(uow, owner_id, proposal_id, body, key, bridge_endpoint=False)
+
+
+@router.post(
+    "/bridges/{proposal_id}/decision",
+    response_model=OverlayProposalResponse,
+)
+def post_bridge_decision(
+    proposal_id: str,
+    body: OverlayProposalDecisionRequest,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> OverlayProposalResponse:
+    return _decide(uow, owner_id, proposal_id, body, key, bridge_endpoint=True)
 
 
 @router.get("/goals/{goal_id}/roadmap", response_model=RoadmapResponse)
@@ -351,6 +447,17 @@ def _projection_response(
         transferred_evidence_topic_ids=uow.roadmap.list_transferred_evidence_topic_ids(
             owner_id, goal_id
         ),
+        pending_proposals=(
+            {
+                "id": proposal.id,
+                "topic_stable_id": proposal.topic_stable_id,
+                "proposal_type": proposal.proposal_type.value,
+                "payload": proposal.payload,
+                "state": proposal.state.value,
+            }
+            for proposal in uow.roadmap.list_proposals(owner_id, goal_id)
+            if proposal.state.value == "awaiting-learner-decision"
+        ),
     )
     versions = uow.canonical.list_published_versions()
     stale = bool(versions and versions[0].id != goal.graph_version_id)
@@ -421,3 +528,118 @@ def _prerequisites(
 def _require_topic(topics: Sequence[CanonicalTopicView], topic_id: str) -> None:
     if all(item.stable_id != topic_id for item in topics):
         raise NotFoundError("Topic not found in the goal's pinned graph.")
+
+
+def _decide(
+    uow: RoadmapUnitOfWork,
+    owner_id: str,
+    proposal_id: str,
+    body: OverlayProposalDecisionRequest,
+    key: str,
+    *,
+    bridge_endpoint: bool,
+) -> OverlayProposalResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
+    prefix = "bridge" if bridge_endpoint else "overlay-proposal"
+    operation = f"{prefix}-decision:{proposal_id}"
+    request_hash = hash_payload(body.model_dump(mode="json"))
+    if replay := _proposal_replay(uow, owner_id, operation, key, request_hash):
+        return replay
+    proposal, stale_error = decide_proposal(
+        uow,
+        owner_id,
+        proposal_id,
+        decision=body.decision,
+        reason=body.reason,
+        bridge_endpoint=bridge_endpoint,
+    )
+    result = _proposal_response(uow, owner_id, proposal)
+    _save_proposal_response(
+        uow, owner_id, proposal.goal_id, operation, key, request_hash, result
+    )
+    # The rejected-stale transition is intentionally persisted so the UX can
+    # render it, while the accepting command still returns the required 409.
+    uow.commit()
+    if stale_error is not None:
+        raise stale_error
+    return result
+
+
+def _proposal_replay(
+    uow: RoadmapUnitOfWork,
+    owner_id: str,
+    operation: str,
+    key: str,
+    request_hash: str,
+) -> OverlayProposalResponse | None:
+    prior = uow.roadmap.get_idempotency(owner_id, operation, key)
+    if prior is None:
+        return None
+    if prior.request_hash != request_hash:
+        raise IdempotencyConflictError(
+            "The Idempotency-Key was reused with a different proposal command."
+        )
+    replay = OverlayProposalResponse.model_validate_json(prior.response_json)
+    if replay.state.value == "rejected-stale":
+        raise ProposalStaleError(
+            replay.state_reason
+            or "The proposal is stale for the goal's current graph.",
+            current_state=replay.state.value,
+            recovery_action="Create a new proposal against the goal's current graph.",
+        )
+    return replay
+
+
+def _save_proposal_response(
+    uow: RoadmapUnitOfWork,
+    owner_id: str,
+    goal_id: str,
+    operation: str,
+    key: str,
+    request_hash: str,
+    result: OverlayProposalResponse,
+) -> None:
+    uow.roadmap.add_idempotency(
+        RoadmapIdempotencyRecord(
+            id=new_id(),
+            owner_id=owner_id,
+            goal_id=goal_id,
+            operation=operation,
+            idempotency_key=key,
+            request_hash=request_hash,
+            response_json=result.model_dump_json(),
+            created_at=now_text(SystemClock()),
+        )
+    )
+
+
+def _proposal_response(
+    uow: RoadmapUnitOfWork,
+    owner_id: str,
+    proposal,
+    *,
+    deduplicated: bool = False,
+) -> OverlayProposalResponse:
+    return OverlayProposalResponse(
+        id=proposal.id,
+        goal_id=proposal.goal_id,
+        generated_against_graph_version_id=proposal.generated_against_graph_version_id,
+        topic_stable_id=proposal.topic_stable_id,
+        proposal_type=proposal.proposal_type,
+        payload=proposal.payload,
+        content_hash=proposal.content_hash,
+        state=proposal.state,
+        state_reason=proposal.state_reason,
+        created_at=proposal.created_at,
+        decided_at=proposal.decided_at,
+        deduplicated=deduplicated,
+        decisions=[
+            OverlayProposalDecisionResponse(
+                id=decision.id,
+                decision=decision.decision,
+                reason=decision.reason,
+                decided_at=decision.decided_at,
+            )
+            for decision in uow.roadmap.list_proposal_decisions(owner_id, proposal.id)
+        ],
+    )

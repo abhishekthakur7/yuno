@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 
 import {
   learningStatesQueryOptions,
+  overlayProposalsQueryOptions,
+  decideOverlayProposal,
   roadmapQueryOptions,
   saveDepthOverride,
   saveLearnerCorrection,
@@ -11,15 +13,18 @@ import {
   type DepthOverride,
   type LearnerCorrection,
   type OrderConstraint,
+  type OverlayProposal,
+  type OverlayProposalDecisionInput,
   type RoadmapMutation,
   type SkipDecision,
 } from './api/roadmap'
 
-export function useRoadmap(goalId: string | null) {
+export function useRoadmap(goalId: string | null, includeProposals = false) {
   const queryClient = useQueryClient()
   const [checkpointSaved, setCheckpointSaved] = useState(false)
   const roadmap = useQuery(roadmapQueryOptions(goalId))
   const learningStates = useQuery(learningStatesQueryOptions(goalId))
+  const proposals = useQuery(overlayProposalsQueryOptions(includeProposals ? goalId : null))
   const acceptProjection = (result: RoadmapMutation) => {
     queryClient.setQueryData(['goals', goalId, 'roadmap'], result.projection)
     void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'learning-states'] })
@@ -46,6 +51,16 @@ export function useRoadmap(goalId: string | null) {
     mutationFn: (body: DepthOverride) => saveDepthOverride(goalId!, body, crypto.randomUUID()),
     onSuccess: acceptProjection,
   })
+  const decideProposal = useMutation({
+    mutationFn: ({ proposal, input }: { proposal: OverlayProposal; input: OverlayProposalDecisionInput }) => decideOverlayProposal(proposal, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'overlay-proposals'] })
+      void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'roadmap'] })
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'overlay-proposals'] })
+    },
+  })
 
-  return { roadmap, learningStates, correction, order, skip, depth, checkpointSaved }
+  return { roadmap, learningStates, proposals, correction, order, skip, depth, decideProposal, checkpointSaved }
 }

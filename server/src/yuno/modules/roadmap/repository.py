@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from yuno.modules.roadmap.domain import (
@@ -13,8 +13,13 @@ from yuno.modules.roadmap.domain import (
     LearnerCorrection,
     LearningClassification,
     LearningState,
+    OverlayDecisionType,
     OverlayEntry,
     OverlayEntryType,
+    OverlayProposal,
+    OverlayProposalDecision,
+    OverlayProposalState,
+    OverlayProposalType,
     PersonalOverlay,
     RoadmapIdempotencyRecord,
 )
@@ -22,6 +27,8 @@ from yuno.modules.roadmap.models import (
     LearnerCorrectionRow,
     LearningStateRow,
     OverlayEntryRow,
+    OverlayProposalDecisionRow,
+    OverlayProposalRow,
     PersonalOverlayRow,
     RoadmapIdempotencyRow,
     TransferredEvidenceRefRow,
@@ -104,6 +111,130 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
             .order_by(OverlayEntryRow.approved_at, OverlayEntryRow.id)
         ).all()
         return tuple(_entry(row) for row in rows)
+
+    def add_proposal(self, proposal: OverlayProposal) -> OverlayProposal:
+        self._session.add(
+            OverlayProposalRow(
+                id=proposal.id,
+                owner_id=proposal.owner_id,
+                goal_id=proposal.goal_id,
+                generated_against_graph_version_id=proposal.generated_against_graph_version_id,
+                topic_stable_id=proposal.topic_stable_id,
+                proposal_type=proposal.proposal_type.value,
+                payload_json=json.dumps(
+                    proposal.payload, sort_keys=True, separators=(",", ":")
+                ),
+                content_hash=proposal.content_hash,
+                state=proposal.state.value,
+                state_reason=proposal.state_reason,
+                created_at=proposal.created_at,
+                decided_at=proposal.decided_at,
+            )
+        )
+        self._session.flush()
+        return proposal
+
+    def get_proposal(self, owner_id: str, proposal_id: str) -> OverlayProposal | None:
+        row = self._session.scalars(
+            owner_scoped_select(OverlayProposalRow, owner_id).where(
+                OverlayProposalRow.id == proposal_id
+            )
+        ).one_or_none()
+        return _proposal(row) if row else None
+
+    def get_pending_proposal_by_hash(
+        self, owner_id: str, goal_id: str, content_hash: str
+    ) -> OverlayProposal | None:
+        row = self._session.scalars(
+            owner_scoped_select(OverlayProposalRow, owner_id).where(
+                OverlayProposalRow.goal_id == goal_id,
+                OverlayProposalRow.content_hash == content_hash,
+                OverlayProposalRow.state
+                == OverlayProposalState.AWAITING_DECISION.value,
+            )
+        ).one_or_none()
+        return _proposal(row) if row else None
+
+    def list_proposals(self, owner_id: str, goal_id: str) -> Sequence[OverlayProposal]:
+        rows = self._session.scalars(
+            owner_scoped_select(OverlayProposalRow, owner_id)
+            .where(OverlayProposalRow.goal_id == goal_id)
+            .order_by(OverlayProposalRow.created_at, OverlayProposalRow.id)
+        ).all()
+        return tuple(_proposal(row) for row in rows)
+
+    def count_pending_proposals(self, owner_id: str, goal_id: str) -> int:
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(OverlayProposalRow)
+                .where(
+                    OverlayProposalRow.owner_id == owner_id,
+                    OverlayProposalRow.goal_id == goal_id,
+                    OverlayProposalRow.state
+                    == OverlayProposalState.AWAITING_DECISION.value,
+                )
+            )
+            or 0
+        )
+
+    def update_proposal_state(
+        self,
+        owner_id: str,
+        proposal_id: str,
+        expected_state: str,
+        *,
+        state: str,
+        state_reason: str | None,
+        decided_at: str,
+    ) -> OverlayProposal | None:
+        result = self._session.execute(
+            update(OverlayProposalRow)
+            .where(
+                OverlayProposalRow.owner_id == owner_id,
+                OverlayProposalRow.id == proposal_id,
+                OverlayProposalRow.state == expected_state,
+            )
+            .values(
+                state=state,
+                state_reason=state_reason,
+                decided_at=decided_at,
+            )
+        )
+        if result.rowcount != 1:
+            return None
+        self._session.flush()
+        return self.get_proposal(owner_id, proposal_id)
+
+    def append_proposal_decision(
+        self, decision: OverlayProposalDecision
+    ) -> OverlayProposalDecision:
+        self._session.add(
+            OverlayProposalDecisionRow(
+                id=decision.id,
+                owner_id=decision.owner_id,
+                goal_id=decision.goal_id,
+                proposal_id=decision.proposal_id,
+                decision=decision.decision.value,
+                reason=decision.reason,
+                decided_at=decision.decided_at,
+            )
+        )
+        self._session.flush()
+        return decision
+
+    def list_proposal_decisions(
+        self, owner_id: str, proposal_id: str
+    ) -> Sequence[OverlayProposalDecision]:
+        rows = self._session.scalars(
+            owner_scoped_select(OverlayProposalDecisionRow, owner_id)
+            .where(OverlayProposalDecisionRow.proposal_id == proposal_id)
+            .order_by(
+                OverlayProposalDecisionRow.decided_at,
+                OverlayProposalDecisionRow.id,
+            )
+        ).all()
+        return tuple(_proposal_decision(row) for row in rows)
 
     def add_learning_state(self, state: LearningState) -> LearningState:
         self._session.add(
@@ -317,6 +448,35 @@ def _overlay(row: PersonalOverlayRow) -> PersonalOverlay:
         row.state,
         row.row_version,
         row.created_at,
+    )
+
+
+def _proposal(row: OverlayProposalRow) -> OverlayProposal:
+    return OverlayProposal(
+        id=row.id,
+        owner_id=row.owner_id,
+        goal_id=row.goal_id,
+        generated_against_graph_version_id=row.generated_against_graph_version_id,
+        topic_stable_id=row.topic_stable_id,
+        proposal_type=OverlayProposalType(row.proposal_type),
+        payload=json.loads(row.payload_json),
+        content_hash=row.content_hash,
+        state=OverlayProposalState(row.state),
+        state_reason=row.state_reason,
+        created_at=row.created_at,
+        decided_at=row.decided_at,
+    )
+
+
+def _proposal_decision(row: OverlayProposalDecisionRow) -> OverlayProposalDecision:
+    return OverlayProposalDecision(
+        id=row.id,
+        owner_id=row.owner_id,
+        goal_id=row.goal_id,
+        proposal_id=row.proposal_id,
+        decision=OverlayDecisionType(row.decision),
+        reason=row.reason,
+        decided_at=row.decided_at,
     )
 
 

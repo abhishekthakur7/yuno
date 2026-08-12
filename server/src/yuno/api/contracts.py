@@ -21,6 +21,13 @@ from yuno.modules.diagnostics.domain import (
     DiagnosticTargetLevel,
     UntrustedSeedKind,
 )
+from yuno.modules.imports.domain import (
+    ImportStatus,
+    ImportType,
+    MappingDecision,
+    MappingState,
+    TrustState,
+)
 from yuno.modules.learning_content.domain import Capability, LayerState, TopicLayer
 from yuno.modules.profiles_goals.domain import (
     GoalPath,
@@ -29,7 +36,13 @@ from yuno.modules.profiles_goals.domain import (
     TargetCapability,
     TargetLevel,
 )
-from yuno.modules.roadmap.domain import CorrectionType, LearningClassification
+from yuno.modules.roadmap.domain import (
+    CorrectionType,
+    LearningClassification,
+    OverlayDecisionType,
+    OverlayProposalState,
+    OverlayProposalType,
+)
 from yuno.shared.application.jobs import JobRef, JobStatus
 
 
@@ -77,6 +90,82 @@ class HealthResponse(BaseModel):
 
     status: str
     schema_revision: str
+
+
+class ImportCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str | None = None
+    import_type: ImportType
+    original_content: str
+
+
+class ImportRecordResponse(BaseModel):
+    id: str
+    goal_id: str | None
+    import_type: ImportType
+    original_content: str
+    original_hash: str
+    parser_version: str
+    status: ImportStatus
+    failure_code: str | None
+    failure_reference: str | None
+    row_version: int
+    created_at: str
+    updated_at: str
+
+
+class ImportStatementPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    corrected_text: str
+
+
+class ImportStatementMapRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str
+    topic_id: str
+
+
+class ImportStatementMappingResponse(BaseModel):
+    goal_id: str
+    topic_id: str
+    graph_version_id: str
+    decision: MappingDecision
+    accepted_at: str
+    revoked_at: str | None
+
+
+class TopicImportHashResponse(BaseModel):
+    goal_id: str
+    graph_version_id: str
+    topic_id: str
+    imports_hash: str
+    updated_at: str
+
+
+class ImportStatementResponse(BaseModel):
+    id: str
+    import_id: str
+    sequence: int
+    parser_version: str
+    original_text: str
+    original_hash: str
+    normalized_text: str
+    normalized_hash: str
+    confidence: float
+    duplicate_of_statement_id: str | None
+    trust_state: TrustState
+    mapping_state: MappingState
+    corrected_text: str | None
+    row_version: int
+    created_at: str
+    updated_at: str
+    mapping: ImportStatementMappingResponse | None = None
+
+
+class ImportStatementMapResponse(BaseModel):
+    statement: ImportStatementResponse
+    mapping: ImportStatementMappingResponse
+    topic_imports_hash: TopicImportHashResponse
 
 
 class LearnerProfileResponse(BaseModel):
@@ -331,6 +420,43 @@ class DepthOverrideRequest(BaseModel):
     topic_stable_id: str
     depth: str | None
     reason: str | None = None
+
+
+class OverlayProposalCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    generated_against_graph_version_id: str
+    topic_stable_id: str | None = None
+    proposal_type: OverlayProposalType
+    payload: dict[str, object]
+
+
+class OverlayProposalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: OverlayDecisionType
+    reason: str | None = None
+
+
+class OverlayProposalDecisionResponse(BaseModel):
+    id: str
+    decision: OverlayDecisionType
+    reason: str | None
+    decided_at: str
+
+
+class OverlayProposalResponse(BaseModel):
+    id: str
+    goal_id: str
+    generated_against_graph_version_id: str
+    topic_stable_id: str | None
+    proposal_type: OverlayProposalType
+    payload: dict[str, object]
+    content_hash: str
+    state: OverlayProposalState
+    state_reason: str | None
+    created_at: str
+    decided_at: str | None
+    deduplicated: bool = False
+    decisions: list[OverlayProposalDecisionResponse] = Field(default_factory=list)
 
 
 class DiagnosticPreviewEditRequest(BaseModel):

@@ -36,6 +36,8 @@ from yuno.modules.evidence_evaluation.ports import EvidenceRepository
 from yuno.modules.evidence_evaluation.repository import SqlAlchemyEvidenceRepository
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
+from yuno.modules.imports.ports import ImportRepository
+from yuno.modules.imports.repository import SqlAlchemyImportRepository
 from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
 from yuno.modules.profiles_goals.repository import SqlAlchemyProfilesGoalsRepository
 from yuno.modules.roadmap.ports import RoadmapRepository
@@ -78,6 +80,7 @@ class SqlAlchemyUnitOfWork:
     canonical: CanonicalGraphRepository
     diagnostics: DiagnosticsRepository
     evidence: EvidenceRepository
+    imports: ImportRepository
     profiles_goals: ProfilesGoalsRepository
     roadmap: RoadmapRepository
 
@@ -98,6 +101,7 @@ class SqlAlchemyUnitOfWork:
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
         self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
         self.evidence = SqlAlchemyEvidenceRepository(self._session)
+        self.imports = SqlAlchemyImportRepository(self._session)
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
         return self
