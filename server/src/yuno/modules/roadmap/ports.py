@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from yuno.modules.audit.ports import AuditRepository
@@ -65,6 +66,9 @@ class RoadmapRepository(Protocol):
     def list_transferred_evidence_topic_ids(
         self, owner_id: str, goal_id: str
     ) -> Sequence[str]: ...
+    def list_progress_transfers(
+        self, owner_id: str, goal_id: str
+    ) -> Sequence[ProgressTransferView]: ...
     def add_transferred_evidence(
         self,
         learning_state: TransferLearningStateView,
@@ -87,6 +91,18 @@ class RoadmapRepository(Protocol):
 
 class TransferClassificationView(Protocol):
     value: str
+
+
+@dataclass(frozen=True)
+class ProgressTransferView:
+    id: str
+    owner_id: str
+    goal_id: str
+    topic_stable_id: str
+    source_evidence_id: str
+    classification: str
+    rationale: str
+    created_at: str
 
 
 class TransferLearningStateView(Protocol):

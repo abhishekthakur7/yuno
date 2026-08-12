@@ -1,6 +1,416 @@
 {
   "components": {
     "schemas": {
+      "AssessmentCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "evaluation_method": {
+            "title": "Evaluation Method",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "provenance_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provenance Refs",
+            "type": "array"
+          },
+          "requested_capability": {
+            "title": "Requested Capability",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "rubric_id": {
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "task_ref": {
+            "title": "Task Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rubric_id",
+          "rubric_version",
+          "task_ref",
+          "requested_capability",
+          "evaluation_method"
+        ],
+        "title": "AssessmentCreateRequest",
+        "type": "object"
+      },
+      "AssessmentDimensionResponse": {
+        "properties": {
+          "dimension_id": {
+            "title": "Dimension Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/DimensionOutcome"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension_id",
+          "outcome",
+          "rationale",
+          "evidence_refs"
+        ],
+        "title": "AssessmentDimensionResponse",
+        "type": "object"
+      },
+      "AssessmentDisputeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AssessmentDisputeRequest",
+        "type": "object"
+      },
+      "AssessmentDisputeResponse": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DisputeStatus"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "assessment_id",
+          "reason",
+          "status",
+          "requested_at"
+        ],
+        "title": "AssessmentDisputeResponse",
+        "type": "object"
+      },
+      "AssessmentReevaluateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dispute_id": {
+            "title": "Dispute Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dispute_id"
+        ],
+        "title": "AssessmentReevaluateRequest",
+        "type": "object"
+      },
+      "AssessmentResponse": {
+        "properties": {
+          "ambiguities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ambiguities",
+            "type": "array"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "citations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "cross_question_candidate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Question Candidate"
+          },
+          "derivation_excluded": {
+            "title": "Derivation Excluded",
+            "type": "boolean"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentDimensionResponse"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "evaluation_method": {
+            "title": "Evaluation Method",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "limitation_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitation Labels",
+            "type": "array"
+          },
+          "predecessor_assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predecessor Assessment Id"
+          },
+          "provenance_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provenance Refs",
+            "type": "array"
+          },
+          "requested_capability": {
+            "title": "Requested Capability",
+            "type": "string"
+          },
+          "revision_invitation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Invitation"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "rubric_id": {
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AssessmentState"
+          },
+          "task_ref": {
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "trade_offs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trade Offs",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "evidence_id",
+          "run_id",
+          "rubric_id",
+          "rubric_version",
+          "state",
+          "task_ref",
+          "requested_capability",
+          "role",
+          "level",
+          "evaluation_method",
+          "assumptions",
+          "source_refs",
+          "provenance_refs",
+          "facts",
+          "trade_offs",
+          "citations",
+          "ambiguities",
+          "feedback",
+          "cross_question_candidate",
+          "revision_invitation",
+          "warnings",
+          "limitation_labels",
+          "predecessor_assessment_id",
+          "derivation_excluded",
+          "created_at",
+          "dimensions"
+        ],
+        "title": "AssessmentResponse",
+        "type": "object"
+      },
+      "AssessmentState": {
+        "enum": [
+          "feedback-ready",
+          "ambiguity-unresolved"
+        ],
+        "title": "AssessmentState",
+        "type": "string"
+      },
       "CanonicalTopicRelationResponse": {
         "description": "One `TopicRelation` row nested in\n`CanonicalVersionDetailResponse.relations`.",
         "properties": {
@@ -801,8 +1211,25 @@
         "title": "DiagnosticTargetLevel",
         "type": "string"
       },
+      "DimensionOutcome": {
+        "enum": [
+          "pass",
+          "trade-off",
+          "factual-correction",
+          "ambiguity-unresolved"
+        ],
+        "title": "DimensionOutcome",
+        "type": "string"
+      },
+      "DisputeStatus": {
+        "enum": [
+          "requested"
+        ],
+        "title": "DisputeStatus",
+        "type": "string"
+      },
       "ErrorResponse": {
-        "description": "The spec \u00a75.1 error envelope: every `YunoError`, request validation\nfailure, and unhandled exception renders through this shape (see\n`yuno.api.errors.register_exception_handlers`).",
+        "description": "The API error envelope.",
         "properties": {
           "code": {
             "title": "Code",
@@ -882,8 +1309,187 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvidenceCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "content_version": {
+            "title": "Content Version",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "evidence_type",
+          "capability",
+          "summary",
+          "origin",
+          "content",
+          "content_version"
+        ],
+        "title": "EvidenceCreateRequest",
+        "type": "object"
+      },
+      "EvidenceDetailResponse": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Version"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "payload_hash": {
+            "title": "Payload Hash",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tombstoned": {
+            "title": "Tombstoned",
+            "type": "boolean"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "topic_stable_id",
+          "evidence_type",
+          "capability",
+          "payload_hash",
+          "summary",
+          "origin",
+          "created_at",
+          "content",
+          "content_version",
+          "tombstoned"
+        ],
+        "title": "EvidenceDetailResponse",
+        "type": "object"
+      },
+      "EvidenceResponse": {
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "payload_hash": {
+            "title": "Payload Hash",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "topic_stable_id",
+          "evidence_type",
+          "capability",
+          "payload_hash",
+          "summary",
+          "origin",
+          "created_at"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
       "FieldError": {
-        "description": "One entry of `ErrorResponse.field_errors`. The domain layer leaves\n`YunoError.field_errors` generic (`Sequence[Mapping[str, Any]]`); a\ncaller must supply mappings with exactly these two keys.",
+        "description": "One field-level error in the API error envelope.",
         "properties": {
           "field": {
             "title": "Field",
@@ -1113,6 +1719,50 @@
         "title": "GoalPath",
         "type": "string"
       },
+      "GoalProgressResponse": {
+        "properties": {
+          "authoritative": {
+            "default": false,
+            "title": "Authoritative",
+            "type": "boolean"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ProgressDimensionResponse"
+          },
+          "effective_now": {
+            "title": "Effective Now",
+            "type": "string"
+          },
+          "input_hash": {
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "proficiency": {
+            "$ref": "#/components/schemas/ProgressDimensionResponse"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/ProgressDimensionResponse"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/ProgressDimensionResponse"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "coverage",
+          "proficiency",
+          "retention",
+          "readiness",
+          "rule_version",
+          "effective_now",
+          "input_hash"
+        ],
+        "title": "GoalProgressResponse",
+        "type": "object"
+      },
       "GoalResponse": {
         "properties": {
           "created_at": {
@@ -1244,7 +1894,6 @@
         "type": "string"
       },
       "HealthResponse": {
-        "description": "`GET /api/v1/health` response body.",
         "properties": {
           "schema_revision": {
             "title": "Schema Revision",
@@ -1607,7 +2256,7 @@
         "type": "string"
       },
       "JobRefResponse": {
-        "description": "Mirrors `application.jobs.JobRef` \u2014 the `202` enqueue response body\nevery async endpoint returns via `accepted_job`.",
+        "description": "The `202` response for an asynchronous operation.",
         "properties": {
           "deduplicated": {
             "default": false,
@@ -1808,6 +2457,89 @@
         ],
         "title": "LearningClassification",
         "type": "string"
+      },
+      "LearningStateExplanationResponse": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/ProgressClassification"
+          },
+          "correction_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Ref"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "supporting_evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Evidence Refs",
+            "type": "array"
+          },
+          "topic_stable_id": {
+            "title": "Topic Stable Id",
+            "type": "string"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_stable_id",
+          "classification",
+          "definition",
+          "supporting_evidence_refs",
+          "uncertainty",
+          "correction_ref"
+        ],
+        "title": "LearningStateExplanationResponse",
+        "type": "object"
+      },
+      "LearningStateExplanationsResponse": {
+        "properties": {
+          "authoritative": {
+            "default": false,
+            "title": "Authoritative",
+            "type": "boolean"
+          },
+          "effective_now": {
+            "title": "Effective Now",
+            "type": "string"
+          },
+          "input_hash": {
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "learning_states": {
+            "items": {
+              "$ref": "#/components/schemas/LearningStateExplanationResponse"
+            },
+            "title": "Learning States",
+            "type": "array"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "learning_states",
+          "rule_version",
+          "effective_now",
+          "input_hash"
+        ],
+        "title": "LearningStateExplanationsResponse",
+        "type": "object"
       },
       "LearningStateResponse": {
         "properties": {
@@ -2118,6 +2850,46 @@
         ],
         "title": "OverlayProposalType",
         "type": "string"
+      },
+      "ProgressClassification": {
+        "enum": [
+          "likely-known",
+          "partial",
+          "unverified",
+          "new"
+        ],
+        "title": "ProgressClassification",
+        "type": "string"
+      },
+      "ProgressDimensionResponse": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/ProgressClassification"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "supporting_evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Evidence Refs",
+            "type": "array"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "classification",
+          "definition",
+          "supporting_evidence_refs",
+          "uncertainty"
+        ],
+        "title": "ProgressDimensionResponse",
+        "type": "object"
       },
       "ResumeDestination": {
         "enum": [
@@ -2668,6 +3440,184 @@
         "summary": "Regenerate Artifact",
         "tags": [
           "learning-content"
+        ]
+      }
+    },
+    "/api/v1/assessments/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_record_api_v1_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Assessment Record",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
+    "/api/v1/assessments/{assessment_id}/disputes": {
+      "post": {
+        "operationId": "post_dispute_api_v1_assessments__assessment_id__disputes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentDisputeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentDisputeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Dispute",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
+    "/api/v1/assessments/{assessment_id}/reevaluate": {
+      "post": {
+        "operationId": "post_reevaluate_api_v1_assessments__assessment_id__reevaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentReevaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Reevaluate",
+        "tags": [
+          "evidence-evaluation"
         ]
       }
     },
@@ -3228,6 +4178,116 @@
         ]
       }
     },
+    "/api/v1/evidence/{evidence_id}": {
+      "get": {
+        "operationId": "get_evidence_api_v1_evidence__evidence_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Evidence",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/assess": {
+      "post": {
+        "operationId": "post_assess_api_v1_evidence__evidence_id__assess_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Assess",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
     "/api/v1/goals": {
       "get": {
         "operationId": "list_goals_api_v1_goals_get",
@@ -3764,6 +4824,160 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/evidence": {
+      "get": {
+        "operationId": "get_goal_evidence_api_v1_goals__goal_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceResponse"
+                  },
+                  "title": "Response Get Goal Evidence Api V1 Goals  Goal Id  Evidence Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Goal Evidence",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      },
+      "post": {
+        "operationId": "post_evidence_api_v1_goals__goal_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Evidence",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/learning-state-explanations": {
+      "get": {
+        "operationId": "get_learning_state_explanations_api_v1_goals__goal_id__learning_state_explanations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningStateExplanationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Learning State Explanations",
+        "tags": [
+          "evidence-evaluation"
+        ]
+      }
+    },
     "/api/v1/goals/{goal_id}/learning-states": {
       "get": {
         "operationId": "get_learning_states_api_v1_goals__goal_id__learning_states_get",
@@ -3997,6 +5211,48 @@
         "summary": "Post Overlay Proposal",
         "tags": [
           "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/progress": {
+      "get": {
+        "operationId": "get_goal_progress_api_v1_goals__goal_id__progress_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalProgressResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Goal Progress",
+        "tags": [
+          "evidence-evaluation"
         ]
       }
     },

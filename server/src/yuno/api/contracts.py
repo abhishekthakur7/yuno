@@ -1,11 +1,4 @@
-"""Pydantic response contracts (spec §5.1).
-
-FastAPI serializes every API response through one of these models. Domain
-and application code never imports pydantic (spec §3.2's dependency
-direction) and knows nothing about these shapes — translating domain
-dataclasses (`YunoError`, `JobRef`) into them happens only here and in
-`yuno.api.errors`.
-"""
+"""Pydantic API contracts."""
 
 from __future__ import annotations
 
@@ -20,6 +13,12 @@ from yuno.modules.diagnostics.domain import (
     DiagnosticTargetCapability,
     DiagnosticTargetLevel,
     UntrustedSeedKind,
+)
+from yuno.modules.evidence_evaluation.domain import (
+    AssessmentState,
+    DimensionOutcome,
+    DisputeStatus,
+    ProgressClassification,
 )
 from yuno.modules.imports.domain import (
     ImportStatus,
@@ -47,20 +46,14 @@ from yuno.shared.application.jobs import JobRef, JobStatus
 
 
 class FieldError(BaseModel):
-    """One entry of `ErrorResponse.field_errors`. The domain layer leaves
-    `YunoError.field_errors` generic (`Sequence[Mapping[str, Any]]`); a
-    caller must supply mappings with exactly these two keys.
-    """
+    """One field-level error in the API error envelope."""
 
     field: str
     message: str
 
 
 class ErrorResponse(BaseModel):
-    """The spec §5.1 error envelope: every `YunoError`, request validation
-    failure, and unhandled exception renders through this shape (see
-    `yuno.api.errors.register_exception_handlers`).
-    """
+    """The API error envelope."""
 
     code: str
     message: str
@@ -74,9 +67,7 @@ class ErrorResponse(BaseModel):
 
 
 class JobRefResponse(BaseModel):
-    """Mirrors `application.jobs.JobRef` — the `202` enqueue response body
-    every async endpoint returns via `accepted_job`.
-    """
+    """The `202` response for an asynchronous operation."""
 
     job_id: str
     kind: str
@@ -86,10 +77,43 @@ class JobRefResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """`GET /api/v1/health` response body."""
-
     status: str
     schema_revision: str
+
+
+class ProgressDimensionResponse(BaseModel):
+    classification: ProgressClassification
+    definition: str
+    supporting_evidence_refs: list[str]
+    uncertainty: str
+
+
+class LearningStateExplanationResponse(BaseModel):
+    topic_stable_id: str
+    classification: ProgressClassification
+    definition: str
+    supporting_evidence_refs: list[str]
+    uncertainty: str
+    correction_ref: str | None
+
+
+class GoalProgressResponse(BaseModel):
+    coverage: ProgressDimensionResponse
+    proficiency: ProgressDimensionResponse
+    retention: ProgressDimensionResponse
+    readiness: ProgressDimensionResponse
+    rule_version: str
+    effective_now: str
+    input_hash: str
+    authoritative: bool = False
+
+
+class LearningStateExplanationsResponse(BaseModel):
+    learning_states: list[LearningStateExplanationResponse]
+    rule_version: str
+    effective_now: str
+    input_hash: str
+    authoritative: bool = False
 
 
 class ImportCreateRequest(BaseModel):
@@ -237,6 +261,107 @@ class GoalDeleteImpactResponse(BaseModel):
     goal_id: str
     evidence_ids: list[str]
     learning_state_ids: list[str]
+
+
+class EvidenceCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic_stable_id: str
+    evidence_type: str
+    capability: str
+    summary: str
+    origin: str
+    content: str
+    content_version: str
+
+
+class EvidenceResponse(BaseModel):
+    id: str
+    goal_id: str
+    topic_stable_id: str
+    evidence_type: str
+    capability: str
+    payload_hash: str
+    summary: str
+    origin: str
+    created_at: str
+
+
+class EvidenceDetailResponse(EvidenceResponse):
+    content: str | None
+    content_version: str | None
+    tombstoned: bool
+
+
+class AssessmentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rubric_id: str
+    rubric_version: str
+    task_ref: str
+    assumptions: list[str] = Field(default_factory=list)
+    requested_capability: str
+    source_refs: list[str] = Field(default_factory=list)
+    provenance_refs: list[str] = Field(default_factory=list)
+    role: str | None = None
+    level: str | None = None
+    evaluation_method: str
+    run_id: str | None = None
+
+
+class AssessmentDimensionResponse(BaseModel):
+    dimension_id: str
+    outcome: DimensionOutcome
+    rationale: str
+    evidence_refs: list[str]
+
+
+class AssessmentResponse(BaseModel):
+    id: str
+    goal_id: str
+    evidence_id: str
+    run_id: str | None
+    rubric_id: str
+    rubric_version: str
+    state: AssessmentState
+    task_ref: str
+    requested_capability: str
+    role: str | None
+    level: str | None
+    evaluation_method: str
+    assumptions: list[str]
+    source_refs: list[str]
+    provenance_refs: list[str]
+    facts: list[str]
+    trade_offs: list[str]
+    citations: list[str]
+    ambiguities: list[str]
+    feedback: str
+    cross_question_candidate: str | None
+    revision_invitation: str | None
+    warnings: list[str]
+    limitation_labels: list[str]
+    predecessor_assessment_id: str | None
+    derivation_excluded: bool
+    created_at: str
+    dimensions: list[AssessmentDimensionResponse]
+
+
+class AssessmentDisputeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str
+
+
+class AssessmentDisputeResponse(BaseModel):
+    id: str
+    goal_id: str
+    assessment_id: str
+    reason: str
+    status: DisputeStatus
+    requested_at: str
+
+
+class AssessmentReevaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dispute_id: str
 
 
 class TopicCheckpointResponse(BaseModel):

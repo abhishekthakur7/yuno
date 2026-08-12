@@ -21,6 +21,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assessments/{assessment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assessment Record */
+        get: operations["get_assessment_record_api_v1_assessments__assessment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assessments/{assessment_id}/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Dispute */
+        post: operations["post_dispute_api_v1_assessments__assessment_id__disputes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assessments/{assessment_id}/reevaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Reevaluate */
+        post: operations["post_reevaluate_api_v1_assessments__assessment_id__reevaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bridges/{proposal_id}/decision": {
         parameters: {
             query?: never;
@@ -194,6 +245,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence */
+        get: operations["get_evidence_api_v1_evidence__evidence_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evidence/{evidence_id}/assess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Assess */
+        post: operations["post_assess_api_v1_evidence__evidence_id__assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals": {
         parameters: {
             query?: never;
@@ -315,6 +400,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Evidence */
+        get: operations["get_goal_evidence_api_v1_goals__goal_id__evidence_get"];
+        put?: never;
+        /** Post Evidence */
+        post: operations["post_evidence_api_v1_goals__goal_id__evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/learning-state-explanations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Learning State Explanations */
+        get: operations["get_learning_state_explanations_api_v1_goals__goal_id__learning_state_explanations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals/{goal_id}/learning-states": {
         parameters: {
             query?: never;
@@ -361,6 +481,23 @@ export interface paths {
         put?: never;
         /** Post Overlay Proposal */
         post: operations["post_overlay_proposal_api_v1_goals__goal_id__overlay_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Progress */
+        get: operations["get_goal_progress_api_v1_goals__goal_id__progress_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -684,6 +821,128 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssessmentCreateRequest */
+        AssessmentCreateRequest: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Evaluation Method */
+            evaluation_method: string;
+            /** Level */
+            level?: string | null;
+            /** Provenance Refs */
+            provenance_refs?: string[];
+            /** Requested Capability */
+            requested_capability: string;
+            /** Role */
+            role?: string | null;
+            /** Rubric Id */
+            rubric_id: string;
+            /** Rubric Version */
+            rubric_version: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Source Refs */
+            source_refs?: string[];
+            /** Task Ref */
+            task_ref: string;
+        };
+        /** AssessmentDimensionResponse */
+        AssessmentDimensionResponse: {
+            /** Dimension Id */
+            dimension_id: string;
+            /** Evidence Refs */
+            evidence_refs: string[];
+            outcome: components["schemas"]["DimensionOutcome"];
+            /** Rationale */
+            rationale: string;
+        };
+        /** AssessmentDisputeRequest */
+        AssessmentDisputeRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** AssessmentDisputeResponse */
+        AssessmentDisputeResponse: {
+            /** Assessment Id */
+            assessment_id: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Requested At */
+            requested_at: string;
+            status: components["schemas"]["DisputeStatus"];
+        };
+        /** AssessmentReevaluateRequest */
+        AssessmentReevaluateRequest: {
+            /** Dispute Id */
+            dispute_id: string;
+        };
+        /** AssessmentResponse */
+        AssessmentResponse: {
+            /** Ambiguities */
+            ambiguities: string[];
+            /** Assumptions */
+            assumptions: string[];
+            /** Citations */
+            citations: string[];
+            /** Created At */
+            created_at: string;
+            /** Cross Question Candidate */
+            cross_question_candidate: string | null;
+            /** Derivation Excluded */
+            derivation_excluded: boolean;
+            /** Dimensions */
+            dimensions: components["schemas"]["AssessmentDimensionResponse"][];
+            /** Evaluation Method */
+            evaluation_method: string;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Facts */
+            facts: string[];
+            /** Feedback */
+            feedback: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Level */
+            level: string | null;
+            /** Limitation Labels */
+            limitation_labels: string[];
+            /** Predecessor Assessment Id */
+            predecessor_assessment_id: string | null;
+            /** Provenance Refs */
+            provenance_refs: string[];
+            /** Requested Capability */
+            requested_capability: string;
+            /** Revision Invitation */
+            revision_invitation: string | null;
+            /** Role */
+            role: string | null;
+            /** Rubric Id */
+            rubric_id: string;
+            /** Rubric Version */
+            rubric_version: string;
+            /** Run Id */
+            run_id: string | null;
+            /** Source Refs */
+            source_refs: string[];
+            state: components["schemas"]["AssessmentState"];
+            /** Task Ref */
+            task_ref: string;
+            /** Trade Offs */
+            trade_offs: string[];
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * AssessmentState
+         * @enum {string}
+         */
+        AssessmentState: "feedback-ready" | "ambiguity-unresolved";
         /**
          * CanonicalTopicRelationResponse
          * @description One `TopicRelation` row nested in
@@ -962,10 +1221,18 @@ export interface components {
          */
         DiagnosticTargetLevel: "Mid-level" | "Senior" | "Staff";
         /**
+         * DimensionOutcome
+         * @enum {string}
+         */
+        DimensionOutcome: "pass" | "trade-off" | "factual-correction" | "ambiguity-unresolved";
+        /**
+         * DisputeStatus
+         * @enum {string}
+         */
+        DisputeStatus: "requested";
+        /**
          * ErrorResponse
-         * @description The spec §5.1 error envelope: every `YunoError`, request validation
-         *     failure, and unhandled exception renders through this shape (see
-         *     `yuno.api.errors.register_exception_handlers`).
+         * @description The API error envelope.
          */
         ErrorResponse: {
             /** Code */
@@ -987,11 +1254,74 @@ export interface components {
             /** Retryable */
             retryable: boolean;
         };
+        /** EvidenceCreateRequest */
+        EvidenceCreateRequest: {
+            /** Capability */
+            capability: string;
+            /** Content */
+            content: string;
+            /** Content Version */
+            content_version: string;
+            /** Evidence Type */
+            evidence_type: string;
+            /** Origin */
+            origin: string;
+            /** Summary */
+            summary: string;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
+        /** EvidenceDetailResponse */
+        EvidenceDetailResponse: {
+            /** Capability */
+            capability: string;
+            /** Content */
+            content: string | null;
+            /** Content Version */
+            content_version: string | null;
+            /** Created At */
+            created_at: string;
+            /** Evidence Type */
+            evidence_type: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Origin */
+            origin: string;
+            /** Payload Hash */
+            payload_hash: string;
+            /** Summary */
+            summary: string;
+            /** Tombstoned */
+            tombstoned: boolean;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
+        /** EvidenceResponse */
+        EvidenceResponse: {
+            /** Capability */
+            capability: string;
+            /** Created At */
+            created_at: string;
+            /** Evidence Type */
+            evidence_type: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Origin */
+            origin: string;
+            /** Payload Hash */
+            payload_hash: string;
+            /** Summary */
+            summary: string;
+            /** Topic Stable Id */
+            topic_stable_id: string;
+        };
         /**
          * FieldError
-         * @description One entry of `ErrorResponse.field_errors`. The domain layer leaves
-         *     `YunoError.field_errors` generic (`Sequence[Mapping[str, Any]]`); a
-         *     caller must supply mappings with exactly these two keys.
+         * @description One field-level error in the API error envelope.
          */
         FieldError: {
             /** Field */
@@ -1052,6 +1382,24 @@ export interface components {
          * @enum {string}
          */
         GoalPath: "learn" | "interview_prep";
+        /** GoalProgressResponse */
+        GoalProgressResponse: {
+            /**
+             * Authoritative
+             * @default false
+             */
+            authoritative: boolean;
+            coverage: components["schemas"]["ProgressDimensionResponse"];
+            /** Effective Now */
+            effective_now: string;
+            /** Input Hash */
+            input_hash: string;
+            proficiency: components["schemas"]["ProgressDimensionResponse"];
+            readiness: components["schemas"]["ProgressDimensionResponse"];
+            retention: components["schemas"]["ProgressDimensionResponse"];
+            /** Rule Version */
+            rule_version: string;
+        };
         /** GoalResponse */
         GoalResponse: {
             /** Created At */
@@ -1087,10 +1435,7 @@ export interface components {
          * @enum {string}
          */
         GoalStatus: "active" | "archived" | "tombstoned";
-        /**
-         * HealthResponse
-         * @description `GET /api/v1/health` response body.
-         */
+        /** HealthResponse */
         HealthResponse: {
             /** Schema Revision */
             schema_revision: string;
@@ -1208,8 +1553,7 @@ export interface components {
         ImportType: "markdown" | "plain_text";
         /**
          * JobRefResponse
-         * @description Mirrors `application.jobs.JobRef` — the `202` enqueue response body
-         *     every async endpoint returns via `accepted_job`.
+         * @description The `202` response for an asynchronous operation.
          */
         JobRefResponse: {
             /**
@@ -1274,6 +1618,36 @@ export interface components {
          * @enum {string}
          */
         LearningClassification: "likely-known" | "partial" | "unverified" | "new";
+        /** LearningStateExplanationResponse */
+        LearningStateExplanationResponse: {
+            classification: components["schemas"]["ProgressClassification"];
+            /** Correction Ref */
+            correction_ref: string | null;
+            /** Definition */
+            definition: string;
+            /** Supporting Evidence Refs */
+            supporting_evidence_refs: string[];
+            /** Topic Stable Id */
+            topic_stable_id: string;
+            /** Uncertainty */
+            uncertainty: string;
+        };
+        /** LearningStateExplanationsResponse */
+        LearningStateExplanationsResponse: {
+            /**
+             * Authoritative
+             * @default false
+             */
+            authoritative: boolean;
+            /** Effective Now */
+            effective_now: string;
+            /** Input Hash */
+            input_hash: string;
+            /** Learning States */
+            learning_states: components["schemas"]["LearningStateExplanationResponse"][];
+            /** Rule Version */
+            rule_version: string;
+        };
         /** LearningStateResponse */
         LearningStateResponse: {
             classification: components["schemas"]["LearningClassification"];
@@ -1381,6 +1755,21 @@ export interface components {
          * @enum {string}
          */
         OverlayProposalType: "recommendation" | "emphasis" | "example" | "exercise" | "ordering" | "bridge";
+        /**
+         * ProgressClassification
+         * @enum {string}
+         */
+        ProgressClassification: "likely-known" | "partial" | "unverified" | "new";
+        /** ProgressDimensionResponse */
+        ProgressDimensionResponse: {
+            classification: components["schemas"]["ProgressClassification"];
+            /** Definition */
+            definition: string;
+            /** Supporting Evidence Refs */
+            supporting_evidence_refs: string[];
+            /** Uncertainty */
+            uncertainty: string;
+        };
         /**
          * ResumeDestination
          * @enum {string}
@@ -1573,6 +1962,111 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_assessment_record_api_v1_assessments__assessment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_dispute_api_v1_assessments__assessment_id__disputes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentDisputeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentDisputeResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_reevaluate_api_v1_assessments__assessment_id__reevaluate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentReevaluateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -1957,6 +2451,74 @@ export interface operations {
             };
         };
     };
+    get_evidence_api_v1_evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceDetailResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_assess_api_v1_evidence__evidence_id__assess_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_goals_api_v1_goals_get: {
         parameters: {
             query?: never;
@@ -2267,6 +2829,105 @@ export interface operations {
             };
         };
     };
+    get_goal_evidence_api_v1_goals__goal_id__evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_evidence_api_v1_goals__goal_id__evidence_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_learning_state_explanations_api_v1_goals__goal_id__learning_state_explanations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningStateExplanationsResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_learning_states_api_v1_goals__goal_id__learning_states_get: {
         parameters: {
             query?: never;
@@ -2399,6 +3060,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverlayProposalResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_goal_progress_api_v1_goals__goal_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalProgressResponse"];
                 };
             };
             /** @description Default Response */

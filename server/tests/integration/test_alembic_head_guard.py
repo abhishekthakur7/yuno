@@ -95,6 +95,16 @@ def test_command_upgrade_honors_explicit_config_url_over_cached_settings(
         engine_b.dispose()
 
 
+def test_fresh_head_matches_declarative_metadata(tmp_path: Path) -> None:
+    """Every checked-in migration must reproduce the ORM schema exactly."""
+    database_url = f"sqlite+pysqlite:///{tmp_path / 'metadata-parity.db'}"
+    config = alembic_guard.build_alembic_config()
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    command.upgrade(config, "head")
+    command.check(config)
+
+
 def test_require_single_head_raises_on_corrupt_database_file(tmp_path: Path) -> None:
     """A corrupt / non-SQLite file at the configured path must surface as a
     clean `UnavailableError`, not a raw

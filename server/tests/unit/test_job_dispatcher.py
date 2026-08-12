@@ -30,6 +30,7 @@ def _request(
     payload: dict[str, object] | None = None,
     dedupe_key: str | None = None,
     idempotency_key: str | None = None,
+    requested_job_id: str | None = None,
 ) -> JobRequest:
     return JobRequest(
         kind=kind,
@@ -37,6 +38,7 @@ def _request(
         payload=payload if payload is not None else {},
         dedupe_key=dedupe_key,
         idempotency_key=idempotency_key,
+        requested_job_id=requested_job_id,
     )
 
 
@@ -55,6 +57,21 @@ def test_enqueue_runs_handler_and_returns_job_ref() -> None:
     assert ref.job_id
     assert ref.enqueued_at
     assert calls == [request]
+
+
+def test_enqueue_honors_a_caller_allocated_job_identity() -> None:
+    calls: list[JobRequest] = []
+    dispatcher = InProcessJobDispatcher()
+    dispatcher.register("send_email", calls.append)
+
+    request = _request(requested_job_id="job-before-enqueue")
+    ref = dispatcher.enqueue(request)
+
+    assert ref.job_id == "job-before-enqueue"
+    assert calls == [request]
+
+    with pytest.raises(DomainValidationError, match="already been used"):
+        dispatcher.enqueue(_request(requested_job_id="job-before-enqueue"))
 
 
 def test_single_flight_deduplicates_while_job_is_running() -> None:

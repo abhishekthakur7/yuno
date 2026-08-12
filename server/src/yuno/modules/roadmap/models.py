@@ -269,6 +269,12 @@ class LearnerCorrectionRow(Base):
             "topic_stable_id",
             "created_at",
         ),
+        Index(
+            "uq_learner_corrections_superseded_once",
+            "supersedes_correction_id",
+            unique=True,
+            sqlite_where=sql_text("supersedes_correction_id IS NOT NULL"),
+        ),
     )
     id: Mapped[str] = id_column()
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)

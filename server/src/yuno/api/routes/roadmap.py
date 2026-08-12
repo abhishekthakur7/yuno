@@ -22,14 +22,18 @@ from yuno.api.contracts import (
     SkipDecisionRequest,
 )
 from yuno.api.dependencies import (
+    get_clock,
     get_owner_id,
     get_settings_dependency,
     get_unit_of_work,
     idempotency_key,
 )
 from yuno.config import Settings
+from yuno.modules.evidence_evaluation.service import get_derived_progress
 from yuno.modules.roadmap.domain import (
     LearnerCorrection,
+    LearningClassification,
+    LearningState,
     OverlayEntry,
     OverlayEntryType,
     ProposalStaleError,
@@ -46,8 +50,12 @@ from yuno.modules.roadmap.ports import (
     RoadmapUnitOfWork,
 )
 from yuno.modules.roadmap.service import create_proposal, decide_proposal
-from yuno.shared.domain.clock import SystemClock, now_text
-from yuno.shared.domain.errors import IdempotencyConflictError, NotFoundError
+from yuno.shared.domain.clock import Clock, SystemClock, now_text
+from yuno.shared.domain.errors import (
+    ConflictError,
+    IdempotencyConflictError,
+    NotFoundError,
+)
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 
@@ -143,8 +151,11 @@ def get_goal_roadmap(
     goal_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+    clock: Annotated[Clock, Depends(get_clock)],
 ) -> RoadmapResponse:
-    return _projection_response(uow, owner_id, goal_id)
+    response = _projection_response(uow, owner_id, goal_id, clock=clock)
+    uow.commit()
+    return response
 
 
 @router.get(
@@ -154,26 +165,26 @@ def get_learning_states(
     goal_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[RoadmapUnitOfWork, Depends(get_unit_of_work)],
+    clock: Annotated[Clock, Depends(get_clock)],
 ) -> list[LearningStateResponse]:
-    _goal(uow, owner_id, goal_id)
-    corrections = {
+    _goal_value, topics, _relations = _graph(uow, owner_id, goal_id)
+    recommended = {item.stable_id: item.recommended_layer for item in topics}
+    derived = get_derived_progress(uow, owner_id, goal_id, clock=clock)
+    persisted = {
         item.topic_stable_id: item
-        for item in uow.roadmap.list_corrections(owner_id, goal_id)
+        for item in uow.roadmap.list_learning_states(owner_id, goal_id)
     }
+    uow.commit()
     return [
         LearningStateResponse(
             topic_stable_id=item.topic_stable_id,
             classification=item.classification,
-            origin=item.origin,
-            recommended_depth=item.recommended_depth,
-            explanation=item.explanation,
-            corrected_classification=(
-                corrections[item.topic_stable_id].value
-                if item.topic_stable_id in corrections
-                else None
-            ),
+            origin=(persisted[item.topic_stable_id].origin if item.topic_stable_id in persisted else "derived-fixture"),
+            recommended_depth=(persisted[item.topic_stable_id].recommended_depth if item.topic_stable_id in persisted else recommended[item.topic_stable_id]),
+            explanation=item.definition,
+            corrected_classification=item.classification if item.correction_ref else None,
         )
-        for item in uow.roadmap.list_learning_states(owner_id, goal_id)
+        for item in derived.learning_states
     ]
 
 
@@ -199,6 +210,14 @@ def post_correction(
         for item in uow.roadmap.list_corrections(owner_id, goal_id)
         if item.topic_stable_id == body.topic_stable_id
     ]
+    superseded = {
+        item.supersedes_correction_id
+        for item in prior
+        if item.supersedes_correction_id is not None
+    }
+    active = [item for item in prior if item.id not in superseded]
+    if len(active) > 1:
+        raise ConflictError("The correction history has multiple active leaves.")
     uow.roadmap.append_correction(
         LearnerCorrection(
             id=new_id(),
@@ -209,7 +228,7 @@ def post_correction(
             value=body.classification.value,
             reason=body.reason,
             created_at=now_text(SystemClock()),
-            supersedes_correction_id=prior[-1].id if prior else None,
+            supersedes_correction_id=active[0].id if active else None,
         )
     )
     return _save(uow, owner_id, goal_id, operation, key, request_hash)
@@ -434,15 +453,33 @@ def _append_entry(
 
 
 def _projection_response(
-    uow: RoadmapUnitOfWork, owner_id: str, goal_id: str
+    uow: RoadmapUnitOfWork, owner_id: str, goal_id: str, *, clock: Clock | None = None
 ) -> RoadmapResponse:
     goal, topics, relations = _graph(uow, owner_id, goal_id)
+    persisted = {
+        item.topic_stable_id: item
+        for item in uow.roadmap.list_learning_states(owner_id, goal_id)
+    }
+    recommended = {item.stable_id: item.recommended_layer for item in topics}
+    derived = get_derived_progress(uow, owner_id, goal_id, clock=clock or SystemClock())
+    learning_states = tuple(
+        LearningState(
+            persisted[item.topic_stable_id].id if item.topic_stable_id in persisted else f"derived:{item.topic_stable_id}",
+            owner_id, goal_id, item.topic_stable_id, goal.graph_version_id,
+            LearningClassification(item.classification.value),
+            persisted[item.topic_stable_id].origin if item.topic_stable_id in persisted else "derived-fixture",
+            persisted[item.topic_stable_id].recommended_depth if item.topic_stable_id in persisted else recommended[item.topic_stable_id],
+            item.definition, derived.rule_version, derived.input_hash,
+            f"{derived.effective_now[:10]}T00:00:00.000000Z",
+        )
+        for item in derived.learning_states
+    )
     projection = project_roadmap(
         graph_version_id=goal.graph_version_id,
         topics=_topics(topics),
         prerequisite_relations=_prerequisites(relations),
         overlay_entries=uow.roadmap.list_overlay_entries(owner_id, goal_id),
-        learning_states=uow.roadmap.list_learning_states(owner_id, goal_id),
+        learning_states=learning_states,
         corrections=uow.roadmap.list_corrections(owner_id, goal_id),
         transferred_evidence_topic_ids=uow.roadmap.list_transferred_evidence_topic_ids(
             owner_id, goal_id
@@ -557,8 +594,7 @@ def _decide(
     _save_proposal_response(
         uow, owner_id, proposal.goal_id, operation, key, request_hash, result
     )
-    # The rejected-stale transition is intentionally persisted so the UX can
-    # render it, while the accepting command still returns the required 409.
+    # Persist rejected-stale so clients can render it, then return the 409.
     uow.commit()
     if stale_error is not None:
         raise stale_error
