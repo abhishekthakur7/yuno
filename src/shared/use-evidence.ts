@@ -7,6 +7,7 @@ import {
   evidenceQueryOptions,
   progressQueryOptions,
   requestAssessmentReevaluation,
+  retrieveSource,
   sourceQueryOptions,
   type Assessment,
 } from './api/evidence'
@@ -54,6 +55,10 @@ export function useEvidence(goalId: string | null, requestedEvidenceId: string |
       requestAssessmentReevaluation(id, { dispute_id: disputeId }),
     onSuccess: refreshDerivedReads,
   })
+  const sourceRetrieval = useMutation({
+    mutationFn: retrieveSource,
+    onSuccess: (_job, sourceId) => queryClient.invalidateQueries({ queryKey: ['sources', sourceId] }),
+  })
 
   const sources = {
     queries: sourceQueries,
@@ -81,6 +86,7 @@ export function useEvidence(goalId: string | null, requestedEvidenceId: string |
     progress,
     dispute,
     reevaluate,
+    sourceRetrieval,
   }
 }
 

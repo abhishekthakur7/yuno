@@ -11,6 +11,9 @@ from yuno.modules.learning_content.domain import (
     GenerateResult,
     GenerationAttempt,
     GenerationIdempotencyRecord,
+    TopicConversationTurn,
+    TutorRequest,
+    TutorResult,
 )
 from yuno.shared.application.unit_of_work import UnitOfWork
 
@@ -135,11 +138,26 @@ class LearningContentRepository(Protocol):
     def add_idempotency(
         self, record: GenerationIdempotencyRecord
     ) -> GenerationIdempotencyRecord: ...
-    def add_quarantine(self, **values: object) -> None: ...
+    def add_conversation_turn(
+        self, turn: TopicConversationTurn
+    ) -> TopicConversationTurn: ...
+    def get_conversation_turn(
+        self, owner_id: str, turn_id: str
+    ) -> TopicConversationTurn | None: ...
+    def get_conversation_turn_by_idempotency(
+        self, owner_id: str, idempotency_key: str
+    ) -> TopicConversationTurn | None: ...
+    def list_conversation_turns(
+        self, owner_id: str, goal_id: str, topic_id: str
+    ) -> Sequence[TopicConversationTurn]: ...
 
 
 class GenerationAdapter(Protocol):
     def generate(self, request: GenerateRequest) -> GenerateResult: ...
+
+
+class TutorAdapter(Protocol):
+    def respond(self, request: TutorRequest) -> TutorResult: ...
 
 
 class ProvenanceRepository(Protocol):

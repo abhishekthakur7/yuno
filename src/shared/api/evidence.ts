@@ -116,3 +116,14 @@ export async function requestAssessmentReevaluation(
   if (error || !data) failure(error, response.status, 'Re-evaluation could not be requested.')
   return data
 }
+
+export async function retrieveSource(sourceId: string): Promise<JobRef> {
+  const { data, error, response } = await client.POST('/api/v1/sources/{source_id}/retrieve', {
+    params: {
+      path: { source_id: sourceId },
+      header: { 'Idempotency-Key': crypto.randomUUID() },
+    },
+  })
+  if (error || !data) failure(error, response.status, 'Source retrieval could not be started.')
+  return data
+}

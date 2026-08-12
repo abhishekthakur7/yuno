@@ -64,6 +64,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
+    "yuno.modules.provider",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {
@@ -114,6 +115,9 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.settings_data.domain",
     "yuno.modules.settings_data.ports",
     "yuno.modules.settings_data.service",
+    "yuno.modules.provider.domain",
+    "yuno.modules.provider.ports",
+    "yuno.modules.provider.service",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -130,6 +134,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
+    "yuno.modules.provider",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
@@ -216,6 +221,7 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.notebook_review.service -> yuno.modules.audit.**",
         "yuno.modules.settings_data.ports -> yuno.modules.audit.**",
         "yuno.modules.settings_data.service -> yuno.modules.audit.**",
+        "yuno.modules.provider.service -> yuno.modules.audit.**",
     }
 
 

@@ -158,6 +158,11 @@ def test_generation_contract_returns_job_ref_without_claiming_content(
     client: TestClient, uow_factory: UnitOfWorkFactory
 ) -> None:
     _graph_id, topic_id, goal_id = _seed(uow_factory)
+    accepted = client.post(
+        "/api/v1/disclosures/provider-generation/accept",
+        json={"disclosure_version": "provider-network-v1"},
+    )
+    assert accepted.status_code == 200, accepted.text
     response = client.post(
         f"/api/v1/goals/{goal_id}/topics/{topic_id}/generate",
         params={"layer": "Essential"},

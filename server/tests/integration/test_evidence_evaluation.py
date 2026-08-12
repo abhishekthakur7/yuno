@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from tests.integration.test_learning_content_api import _seed
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -266,7 +267,7 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
     client, uow_factory: UnitOfWorkFactory
 ) -> None:
     _owner_id, _evidence, rubric, _request = _arrange(uow_factory)
-    client.app.state.evaluation_adapter = FakeEvaluationAdapter(ambiguity=True)
+    install_provider_fake(client, FakeEvaluationAdapter(ambiguity=True))
     goal_id = _evidence.goal_id
     topic_id = _evidence.topic_stable_id
     submitted = client.post(
@@ -346,7 +347,13 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         "trade-offs",
     }
 
-    # Replay preserves the response; changed idempotency bodies conflict.
+    # A terminal replay does not require a disclosure because it does not
+    # dispatch another provider request.
+    revoked = client.post(
+        "/api/v1/disclosures/provider-generation/revoke",
+        params={"disclosure_version": "provider-network-v1"},
+    )
+    assert revoked.status_code == 200
     replay = client.post(
         f"/api/v1/evidence/{evidence_id}/assess",
         headers={"Idempotency-Key": "assess-api"},
@@ -381,6 +388,11 @@ def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
         },
     )
     assert conflict.status_code == 409
+    reaccepted = client.post(
+        "/api/v1/disclosures/provider-generation/accept",
+        json={"disclosure_version": "provider-network-v1"},
+    )
+    assert reaccepted.status_code == 200
 
     dispute = client.post(
         f"/api/v1/assessments/{assessment.id}/disputes",
@@ -689,3 +701,8 @@ def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(
             for event in uow.audit.list_for_owner(owner_id)
         }
         assert (request.id, "requested") in actions
+
+
+@pytest.fixture(autouse=True)
+def accepted_provider_disclosure(client):
+    accept_provider_disclosure(client)

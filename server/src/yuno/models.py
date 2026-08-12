@@ -23,6 +23,7 @@ from yuno.modules.learning_content import models as learning_content_models
 from yuno.modules.notebook_review import models as notebook_review_models
 from yuno.modules.profiles_goals import models as profiles_goals_models
 from yuno.modules.provenance import models as provenance_models
+from yuno.modules.provider import models as provider_models
 from yuno.modules.roadmap import models as roadmap_models
 from yuno.modules.settings_data import models as settings_data_models
 
@@ -39,6 +40,7 @@ __all__ = [
     "notebook_review_models",
     "profiles_goals_models",
     "provenance_models",
+    "provider_models",
     "roadmap_models",
     "settings_data_models",
 ]

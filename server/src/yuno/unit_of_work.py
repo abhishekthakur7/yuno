@@ -32,6 +32,8 @@ from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
 from yuno.modules.profiles_goals.repository import SqlAlchemyProfilesGoalsRepository
 from yuno.modules.provenance.ports import SourceRepository
 from yuno.modules.provenance.repository import SqlAlchemySourceRepository
+from yuno.modules.provider.ports import ProviderRepository
+from yuno.modules.provider.repository import SqlAlchemyProviderRepository
 from yuno.modules.roadmap.ports import RoadmapRepository
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
 from yuno.modules.settings_data.ports import SettingsRepository
@@ -63,6 +65,7 @@ class SqlAlchemyUnitOfWork:
     notebook_review: NotebookReviewRepository
     profiles_goals: ProfilesGoalsRepository
     provenance: SourceRepository
+    provider: ProviderRepository
     roadmap: RoadmapRepository
     settings_data: SettingsRepository
 
@@ -103,6 +106,7 @@ class SqlAlchemyUnitOfWork:
         self.notebook_review = SqlAlchemyNotebookReviewRepository(self._session)
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         self.provenance = SqlAlchemySourceRepository(self._session)
+        self.provider = SqlAlchemyProviderRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
         self.settings_data = SqlAlchemySettingsRepository(self._session)
         return self

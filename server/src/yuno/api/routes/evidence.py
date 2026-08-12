@@ -50,7 +50,14 @@ from yuno.modules.evidence_evaluation.service import (
     perform_assessment,
     request_reevaluation,
 )
-from yuno.shared.application.jobs import JobDispatcher, JobRef, JobRequest, JobStatus
+from yuno.modules.provider.service import require_disclosure
+from yuno.shared.application.jobs import (
+    JobDispatcher,
+    JobLane,
+    JobRef,
+    JobRequest,
+    JobStatus,
+)
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import Clock, SystemClock, now_text
 from yuno.shared.domain.errors import IdempotencyConflictError
@@ -190,9 +197,61 @@ def post_assess(
         },
         "run_id": body.run_id,
     }
+    operation = f"assess_evidence:{evidence_id}"
+    request_hash = hash_payload(payload)
+    prior = uow.evidence.get_idempotency(owner_id, operation, key)
+    if prior is not None:
+        if prior.request_hash != request_hash:
+            raise IdempotencyConflictError(
+                "The Idempotency-Key was reused with a different assessment request."
+            )
+        reserved = JobRefResponse.model_validate_json(prior.response_json)
+        current = dispatcher.get(owner_id, reserved.job_id)
+        replay = current or JobRef(**reserved.model_dump())
+        return accepted_job(
+            JobRef(
+                replay.job_id,
+                replay.kind,
+                replay.status,
+                replay.enqueued_at,
+                deduplicated=True,
+                lane=replay.lane,
+            )
+        )
+    disclosure = require_disclosure(uow, owner_id)
     ref = dispatcher.enqueue(
-        JobRequest("assess_evidence", owner_id, payload, evidence.id, key)
+        JobRequest(
+            "assess_evidence",
+            owner_id,
+            payload,
+            evidence.id,
+            key,
+            goal_id=evidence.goal_id,
+            lane=JobLane.INTERACTIVE,
+            schema_version="provider-job-v1",
+            request_ref=f"Evidence:{evidence.id}",
+            disclosure_ref=disclosure.id,
+        )
     )
+    response = JobRefResponse(
+        job_id=ref.job_id,
+        kind=ref.kind,
+        status=ref.status,
+        enqueued_at=ref.enqueued_at,
+        deduplicated=ref.deduplicated,
+    )
+    uow.evidence.add_idempotency(
+        EvidenceEvaluationIdempotencyRecord(
+            new_id(),
+            owner_id,
+            operation,
+            key,
+            request_hash,
+            response.model_dump_json(),
+            now_text(SystemClock()),
+        )
+    )
+    uow.commit()
     return accepted_job(ref)
 
 
@@ -278,6 +337,7 @@ def post_reevaluate(
         if request is None:
             raise RuntimeError("The re-evaluation idempotency reservation is invalid.")
     else:
+        disclosure = require_disclosure(uow, owner_id)
         job_id = new_id()
         request = request_reevaluation(
             uow, owner_id, assessment_id, body.dispute_id, job_id=job_id
@@ -301,6 +361,7 @@ def post_reevaluate(
 
     ref = dispatcher.get(owner_id, request.job_id)
     if ref is None and request.status.value == "requested":
+        disclosure = require_disclosure(uow, owner_id)
         ref = dispatcher.enqueue(
             JobRequest(
                 "reevaluate_assessment",
@@ -309,6 +370,11 @@ def post_reevaluate(
                 request.id,
                 key,
                 requested_job_id=request.job_id,
+                goal_id=request.goal_id,
+                lane=JobLane.INTERACTIVE,
+                schema_version="provider-job-v1",
+                request_ref=f"ReevaluationRequest:{request.id}",
+                disclosure_ref=disclosure.id,
             )
         )
     elif ref is None:

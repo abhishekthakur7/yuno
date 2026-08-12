@@ -426,6 +426,10 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'conversation' && path.includes('topics')) {
+      await route.fulfill({ json: [] })
+      return
+    }
     if (path.at(-1) === 'refreshers') {
       await route.fulfill({ json: interviewRefreshers })
       return
@@ -1105,6 +1109,7 @@ test('Topic Studio generates absent content through an explicit generating state
   await expect(page.getByRole('heading', { name: 'No Essential content yet' })).toBeVisible()
   await page.getByRole('button', { name: 'Generate Essential' }).click()
   await expect(page.getByRole('heading', { name: 'Generating Essential' })).toBeVisible()
+  await page.reload()
   await expect(page.getByText('Generated ready body.')).toBeVisible({ timeout: 5_000 })
 })
 
@@ -1135,6 +1140,7 @@ test('Topic Studio keeps a stale body through explicit regeneration and exposes 
   await page.getByRole('button', { name: 'Regenerate', exact: true }).click()
   await expect(page.getByText('Original stale generated body.')).toBeVisible()
   await expect(page.getByText('Generating updated content')).toBeVisible()
+  await page.reload()
   await expect(page.getByText('Regenerated body after explicit action.')).toBeVisible({ timeout: 5_000 })
 })
 
@@ -1221,6 +1227,7 @@ test('Mock pause/resume preserves the exact API draft and Complete remains an ex
   await expect(page).toHaveURL(/\/app\/mock\?runId=mock-run-e2e-1$/)
   expect(completeRequests).toBe(1)
   await page.evaluate(() => fetch('/api/v1/interview-runs/mock-run-e2e-1?finish=1'))
+  await page.reload()
   await expect(page.getByRole('button', { name: /Open report/i })).toBeVisible()
   await page.getByRole('button', { name: /Open report/i }).click()
   await expect(page).toHaveURL(/\/app\/reports\?runId=mock-run-e2e-1$/)

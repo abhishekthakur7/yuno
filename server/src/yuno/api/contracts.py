@@ -38,6 +38,7 @@ from yuno.modules.interview.domain import (
 )
 from yuno.modules.learning_content.domain import (
     Capability,
+    ConversationRole,
     GenerationAttemptStatus,
     LayerState,
     StaleReason,
@@ -58,6 +59,7 @@ from yuno.modules.profiles_goals.domain import (
     TargetLevel,
 )
 from yuno.modules.provenance.domain import ClaimType, SourceAvailability
+from yuno.modules.provider.domain import ProviderCapabilityState, ProviderName
 from yuno.modules.roadmap.domain import (
     CorrectionType,
     LearningClassification,
@@ -88,6 +90,30 @@ class ErrorResponse(BaseModel):
     current_state: str | None = None
     job_id: str | None = None
     recovery_action: str | None = None
+
+
+class DisclosureAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    disclosure_version: str = Field(min_length=1)
+
+
+class DisclosureResponse(BaseModel):
+    id: str | None
+    category: str
+    operation: str
+    destination: str
+    data_categories: list[str]
+    disclosure_version: str
+    accepted_at: str | None
+    revoked_at: str | None
+
+
+class ProviderCapabilityResponse(BaseModel):
+    provider: ProviderName
+    state: ProviderCapabilityState
+    reason: str | None
+    adapter_version: str | None
+    contract_version: str | None
 
 
 class InterviewBundleItemCreateRequest(BaseModel):
@@ -843,6 +869,16 @@ class SourceResponse(BaseModel):
     updated_at: str
 
 
+class SourceSnapshotResponse(BaseModel):
+    id: str
+    source_id: str
+    retrieved_at: str
+    content_ref: str
+    content_hash: str
+    status: str
+    version_label: str | None
+
+
 class CitationResponse(BaseModel):
     id: str
     source: SourceResponse
@@ -894,6 +930,22 @@ class TopicLayersResponse(BaseModel):
     topic_id: str
     conversation_scope: str
     layers: list[TopicLayerResponse]
+
+
+class TutorTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(min_length=1)
+
+
+class TopicConversationTurnResponse(BaseModel):
+    id: str
+    goal_id: str
+    topic_id: str
+    role: ConversationRole
+    body: str
+    response_to_id: str | None
+    job_id: str | None
+    created_at: str
 
 
 class TopicDetailResponse(BaseModel):

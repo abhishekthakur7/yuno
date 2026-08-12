@@ -13,6 +13,7 @@ from yuno.modules.provenance.domain import (
     ClaimType,
     Source,
     SourceAvailability,
+    SourceRetrievalCommand,
     SourceSnapshot,
 )
 from yuno.modules.provenance.models import (
@@ -20,6 +21,7 @@ from yuno.modules.provenance.models import (
     ArtifactProvenanceSnapshotRow,
     CitationRow,
     ClaimRow,
+    SourceRetrievalCommandRow,
     SourceRow,
     SourceSnapshotRow,
 )
@@ -69,6 +71,46 @@ class SqlAlchemySourceRepository(SqlAlchemyRepository):
                 r.version_label,
             )
             if r
+            else None
+        )
+
+    def add_source_snapshot(self, snapshot):
+        self._session.add(SourceSnapshotRow(**snapshot.__dict__))
+        self._session.flush()
+        return snapshot
+
+    def list_source_snapshots(self, owner_id, source_id):
+        rows = self._session.scalars(
+            owner_scoped_select(SourceSnapshotRow, owner_id)
+            .where(SourceSnapshotRow.source_id == source_id)
+            .order_by(
+                SourceSnapshotRow.retrieved_at.desc(), SourceSnapshotRow.id.desc()
+            )
+        ).all()
+        return tuple(_source_snapshot(row) for row in rows)
+
+    def add_retrieval_command(self, command):
+        self._session.add(SourceRetrievalCommandRow(**command.__dict__))
+        self._session.flush()
+        return command
+
+    def get_retrieval_command_by_idempotency(self, owner_id, key):
+        row = self._session.scalars(
+            owner_scoped_select(SourceRetrievalCommandRow, owner_id).where(
+                SourceRetrievalCommandRow.idempotency_key == key
+            )
+        ).one_or_none()
+        return (
+            SourceRetrievalCommand(
+                row.id,
+                row.owner_id,
+                row.source_id,
+                row.job_id,
+                row.idempotency_key,
+                row.request_hash,
+                row.created_at,
+            )
+            if row
             else None
         )
 
@@ -171,6 +213,19 @@ def _source(row: SourceRow) -> Source:
         SourceAvailability(row.availability_status),
         row.created_at,
         row.updated_at,
+    )
+
+
+def _source_snapshot(row: SourceSnapshotRow) -> SourceSnapshot:
+    return SourceSnapshot(
+        row.id,
+        row.owner_id,
+        row.source_id,
+        row.retrieved_at,
+        row.content_ref,
+        row.content_hash,
+        row.status,
+        row.version_label,
     )
 
 

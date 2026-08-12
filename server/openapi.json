@@ -947,6 +947,14 @@
         "title": "ClaimType",
         "type": "string"
       },
+      "ConversationRole": {
+        "enum": [
+          "learner",
+          "tutor"
+        ],
+        "title": "ConversationRole",
+        "type": "string"
+      },
       "CorrectionType": {
         "enum": [
           "correction",
@@ -1524,6 +1532,93 @@
         ],
         "title": "DimensionOutcome",
         "type": "string"
+      },
+      "DisclosureAcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "disclosure_version": {
+            "minLength": 1,
+            "title": "Disclosure Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "disclosure_version"
+        ],
+        "title": "DisclosureAcceptRequest",
+        "type": "object"
+      },
+      "DisclosureResponse": {
+        "properties": {
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "data_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Categories",
+            "type": "array"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "disclosure_version": {
+            "title": "Disclosure Version",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "operation",
+          "destination",
+          "data_categories",
+          "disclosure_version",
+          "accepted_at",
+          "revoked_at"
+        ],
+        "title": "DisclosureResponse",
+        "type": "object"
       },
       "DisputeStatus": {
         "enum": [
@@ -4873,6 +4968,74 @@
         "title": "ProgressDisplay",
         "type": "string"
       },
+      "ProviderCapabilityResponse": {
+        "properties": {
+          "adapter_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Version"
+          },
+          "contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Version"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ProviderCapabilityState"
+          }
+        },
+        "required": [
+          "provider",
+          "state",
+          "reason",
+          "adapter_version",
+          "contract_version"
+        ],
+        "title": "ProviderCapabilityResponse",
+        "type": "object"
+      },
+      "ProviderCapabilityState": {
+        "enum": [
+          "configured",
+          "unavailable"
+        ],
+        "title": "ProviderCapabilityState",
+        "type": "string"
+      },
+      "ProviderName": {
+        "enum": [
+          "codex",
+          "claude"
+        ],
+        "title": "ProviderName",
+        "type": "string"
+      },
       "ReevaluationRequestResponse": {
         "properties": {
           "completed_at": {
@@ -5773,6 +5936,56 @@
         "title": "SourceResponse",
         "type": "object"
       },
+      "SourceSnapshotResponse": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "content_ref": {
+            "title": "Content Ref",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "retrieved_at": {
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "retrieved_at",
+          "content_ref",
+          "content_hash",
+          "status",
+          "version_label"
+        ],
+        "title": "SourceSnapshotResponse",
+        "type": "object"
+      },
       "StaleReason": {
         "enum": [
           "personalization-snapshot-mismatch",
@@ -5863,6 +6076,67 @@
           "limitation"
         ],
         "title": "TopicCheckpointResponse",
+        "type": "object"
+      },
+      "TopicConversationTurnResponse": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "response_to_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response To Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ConversationRole"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "topic_id",
+          "role",
+          "body",
+          "response_to_id",
+          "job_id",
+          "created_at"
+        ],
+        "title": "TopicConversationTurnResponse",
         "type": "object"
       },
       "TopicDetailResponse": {
@@ -6125,6 +6399,21 @@
         ],
         "title": "TrustState",
         "type": "string"
+      },
+      "TutorTurnRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "TutorTurnRequest",
+        "type": "object"
       },
       "UntrustedSeedKind": {
         "enum": [
@@ -7016,6 +7305,145 @@
         "summary": "Put Roadmap Preview",
         "tags": [
           "diagnostics"
+        ]
+      }
+    },
+    "/api/v1/disclosures": {
+      "get": {
+        "operationId": "disclosures_api_v1_disclosures_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DisclosureResponse"
+                  },
+                  "title": "Response Disclosures Api V1 Disclosures Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Disclosures",
+        "tags": [
+          "provider"
+        ]
+      }
+    },
+    "/api/v1/disclosures/{category}/accept": {
+      "post": {
+        "operationId": "accept_api_v1_disclosures__category__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisclosureAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisclosureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Accept",
+        "tags": [
+          "provider"
+        ]
+      }
+    },
+    "/api/v1/disclosures/{category}/revoke": {
+      "post": {
+        "operationId": "revoke_api_v1_disclosures__category__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "disclosure_version",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Disclosure Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisclosureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "provider"
         ]
       }
     },
@@ -8612,6 +9040,136 @@
         "summary": "Post Skip",
         "tags": [
           "roadmap"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/conversation": {
+      "get": {
+        "operationId": "get_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TopicConversationTurnResponse"
+                  },
+                  "title": "Response Get Topic Conversation Api V1 Goals  Goal Id  Topics  Topic Id  Conversation Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Topic Conversation",
+        "tags": [
+          "learning-content"
+        ]
+      },
+      "post": {
+        "operationId": "post_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TutorTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Topic Conversation",
+        "tags": [
+          "learning-content"
         ]
       }
     },
@@ -10865,6 +11423,41 @@
         ]
       }
     },
+    "/api/v1/provider-capabilities": {
+      "get": {
+        "operationId": "capabilities_api_v1_provider_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderCapabilityResponse"
+                  },
+                  "title": "Response Capabilities Api V1 Provider Capabilities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Capabilities",
+        "tags": [
+          "provider"
+        ]
+      }
+    },
     "/api/v1/reviews/{review_id}/attempts": {
       "post": {
         "operationId": "post_review_attempt_api_v1_reviews__review_id__attempts_post",
@@ -11151,6 +11744,110 @@
           }
         },
         "summary": "Source",
+        "tags": [
+          "provenance"
+        ]
+      }
+    },
+    "/api/v1/sources/{source_id}/retrieve": {
+      "post": {
+        "operationId": "retrieve_source_api_v1_sources__source_id__retrieve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Retrieve Source",
+        "tags": [
+          "provenance"
+        ]
+      }
+    },
+    "/api/v1/sources/{source_id}/snapshots": {
+      "get": {
+        "operationId": "source_snapshots_api_v1_sources__source_id__snapshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceSnapshotResponse"
+                  },
+                  "title": "Response Source Snapshots Api V1 Sources  Source Id  Snapshots Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Source Snapshots",
         "tags": [
           "provenance"
         ]

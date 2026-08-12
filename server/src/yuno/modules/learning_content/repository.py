@@ -7,17 +7,19 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from yuno.modules.learning_content.domain import (
     ArtifactState,
+    ConversationRole,
     GeneratedArtifact,
     GenerationAttempt,
     GenerationAttemptStatus,
     GenerationIdempotencyRecord,
+    TopicConversationTurn,
     TopicLayer,
 )
 from yuno.modules.learning_content.models import (
     GeneratedArtifactRow,
     GenerationAttemptRow,
     LearningContentIdempotencyRow,
-    SchemaQuarantineRow,
+    TopicConversationTurnRow,
 )
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
@@ -212,9 +214,42 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
         ).first()
         return _idempotency(r) if r else None
 
-    def add_quarantine(self, **values):
-        self._session.add(SchemaQuarantineRow(**values))
+    def add_conversation_turn(self, turn):
+        values = turn.__dict__.copy()
+        values["role"] = turn.role.value
+        self._session.add(TopicConversationTurnRow(**values))
         self._session.flush()
+        return turn
+
+    def get_conversation_turn(self, owner_id, turn_id):
+        row = self._session.scalars(
+            owner_scoped_select(TopicConversationTurnRow, owner_id).where(
+                TopicConversationTurnRow.id == turn_id
+            )
+        ).one_or_none()
+        return _conversation_turn(row) if row else None
+
+    def get_conversation_turn_by_idempotency(self, owner_id, key):
+        row = self._session.scalars(
+            owner_scoped_select(TopicConversationTurnRow, owner_id).where(
+                TopicConversationTurnRow.idempotency_key == key
+            )
+        ).one_or_none()
+        return _conversation_turn(row) if row else None
+
+    def list_conversation_turns(self, owner_id, goal_id, topic_id):
+        rows = self._session.scalars(
+            owner_scoped_select(TopicConversationTurnRow, owner_id)
+            .where(
+                TopicConversationTurnRow.goal_id == goal_id,
+                TopicConversationTurnRow.topic_stable_id == topic_id,
+            )
+            .order_by(
+                TopicConversationTurnRow.created_at,
+                TopicConversationTurnRow.id,
+            )
+        ).all()
+        return tuple(_conversation_turn(row) for row in rows)
 
 
 def _artifact(r):
@@ -281,5 +316,22 @@ def _idempotency(r):
         r.attempt_id,
         r.job_id,
         r.response_json,
+        r.created_at,
+    )
+
+
+def _conversation_turn(r):
+    return TopicConversationTurn(
+        r.id,
+        r.owner_id,
+        r.goal_id,
+        r.graph_version_id,
+        r.topic_stable_id,
+        ConversationRole(r.role),
+        r.body,
+        r.response_to_id,
+        r.job_id,
+        r.idempotency_key,
+        r.request_hash,
         r.created_at,
     )

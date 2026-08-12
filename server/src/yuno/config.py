@@ -10,6 +10,7 @@ here is fine (the framework-free rule applies only to `yuno.shared.domain`/
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     pending_job_cap: int = 100
     background_job_age_promotion_seconds: int = 300
     job_janitor_retention_seconds: int = 86400
+    provider_first_output_seconds: float | None = None
+    provider_inactivity_seconds: float | None = None
+    provider_absolute_seconds: float | None = None
+    source_snapshot_root: Path = Path("./yuno-source-snapshots")
 
 
 @lru_cache

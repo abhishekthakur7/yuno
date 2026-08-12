@@ -74,7 +74,14 @@ from yuno.modules.interview.service import (
 )
 from yuno.modules.learning_content.domain import TopicLayer
 from yuno.modules.learning_content.service import resolve_generation_context
-from yuno.shared.application.jobs import JobDispatcher, JobRef, JobRequest, JobStatus
+from yuno.modules.provider.service import require_disclosure
+from yuno.shared.application.jobs import (
+    JobDispatcher,
+    JobLane,
+    JobRef,
+    JobRequest,
+    JobStatus,
+)
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import Clock, now_text
 from yuno.shared.domain.errors import (
@@ -205,6 +212,8 @@ def post_interview_answer(
     clock: Annotated[Clock, Depends(get_clock)],
 ):
     run = get_interview_run(uow, owner_id, run_id)
+    if not body.answer.strip():
+        raise DomainValidationError("An answer must not be blank.")
     if run.mode == "Mock":
         return _post_mock_answer(run, body, owner_id, uow, dispatcher, key, clock)
     operation = f"practice_answer:{run_id}"
@@ -240,14 +249,18 @@ def post_interview_answer(
                     deduplicated=True,
                 )
             )
+        disclosure = require_disclosure(uow, owner_id)
         return accepted_job(
-            _dispatch_practice(dispatcher, owner_id, run, key, reserved.job_id)
+            _dispatch_practice(
+                dispatcher, owner_id, run, key, reserved.job_id, disclosure.id
+            )
         )
 
     run = get_practice_run(uow, owner_id, run_id)
     bundle = get_bundle(uow, owner_id, run.bundle_id)
     item = next(value for value in bundle.items if value.id == run.bundle_item_id)
     assert item.topic_stable_id is not None
+    disclosure = require_disclosure(uow, owner_id)
     job_id = new_id()
     evidence = create_evidence(
         uow,
@@ -287,7 +300,9 @@ def post_interview_answer(
     uow.commit()
     run = get_practice_run(uow, owner_id, run.id)
     assert run.active_answer_turn_id == answer_turn.id
-    return accepted_job(_dispatch_practice(dispatcher, owner_id, run, key, job_id))
+    return accepted_job(
+        _dispatch_practice(dispatcher, owner_id, run, key, job_id, disclosure.id)
+    )
 
 
 @router.post("/interview-runs/{run_id}/pause", response_model=MockRunResponse)
@@ -361,7 +376,6 @@ def post_mock_complete(
             deduplicated=True,
         )
         return accepted_job(ref)
-    job_id = new_id()
     validate_mock_completion(uow, owner_id, run_id, body.draft)
     bundle = get_bundle(uow, owner_id, run.bundle_id)
     item = next(value for value in bundle.items if value.id == run.bundle_item_id)
@@ -369,6 +383,8 @@ def post_mock_complete(
         raise DomainValidationError(
             "A Mock assessment must reference an approved topic."
         )
+    disclosure = require_disclosure(uow, owner_id)
+    job_id = new_id()
     transcript = [
         {"kind": turn.kind.value, "body": turn.body} for turn in run.turns
     ] + [{"kind": "answer", "body": body.draft}]
@@ -416,6 +432,11 @@ def post_mock_complete(
                 dedupe_key=run.id,
                 idempotency_key=key,
                 requested_job_id=job_id,
+                goal_id=run.goal_id,
+                lane=JobLane.INTERACTIVE,
+                schema_version="provider-job-v1",
+                request_ref=f"InterviewRun:{run.id}",
+                disclosure_ref=disclosure.id,
             )
         )
     )
@@ -474,6 +495,7 @@ def post_interview_retry(
             reserved = JobRefResponse.model_validate_json(prior.response_json)
             current_job = dispatcher.get(owner_id, reserved.job_id)
             return accepted_job(current_job or reserved)
+        disclosure = require_disclosure(uow, owner_id)
         job_id = new_id()
         run, kind = reserve_mock_retry(uow, owner_id, run_id, job_id, clock=clock)
         reserved = JobRefResponse(
@@ -507,13 +529,21 @@ def post_interview_retry(
                     dedupe_key=run.active_answer_turn_id,
                     idempotency_key=key,
                     requested_job_id=job_id,
+                    goal_id=run.goal_id,
+                    lane=JobLane.INTERACTIVE,
+                    schema_version="provider-job-v1",
+                    request_ref=f"InterviewRun:{run.id}",
+                    disclosure_ref=disclosure.id,
                 )
             )
         )
+    disclosure = require_disclosure(uow, owner_id)
     job_id = new_id()
     run = reserve_evaluation_retry(uow, owner_id, run_id, job_id, clock=clock)
     uow.commit()
-    return accepted_job(_dispatch_practice(dispatcher, owner_id, run, key, job_id))
+    return accepted_job(
+        _dispatch_practice(dispatcher, owner_id, run, key, job_id, disclosure.id)
+    )
 
 
 @router.post(
@@ -764,6 +794,7 @@ def _dispatch_practice(
     run: PracticeRun,
     key: str,
     job_id: str,
+    disclosure_ref: str,
 ):
     assert run.active_answer_turn_id is not None
     return dispatcher.enqueue(
@@ -774,6 +805,11 @@ def _dispatch_practice(
             dedupe_key=run.active_answer_turn_id,
             idempotency_key=key,
             requested_job_id=job_id,
+            goal_id=run.goal_id,
+            lane=JobLane.INTERACTIVE,
+            schema_version="provider-job-v1",
+            request_ref=f"InterviewRun:{run.id}",
+            disclosure_ref=disclosure_ref,
         )
     )
 
@@ -798,6 +834,7 @@ def _post_mock_answer(
         reserved = JobRefResponse.model_validate_json(prior.response_json)
         current = dispatcher.get(owner_id, reserved.job_id)
         return accepted_job(current or reserved)
+    disclosure_ref = require_disclosure(uow, owner_id).id
     job_id = new_id()
     updated = submit_mock_answer(
         uow, owner_id, run.id, body.answer, job_id, clock=clock
@@ -830,6 +867,11 @@ def _post_mock_answer(
                 dedupe_key=updated.active_answer_turn_id,
                 idempotency_key=key,
                 requested_job_id=job_id,
+                goal_id=updated.goal_id,
+                lane=JobLane.INTERACTIVE,
+                schema_version="provider-job-v1",
+                request_ref=f"InterviewRun:{updated.id}",
+                disclosure_ref=disclosure_ref,
             )
         )
     )

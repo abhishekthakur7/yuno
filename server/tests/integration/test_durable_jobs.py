@@ -610,7 +610,7 @@ def test_pid_identity_mismatch_refuses_signal_and_owned_reconcile(
         session.commit()
     killed = []
     monkeypatch.setattr(job_service, "_process_exists", lambda _pid: True)
-    monkeypatch.setattr(job_service, "_process_identity", lambda _pid: "424242:reused")
+    monkeypatch.setattr(job_service, "process_identity", lambda _pid: "424242:reused")
     monkeypatch.setattr(job_service.os, "killpg", lambda *args: killed.append(args))
     dispatcher._signal_running_attempt(row.id)  # noqa: SLF001
     assert killed == []

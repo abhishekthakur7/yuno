@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.integration.test_mock_api import _arrange
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -16,6 +19,12 @@ from yuno.modules.evidence_evaluation.domain import (
 )
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.ids import new_id
+
+
+@pytest.fixture(autouse=True)
+def accepted_provider_disclosure(client):
+    accept_provider_disclosure(client)
+
 
 FIXTURE = json.loads(
     (
@@ -158,8 +167,8 @@ def test_terminal_report_uses_immutable_assessment_and_edited_transcript_is_not_
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    client.app.state.evaluation_adapter = ControlledTranscriptEvaluationAdapter(
-        uow_factory, exact_content
+    install_provider_fake(
+        client, ControlledTranscriptEvaluationAdapter(uow_factory, exact_content)
     )
 
     exact = _complete(client, exact_run["id"], answer, "mock-report-exact")
@@ -172,21 +181,15 @@ def test_terminal_report_uses_immutable_assessment_and_edited_transcript_is_not_
     assert exact["assessment"]["trade_offs"] == expected["trade_offs"]
     assert exact["assessment"]["provenance_refs"] == expected["provenance_refs"]
     assert exact["assessment"]["run_id"] == exact_run["id"]
-    terminal_run = client.get(
-        f"/api/v1/interview-runs/{exact_run['id']}"
-    ).json()
+    terminal_run = client.get(f"/api/v1/interview-runs/{exact_run['id']}").json()
     assert terminal_run["final_assessment_id"] == exact["assessment"]["id"]
 
     edited_arranged = _arrange(client, uow_factory, "report-edited")
     edited_run = _create_run(client, edited_arranged, rubric)
-    edited = _complete(
-        client, edited_run["id"], answer + "!", "mock-report-edited"
-    )
+    edited = _complete(client, edited_run["id"], answer + "!", "mock-report-edited")
     assert edited["assessment"]["feedback"] != expected["feedback"]
     assert edited["assessment"]["facts"] != expected["facts"]
-    assert edited["assessment"]["ambiguities"] == [
-        "The edited claim requires review."
-    ]
+    assert edited["assessment"]["ambiguities"] == ["The edited claim requires review."]
 
 
 def test_report_is_withheld_without_completed_run_and_linked_assessment(

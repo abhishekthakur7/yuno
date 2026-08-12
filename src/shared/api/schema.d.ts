@@ -279,6 +279,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/disclosures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Disclosures */
+        get: operations["disclosures_api_v1_disclosures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/disclosures/{category}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept */
+        post: operations["accept_api_v1_disclosures__category__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/disclosures/{category}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke */
+        post: operations["revoke_api_v1_disclosures__category__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -670,6 +721,24 @@ export interface paths {
         put?: never;
         /** Post Skip */
         post: operations["post_skip_api_v1_goals__goal_id__skip_decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Topic Conversation */
+        get: operations["get_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_get"];
+        put?: never;
+        /** Post Topic Conversation */
+        post: operations["post_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1282,6 +1351,23 @@ export interface paths {
         patch: operations["update_profile_api_v1_profile_patch"];
         trace?: never;
     };
+    "/api/v1/provider-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capabilities */
+        get: operations["capabilities_api_v1_provider_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/{review_id}/attempts": {
         parameters: {
             query?: never;
@@ -1360,6 +1446,40 @@ export interface paths {
         };
         /** Source */
         get: operations["source_api_v1_sources__source_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source_id}/retrieve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retrieve Source */
+        post: operations["retrieve_source_api_v1_sources__source_id__retrieve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source_id}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source Snapshots */
+        get: operations["source_snapshots_api_v1_sources__source_id__snapshots_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1705,6 +1825,11 @@ export interface components {
          */
         ClaimType: "fact" | "trade-off" | "routine" | "disputed" | "comparative" | "time-or-version-dependent";
         /**
+         * ConversationRole
+         * @enum {string}
+         */
+        ConversationRole: "learner" | "tutor";
+        /**
          * CorrectionType
          * @enum {string}
          */
@@ -1892,6 +2017,30 @@ export interface components {
          * @enum {string}
          */
         DimensionOutcome: "pass" | "trade-off" | "factual-correction" | "ambiguity-unresolved";
+        /** DisclosureAcceptRequest */
+        DisclosureAcceptRequest: {
+            /** Disclosure Version */
+            disclosure_version: string;
+        };
+        /** DisclosureResponse */
+        DisclosureResponse: {
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Category */
+            category: string;
+            /** Data Categories */
+            data_categories: string[];
+            /** Destination */
+            destination: string;
+            /** Disclosure Version */
+            disclosure_version: string;
+            /** Id */
+            id: string | null;
+            /** Operation */
+            operation: string;
+            /** Revoked At */
+            revoked_at: string | null;
+        };
         /**
          * DisputeStatus
          * @enum {string}
@@ -2944,6 +3093,27 @@ export interface components {
          * @enum {string}
          */
         ProgressDisplay: "detailed" | "simple";
+        /** ProviderCapabilityResponse */
+        ProviderCapabilityResponse: {
+            /** Adapter Version */
+            adapter_version: string | null;
+            /** Contract Version */
+            contract_version: string | null;
+            provider: components["schemas"]["ProviderName"];
+            /** Reason */
+            reason: string | null;
+            state: components["schemas"]["ProviderCapabilityState"];
+        };
+        /**
+         * ProviderCapabilityState
+         * @enum {string}
+         */
+        ProviderCapabilityState: "configured" | "unavailable";
+        /**
+         * ProviderName
+         * @enum {string}
+         */
+        ProviderName: "codex" | "claude";
         /** ReevaluationRequestResponse */
         ReevaluationRequestResponse: {
             /** Completed At */
@@ -3226,6 +3396,23 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** SourceSnapshotResponse */
+        SourceSnapshotResponse: {
+            /** Content Hash */
+            content_hash: string;
+            /** Content Ref */
+            content_ref: string;
+            /** Id */
+            id: string;
+            /** Retrieved At */
+            retrieved_at: string;
+            /** Source Id */
+            source_id: string;
+            /** Status */
+            status: string;
+            /** Version Label */
+            version_label: string | null;
+        };
         /**
          * StaleReason
          * @enum {string}
@@ -3260,6 +3447,24 @@ export interface components {
             /** Scenario */
             scenario: string;
             target_capability: components["schemas"]["Capability"];
+        };
+        /** TopicConversationTurnResponse */
+        TopicConversationTurnResponse: {
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Response To Id */
+            response_to_id: string | null;
+            role: components["schemas"]["ConversationRole"];
+            /** Topic Id */
+            topic_id: string;
         };
         /** TopicDetailResponse */
         TopicDetailResponse: {
@@ -3338,6 +3543,11 @@ export interface components {
          * @enum {string}
          */
         TrustState: "untrusted" | "verified" | "dismissed";
+        /** TutorTurnRequest */
+        TutorTurnRequest: {
+            /** Message */
+            message: string;
+        };
         /**
          * UntrustedSeedKind
          * @enum {string}
@@ -3902,6 +4112,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosticRoadmapPreviewResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    disclosures_api_v1_disclosures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisclosureResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_api_v1_disclosures__category__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisclosureAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisclosureResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revoke_api_v1_disclosures__category__revoke_post: {
+        parameters: {
+            query: {
+                disclosure_version: string;
+            };
+            header?: never;
+            path: {
+                category: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisclosureResponse"];
                 };
             };
             /** @description Default Response */
@@ -4884,6 +5191,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoadmapMutationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicConversationTurnResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_topic_conversation_api_v1_goals__goal_id__topics__topic_id__conversation_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TutorTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
                 };
             };
             /** @description Default Response */
@@ -6262,6 +6639,35 @@ export interface operations {
             };
         };
     };
+    capabilities_api_v1_provider_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderCapabilityResponse"][];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_review_attempt_api_v1_reviews__review_id__attempts_post: {
         parameters: {
             query?: never;
@@ -6443,6 +6849,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retrieve_source_api_v1_sources__source_id__retrieve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    source_snapshots_api_v1_sources__source_id__snapshots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSnapshotResponse"][];
                 };
             };
             /** @description Default Response */

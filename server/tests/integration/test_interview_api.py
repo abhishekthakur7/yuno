@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from fastapi.testclient import TestClient
 
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -494,7 +495,8 @@ def test_refresher_exposes_real_subject_layer_source_and_evidence_gap_then_stale
     adapter = _RefresherGenerationAdapter(
         (("source", source.id), ("evidence-gap", gap_id))
     )
-    client.app.state.generation_adapter = adapter
+    accept_provider_disclosure(client)
+    install_provider_fake(client, adapter)
     artifact_id = _generate_interview_refresher(
         client,
         goal_id,
@@ -538,7 +540,8 @@ def test_refresher_with_missing_provenance_links_is_explicitly_unavailable(
         client, uow_factory, suffix="refresher-unavailable"
     )
     adapter = _RefresherGenerationAdapter(())
-    client.app.state.generation_adapter = adapter
+    accept_provider_disclosure(client)
+    install_provider_fake(client, adapter)
     artifact_id = _generate_interview_refresher(
         client,
         goal_id,

@@ -10,9 +10,11 @@ from fastapi.responses import JSONResponse
 from yuno.api.contracts import (
     JobRefResponse,
     TopicCheckpointResponse,
+    TopicConversationTurnResponse,
     TopicDetailResponse,
     TopicLayerResponse,
     TopicLayersResponse,
+    TutorTurnRequest,
     accepted_job,
 )
 from yuno.api.dependencies import (
@@ -28,12 +30,17 @@ from yuno.modules.learning_content.domain import (
 )
 from yuno.modules.learning_content.ports import LearningContentUnitOfWork
 from yuno.modules.learning_content.service import (
+    find_generation_replay,
     get_topic,
     list_layers,
+    list_topic_conversation,
     reserve_generation,
+    reserve_tutor_turn,
 )
-from yuno.shared.application.jobs import JobDispatcher, JobRef, JobRequest
+from yuno.modules.provider.service import require_disclosure
+from yuno.shared.application.jobs import JobDispatcher, JobLane, JobRef, JobRequest
 from yuno.shared.domain.errors import NotFoundError
+from yuno.shared.domain.ids import new_id
 
 router = APIRouter(tags=["learning-content"])
 
@@ -71,7 +78,7 @@ def get_topic_layers(
     goal = uow.profiles_goals.get_goal(owner_id, goal_id)
     if goal is None:
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
-    adapter = request.app.state.generation_adapter
+    adapter = request.app.state.provider_port
     layers = list_layers(
         uow,
         owner_id,
@@ -101,7 +108,7 @@ def get_topic_layer(
     uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
     request: Request,
 ) -> TopicLayerResponse:
-    adapter = request.app.state.generation_adapter
+    adapter = request.app.state.provider_port
     return _layer_response(
         next(
             item
@@ -114,6 +121,84 @@ def get_topic_layer(
                 getattr(adapter, "model", None),
             )
             if item.layer is layer
+        )
+    )
+
+
+@router.get(
+    "/goals/{goal_id}/topics/{topic_id}/conversation",
+    response_model=list[TopicConversationTurnResponse],
+)
+def get_topic_conversation(
+    goal_id: str,
+    topic_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
+) -> list[TopicConversationTurnResponse]:
+    return [
+        _conversation_response(turn)
+        for turn in list_topic_conversation(uow, owner_id, goal_id, topic_id)
+    ]
+
+
+@router.post(
+    "/goals/{goal_id}/topics/{topic_id}/conversation",
+    response_model=JobRefResponse,
+    status_code=202,
+)
+def post_topic_conversation(
+    goal_id: str,
+    topic_id: str,
+    body: TutorTurnRequest,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
+    dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> JSONResponse:
+    prior = uow.learning_content.get_conversation_turn_by_idempotency(owner_id, key)
+    if prior is not None:
+        turn, _ = reserve_tutor_turn(
+            uow,
+            owner_id,
+            goal_id,
+            topic_id,
+            body.message,
+            key,
+            prior.job_id or new_id(),
+        )
+        assert turn.job_id is not None
+        current = dispatcher.get(owner_id, turn.job_id)
+        if current is not None:
+            return accepted_job(current)
+    list_topic_conversation(uow, owner_id, goal_id, topic_id)
+    disclosure = require_disclosure(uow, owner_id)
+    turn, _ = reserve_tutor_turn(
+        uow,
+        owner_id,
+        goal_id,
+        topic_id,
+        body.message,
+        key,
+        new_id(),
+    )
+    uow.commit()
+    assert turn.job_id is not None
+    return accepted_job(
+        dispatcher.enqueue(
+            JobRequest(
+                "tutor_turn",
+                owner_id,
+                {"learner_turn_id": turn.id},
+                dedupe_key=turn.id,
+                idempotency_key=key,
+                requested_job_id=turn.job_id,
+                goal_id=goal_id,
+                lane=JobLane.INTERACTIVE,
+                schema_version="tutor-turn-v1",
+                request_ref=f"TopicConversationTurn:{turn.id}",
+                disclosure_ref=disclosure.id,
+                run_id=f"{goal_id}:{topic_id}",
+            )
         )
     )
 
@@ -132,12 +217,22 @@ def generate_topic_layer(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
 ) -> JSONResponse:
+    replay = find_generation_replay(uow, owner_id, goal_id, topic_id, layer, key)
+    if replay is not None:
+        if replay[2]:
+            ref, _, _ = reserve_generation(uow, owner_id, goal_id, topic_id, layer, key)
+            uow.commit()
+            return accepted_job(ref)
+        return accepted_job(replay[0])
+    disclosure = require_disclosure(uow, owner_id)
     ref, attempt, dispatch = reserve_generation(
         uow, owner_id, goal_id, topic_id, layer, key
     )
     uow.commit()
     return accepted_job(
-        _enqueue_generation(ref, attempt, dispatch, dispatcher, owner_id, key)
+        _enqueue_generation(
+            ref, attempt, dispatch, dispatcher, owner_id, key, disclosure.id
+        )
     )
 
 
@@ -156,6 +251,30 @@ def regenerate_artifact(
     artifact = uow.learning_content.get_artifact(owner_id, artifact_id)
     if artifact is None:
         raise NotFoundError("The generated artifact was not found.")
+    replay = find_generation_replay(
+        uow,
+        owner_id,
+        artifact.goal_id,
+        artifact.topic_stable_id,
+        artifact.layer,
+        key,
+        force=True,
+    )
+    if replay is not None:
+        if replay[2]:
+            ref, _, _ = reserve_generation(
+                uow,
+                owner_id,
+                artifact.goal_id,
+                artifact.topic_stable_id,
+                artifact.layer,
+                key,
+                force=True,
+            )
+            uow.commit()
+            return accepted_job(ref)
+        return accepted_job(replay[0])
+    disclosure = require_disclosure(uow, owner_id)
     ref, attempt, dispatch = reserve_generation(
         uow,
         owner_id,
@@ -167,7 +286,9 @@ def regenerate_artifact(
     )
     uow.commit()
     return accepted_job(
-        _enqueue_generation(ref, attempt, dispatch, dispatcher, owner_id, key)
+        _enqueue_generation(
+            ref, attempt, dispatch, dispatcher, owner_id, key, disclosure.id
+        )
     )
 
 
@@ -178,6 +299,7 @@ def _enqueue_generation(
     dispatcher: JobDispatcher,
     owner_id: str,
     key: str,
+    disclosure_ref: str,
 ) -> JobRef:
     if not dispatch:
         return ref
@@ -189,6 +311,11 @@ def _enqueue_generation(
             attempt.artifact_id,
             key,
             requested_job_id=attempt.job_id,
+            goal_id=attempt.goal_id,
+            lane=JobLane.BACKGROUND,
+            schema_version="provider-job-v1",
+            request_ref=f"GenerationAttempt:{attempt.id}",
+            disclosure_ref=disclosure_ref,
         )
     )
 
@@ -220,4 +347,17 @@ def _layer_response(layer: LayerDocument) -> TopicLayerResponse:
         content_origin=layer.content_origin,
         generation=layer.generation,
         stale_reason=layer.stale_reason,
+    )
+
+
+def _conversation_response(turn) -> TopicConversationTurnResponse:
+    return TopicConversationTurnResponse(
+        id=turn.id,
+        goal_id=turn.goal_id,
+        topic_id=turn.topic_stable_id,
+        role=turn.role,
+        body=turn.body,
+        response_to_id=turn.response_to_id,
+        job_id=turn.job_id,
+        created_at=turn.created_at,
     )

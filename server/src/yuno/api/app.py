@@ -10,6 +10,13 @@ from fastapi import APIRouter, FastAPI
 from yuno.api.contracts import ErrorResponse
 from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
+from yuno.api.provider_runtime import (
+    ProviderEvaluationAdapter,
+    ProviderGenerationAdapter,
+    ProviderMockInterviewAdapter,
+    ProviderTutorAdapter,
+    UnavailableProviderPort,
+)
 from yuno.api.routes.canonical import router as canonical_router
 from yuno.api.routes.diagnostics import router as diagnostics_router
 from yuno.api.routes.events import router as events_router
@@ -30,15 +37,18 @@ from yuno.api.routes.learning_content import router as learning_content_router
 from yuno.api.routes.notebook_review import router as notebook_review_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.provenance import router as provenance_router
+from yuno.api.routes.provider import router as provider_router
 from yuno.api.routes.roadmap import router as roadmap_router
 from yuno.api.routes.settings_data import router as settings_data_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
 from yuno.modules.identity.service import ensure_local_owner
 from yuno.modules.jobs_events.service import DurableJobDispatcher
-from yuno.modules.learning_content.service import run_generation
+from yuno.modules.learning_content.service import run_generation, run_tutor_turn_job
 from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
+from yuno.modules.provenance.adapters import HttpSourceRetrievalAdapter
+from yuno.modules.provenance.service import run_source_retrieval_job
 from yuno.modules.settings_data.service import ensure_owner_settings
 from yuno.shared.application.jobs import (
     JobCompletion,
@@ -203,9 +213,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     external_result = None
                     if captured is not None:
                         try:
-                            external_result = getattr(adapter_provider(), method)(
-                                *captured.call_args, **captured.call_kwargs
-                            )
+                            external_result = getattr(
+                                adapter_provider(execution), method
+                            )(*captured.call_args, **captured.call_kwargs)
                         except Exception as exc:  # noqa: BLE001 -- provider boundary
                             external_failure = exc
                     elif preparation_failure is None:
@@ -241,14 +251,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     hash_payload(published),
                 )
 
-            class UnavailableGenerationAdapter:
-                provider = "unavailable"
-                model = "unavailable"
-
-                def generate(self, _request: object) -> None:
-                    raise RuntimeError("Live generation is not configured.")
-
-            app.state.generation_adapter = UnavailableGenerationAdapter()
+            app.state.provider_port = UnavailableProviderPort()
+            source_retrieval_adapter = HttpSourceRetrievalAdapter(
+                resolved_settings.source_snapshot_root
+            )
+            app.state.source_retrieval_adapter = source_retrieval_adapter
             dispatcher.register(
                 "generate_topic_content",
                 external_job_handler(
@@ -259,7 +266,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         request.owner_id,
                         str(request.payload["attempt_id"]),
                     ),
-                    lambda: app.state.generation_adapter,
+                    lambda execution: ProviderGenerationAdapter(app, execution),
                     "generate",
                 ),
             )
@@ -282,19 +289,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             )
 
-            class UnavailableEvaluationAdapter:
-                def evaluate(self, _request: object) -> None:
-                    raise RuntimeError("Live evaluation is not configured.")
-
-            app.state.evaluation_adapter = UnavailableEvaluationAdapter()
-
-            class UnavailableMockInterviewAdapter:
-                def next_question(self, _run: object) -> str:
-                    raise RuntimeError(
-                        "Live Mock question generation is not configured."
-                    )
-
-            app.state.mock_interview_adapter = UnavailableMockInterviewAdapter()
             dispatcher.register(
                 "assess_evidence",
                 external_job_handler(
@@ -302,7 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     lambda request, completion_uow_factory, adapter: run_assessment_job(
                         request, completion_uow_factory, adapter
                     ),
-                    lambda: app.state.evaluation_adapter,
+                    lambda execution: ProviderEvaluationAdapter(app, execution),
                     "evaluate",
                 ),
             )
@@ -313,7 +307,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     lambda request, completion_uow_factory, adapter: (
                         run_reevaluation_job(request, completion_uow_factory, adapter)
                     ),
-                    lambda: app.state.evaluation_adapter,
+                    lambda execution: ProviderEvaluationAdapter(app, execution),
                     "evaluate",
                 ),
             )
@@ -326,7 +320,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             request, completion_uow_factory, adapter
                         )
                     ),
-                    lambda: app.state.evaluation_adapter,
+                    lambda execution: ProviderEvaluationAdapter(app, execution),
                     "evaluate",
                 ),
             )
@@ -341,7 +335,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             adapter,
                         )
                     ),
-                    lambda: app.state.mock_interview_adapter,
+                    lambda execution: ProviderMockInterviewAdapter(app, execution),
                     "next_question",
                 ),
             )
@@ -356,8 +350,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             adapter,
                         )
                     ),
-                    lambda: app.state.evaluation_adapter,
+                    lambda execution: ProviderEvaluationAdapter(app, execution),
                     "evaluate",
+                ),
+            )
+            dispatcher.register(
+                "tutor_turn",
+                external_job_handler(
+                    "tutor_turn",
+                    lambda request, completion_uow_factory, adapter: run_tutor_turn_job(
+                        request, completion_uow_factory, adapter
+                    ),
+                    lambda execution: ProviderTutorAdapter(app, execution),
+                    "respond",
+                ),
+            )
+            dispatcher.register(
+                "retrieve_source_snapshot",
+                external_job_handler(
+                    "retrieve_source_snapshot",
+                    lambda request, completion_uow_factory, adapter: (
+                        run_source_retrieval_job(
+                            request, completion_uow_factory, adapter
+                        )
+                    ),
+                    lambda _execution: app.state.source_retrieval_adapter,
+                    "retrieve",
                 ),
             )
             dispatcher.start()
@@ -376,6 +394,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             durable_dispatcher = locals().get("dispatcher")
             if durable_dispatcher is not None:
                 durable_dispatcher.stop()
+            retrieval_adapter = locals().get("source_retrieval_adapter")
+            if retrieval_adapter is not None:
+                retrieval_adapter.close()
             # Dispose the pool even when startup fails.
             engine.dispose()
 
@@ -398,6 +419,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(evidence_router)
     api_router.include_router(notebook_review_router)
     api_router.include_router(provenance_router)
+    api_router.include_router(provider_router)
     api_router.include_router(settings_data_router)
     api_router.include_router(jobs_router)
     api_router.include_router(events_router)

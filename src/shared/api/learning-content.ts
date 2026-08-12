@@ -8,6 +8,7 @@ export type TopicLayerName = components['schemas']['TopicLayer']
 export type TopicLayerContent = components['schemas']['TopicLayerResponse']
 export type TopicCheckpoint = components['schemas']['TopicCheckpointResponse']
 export type ArtifactProvenanceSummary = components['schemas']['ArtifactProvenanceResponse']
+export type TopicConversationTurn = components['schemas']['TopicConversationTurnResponse']
 
 export const TOPIC_LAYERS: readonly TopicLayerName[] = [
   'Essential',
@@ -35,6 +36,29 @@ export function topicLayersQueryOptions(goalId: string | null, topicId: string |
       return data
     },
   })
+}
+
+export function topicConversationQueryOptions(goalId: string | null, topicId: string | null) {
+  return queryOptions({
+    queryKey: ['goals', goalId, 'topics', topicId, 'conversation'],
+    enabled: Boolean(goalId && topicId),
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/goals/{goal_id}/topics/{topic_id}/conversation', {
+        params: { path: { goal_id: goalId!, topic_id: topicId! } },
+      })
+      if (error || !data) throw new ApiError(error?.message ?? 'Topic conversation could not be loaded.', response.status)
+      return data
+    },
+  })
+}
+
+export async function sendTutorTurn(goalId: string, topicId: string, message: string) {
+  const { data, error, response } = await client.POST('/api/v1/goals/{goal_id}/topics/{topic_id}/conversation', {
+    params: { path: { goal_id: goalId, topic_id: topicId }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    body: { message },
+  })
+  if (error || !data) throw new ApiError(error?.message ?? 'The tutor message could not be sent.', response.status)
+  return data
 }
 
 export function artifactProvenanceQueryOptions(artifactId: string | null) {

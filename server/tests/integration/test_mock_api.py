@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import exc as sa_exc
 from sqlalchemy import text
 
 from tests.integration.test_interview_api import _create_goal
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.interview.service import (
     cancel_mock_generation,
     submit_mock_answer,
@@ -98,7 +100,7 @@ def test_mock_complete_rejects_blank_and_is_idempotent_after_enqueue_failure(
         client.get(f"/api/v1/goals/{run['goal_id']}/evidence").json() == evidence_before
     )
 
-    client.app.state.mock_interview_adapter = FakeMockAdapter()
+    install_provider_fake(client, FakeMockAdapter())
     exact = "  Complete answer.\n"
     first = client.post(
         f"/api/v1/interview-runs/{run['id']}/complete",
@@ -188,7 +190,7 @@ def test_mock_next_turn_cancel_preserves_transcript_and_db_rejects_hint(
 
 def test_mock_adaptive_turn_and_unchanged_completion_guard(client, uow_factory):
     run = _create(client, _arrange(client, uow_factory, "adaptive"))
-    client.app.state.mock_interview_adapter = FakeMockAdapter()
+    install_provider_fake(client, FakeMockAdapter())
     answer = "  First adaptive answer.\n"
     generated = client.post(
         f"/api/v1/interview-runs/{run['id']}/answers",
@@ -216,3 +218,8 @@ def test_mock_adaptive_turn_and_unchanged_completion_guard(client, uow_factory):
         client.get(f"/api/v1/interview-runs/{run['id']}").json()["turns"]
         == after["turns"]
     )
+
+
+@pytest.fixture(autouse=True)
+def accepted_provider_disclosure(client):
+    accept_provider_disclosure(client)

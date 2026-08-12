@@ -82,6 +82,33 @@ class SourceSnapshotRow(Base):
     redacted_failure: Mapped[str | None] = mapped_column(Text)
 
 
+class SourceRetrievalCommandRow(Base):
+    __tablename__ = "source_retrieval_commands"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_id", "owner_id"],
+            ["sources.id", "sources.owner_id"],
+            name="fk_source_retrieval_commands_source_owner",
+        ),
+        UniqueConstraint(
+            "id", "owner_id", name="uq_source_retrieval_commands_id_owner"
+        ),
+        UniqueConstraint(
+            "owner_id",
+            "idempotency_key",
+            name="uq_source_retrieval_commands_idempotency",
+        ),
+        UniqueConstraint("job_id", name="uq_source_retrieval_commands_job"),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    source_id: Mapped[str] = mapped_column(Text, nullable=False)
+    job_id: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    request_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = utc_timestamp_column()
+
+
 class ArtifactProvenanceSnapshotRow(Base):
     __tablename__ = "artifact_provenance_snapshots"
     __table_args__ = (

@@ -54,6 +54,32 @@ class SourceSnapshot:
 
 
 @dataclass(frozen=True)
+class SourceRetrievalRequest:
+    owner_id: str
+    source_id: str
+    canonical_url: str
+
+
+@dataclass(frozen=True)
+class SourceRetrievalResult:
+    content_ref: str
+    content_hash: str
+    retrieved_at: str
+    version_label: str | None = None
+
+
+@dataclass(frozen=True)
+class SourceRetrievalCommand:
+    id: str
+    owner_id: str
+    source_id: str
+    job_id: str
+    idempotency_key: str
+    request_hash: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class ArtifactProvenanceSnapshot:
     id: str
     owner_id: str

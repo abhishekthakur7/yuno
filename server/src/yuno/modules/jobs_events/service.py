@@ -40,6 +40,7 @@ from yuno.shared.domain.errors import (
 )
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
+from yuno.shared.infrastructure.processes import process_identity
 
 _INTERACTIVE_KINDS = {
     "assess_evidence",
@@ -60,6 +61,8 @@ _RETRY_POLICIES = {
     "evaluate_practice_answer": "interview",
     "generate_mock_next_turn": "interview",
     "evaluate_mock_final": "interview",
+    "tutor_turn": "idempotent",
+    "retrieve_source_snapshot": "idempotent",
     "java_runner": "runner",
 }
 
@@ -503,7 +506,7 @@ class DurableJobDispatcher:
             except OSError:
                 pgid = None
             repo.add_attempt(
-                row, process_identity=_process_identity(pid), pid=pid, pgid=pgid
+                row, process_identity=process_identity(pid), pid=pid, pgid=pgid
             )
             session.commit()
             session.expunge(row)
@@ -545,7 +548,7 @@ class DurableJobDispatcher:
                 return
             if not _process_exists(attempt.pid):
                 return
-            identity = _process_identity(attempt.pid)
+            identity = process_identity(attempt.pid)
             if "unavailable" in identity or identity != attempt.process_identity:
                 return
             try:
@@ -583,7 +586,7 @@ class DurableJobDispatcher:
             return None
         diagnostics: list[str] = []
         if attempt.pid and attempt.pid != os.getpid() and _process_exists(attempt.pid):
-            current_identity = _process_identity(attempt.pid)
+            current_identity = process_identity(attempt.pid)
             if (
                 "unavailable" in current_identity
                 or current_identity != attempt.process_identity
@@ -642,14 +645,6 @@ def _retry_policy(kind: str) -> str:
 
 def _provider(value: int | Callable[[], int]) -> Callable[[], int]:
     return value if callable(value) else lambda: value
-
-
-def _process_identity(pid: int) -> str:
-    stat = Path(f"/proc/{pid}/stat")
-    try:
-        return f"{pid}:{stat.read_text().split()[21]}"
-    except (OSError, IndexError):
-        return f"{pid}:unavailable"
 
 
 def _process_exists(pid: int) -> bool:

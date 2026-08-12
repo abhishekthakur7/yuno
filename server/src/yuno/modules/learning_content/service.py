@@ -14,6 +14,7 @@ from yuno.modules.learning_content.domain import (
     ArtifactState,
     Capability,
     Checkpoint,
+    ConversationRole,
     D3CacheKey,
     GeneratedArtifact,
     GenerateRequest,
@@ -27,7 +28,10 @@ from yuno.modules.learning_content.domain import (
     LayerDocument,
     LayerState,
     StaleReason,
+    TopicConversationTurn,
     TopicLayer,
+    TutorRequest,
+    TutorResult,
     d3_cache_key_hash,
     personalization_is_stale,
     validate_checkpoint,
@@ -36,6 +40,7 @@ from yuno.modules.learning_content.ports import (
     ContentRevisionView,
     LearningContentUnitOfWork,
     TopicView,
+    TutorAdapter,
 )
 from yuno.shared.application.jobs import JobRef, JobStatus
 from yuno.shared.domain.clock import SystemClock, now_text
@@ -64,6 +69,133 @@ def get_topic(
     if topic is None:
         raise NotFoundError(f"Topic '{topic_id}' was not found in the approved graph.")
     return topic
+
+
+def list_topic_conversation(
+    uow: LearningContentUnitOfWork,
+    owner_id: str,
+    goal_id: str,
+    topic_id: str,
+) -> tuple[TopicConversationTurn, ...]:
+    goal = uow.profiles_goals.get_goal(owner_id, goal_id)
+    if goal is None:
+        raise NotFoundError(f"Goal '{goal_id}' was not found.")
+    get_topic(uow, goal.graph_version_id, topic_id)
+    return tuple(
+        uow.learning_content.list_conversation_turns(owner_id, goal_id, topic_id)
+    )
+
+
+def reserve_tutor_turn(
+    uow: LearningContentUnitOfWork,
+    owner_id: str,
+    goal_id: str,
+    topic_id: str,
+    message: str,
+    idempotency_key: str,
+    job_id: str,
+    *,
+    clock=None,
+) -> tuple[TopicConversationTurn, bool]:
+    if not message.strip():
+        raise DomainValidationError("A tutor message must not be blank.")
+    request_hash = hash_payload(
+        {"goal_id": goal_id, "topic_id": topic_id, "message": message}
+    )
+    prior = uow.learning_content.get_conversation_turn_by_idempotency(
+        owner_id, idempotency_key
+    )
+    if prior is not None:
+        if prior.request_hash != request_hash:
+            raise IdempotencyConflictError(
+                "The Idempotency-Key was reused with a different tutor message."
+            )
+        return prior, True
+    goal = uow.profiles_goals.get_goal(owner_id, goal_id)
+    if goal is None:
+        raise NotFoundError(f"Goal '{goal_id}' was not found.")
+    get_topic(uow, goal.graph_version_id, topic_id)
+    turn = TopicConversationTurn(
+        id=new_id(),
+        owner_id=owner_id,
+        goal_id=goal_id,
+        graph_version_id=goal.graph_version_id,
+        topic_stable_id=topic_id,
+        role=ConversationRole.LEARNER,
+        body=message,
+        response_to_id=None,
+        job_id=job_id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        created_at=now_text(clock or SystemClock()),
+    )
+    return uow.learning_content.add_conversation_turn(turn), False
+
+
+def run_tutor_turn_job(
+    request,
+    uow_factory,
+    adapter: TutorAdapter,
+) -> TopicConversationTurn:
+    learner_turn_id = str(request.payload["learner_turn_id"])
+    with uow_factory() as uow:
+        learner = uow.learning_content.get_conversation_turn(
+            request.owner_id, learner_turn_id
+        )
+        if learner is None or learner.role is not ConversationRole.LEARNER:
+            raise NotFoundError("The learner tutor turn was not found.")
+        conversation = tuple(
+            (turn.role.value, turn.body)
+            for turn in uow.learning_content.list_conversation_turns(
+                request.owner_id, learner.goal_id, learner.topic_stable_id
+            )
+        )
+        tutor_request = TutorRequest(
+            owner_id=request.owner_id,
+            goal_id=learner.goal_id,
+            graph_version_id=learner.graph_version_id,
+            topic_id=learner.topic_stable_id,
+            learner_turn_id=learner.id,
+            message=learner.body,
+            conversation=conversation,
+        )
+    result = adapter.respond(tutor_request)
+    _validate_tutor_result(result)
+    with uow_factory() as uow:
+        turns = uow.learning_content.list_conversation_turns(
+            request.owner_id, learner.goal_id, learner.topic_stable_id
+        )
+        existing = next(
+            (turn for turn in turns if turn.response_to_id == learner.id), None
+        )
+        if existing is not None:
+            return existing
+        reply = TopicConversationTurn(
+            id=new_id(),
+            owner_id=request.owner_id,
+            goal_id=learner.goal_id,
+            graph_version_id=learner.graph_version_id,
+            topic_stable_id=learner.topic_stable_id,
+            role=ConversationRole.TUTOR,
+            body=result.body,
+            response_to_id=learner.id,
+            job_id=None,
+            idempotency_key=None,
+            request_hash=None,
+            created_at=now_text(SystemClock()),
+        )
+        reply = uow.learning_content.add_conversation_turn(reply)
+        uow.commit()
+        return reply
+
+
+def _validate_tutor_result(result: TutorResult) -> None:
+    if not isinstance(result, TutorResult) or not result.body.strip():
+        raise DomainValidationError("Tutor output must contain a non-blank body.")
+    if any(not value.strip() for value in result.provenance_references):
+        raise DomainValidationError("Tutor provenance references must not be blank.")
+    if any(not value.strip() for value in result.warnings):
+        raise DomainValidationError("Tutor warnings must not be blank.")
 
 
 def list_layers(
@@ -466,6 +598,49 @@ def reserve_generation(
     return ref, attempt, created
 
 
+def find_generation_replay(
+    uow, owner_id, goal_id, topic_id, layer, idempotency_key, *, force=False
+):
+    """Read-only replay/cache check; never reserves work or writes idempotency."""
+    key, _, _, _ = resolve_generation_context(uow, owner_id, goal_id, topic_id, layer)
+    request_hash = hash_payload(
+        {"goal_id": goal_id, "topic_id": topic_id, "layer": layer.value, "force": force}
+    )
+    operation = (
+        "regenerate" if force else "generate"
+    ) + f":{goal_id}:{topic_id}:{layer.value}"
+    prior = uow.learning_content.get_idempotency(owner_id, operation, idempotency_key)
+    if prior:
+        if prior.request_hash != request_hash:
+            raise IdempotencyConflictError(
+                "The Idempotency-Key was reused with a different generation request."
+            )
+        attempt = uow.learning_content.get_attempt(owner_id, prior.attempt_id)
+        return _job_ref(attempt, True), attempt, False
+    if uow.learning_content.get_idempotency_by_key(owner_id, idempotency_key):
+        raise IdempotencyConflictError(
+            "The Idempotency-Key was reused for another generation operation."
+        )
+    artifact = uow.learning_content.get_artifact_by_key(
+        owner_id,
+        key.canonical_graph_version,
+        key.topic_id,
+        key.goal_id,
+        key.layer.value,
+        key.topic_mapped_approved_imports_hash,
+        key.prompt_template_version,
+    )
+    if artifact is None:
+        return None
+    active = uow.learning_content.get_active_attempt(owner_id, artifact.id)
+    if active:
+        return _job_ref(active, True), active, True
+    if artifact.body is not None and not force:
+        attempt = uow.learning_content.get_attempt(owner_id, artifact.last_attempt_id)
+        return _job_ref(attempt, True), attempt, True
+    return None
+
+
 def run_generation(uow_factory, adapter, owner_id, attempt_id):
     with uow_factory() as uow:
         attempt = uow.learning_content.get_attempt(owner_id, attempt_id)
@@ -509,18 +684,6 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
         ):
             timestamp = now_text(SystemClock())
             with uow_factory() as uow:
-                uow.learning_content.add_quarantine(
-                    id=new_id(),
-                    owner_id=owner_id,
-                    goal_id=attempt.goal_id,
-                    attempt_id=attempt.id,
-                    raw_output_hash=hash_payload(result.body),
-                    schema_version=result.schema_version,
-                    validation_errors_json=json.dumps(
-                        ["unsupported generation schema or contract version"]
-                    ),
-                    created_at=timestamp,
-                )
                 uow.learning_content.update_attempt(
                     owner_id,
                     attempt.id,

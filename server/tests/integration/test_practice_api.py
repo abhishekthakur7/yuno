@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from tests.integration.test_interview_api import _create_goal
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.evidence_evaluation.domain import (
     AssessmentState,
     DimensionOutcome,
@@ -221,7 +222,7 @@ def test_practice_feedback_and_adaptive_follow_up_exist_only_after_explicit_acti
     assert client.get(f"/api/v1/interview-runs/{run['id']}").json()["results"] == []
 
     adapter = FixtureV0EvaluationAdapter()
-    client.app.state.evaluation_adapter = adapter
+    install_provider_fake(client, adapter)
     submitted = client.post(
         f"/api/v1/interview-runs/{run['id']}/answers",
         headers={"Idempotency-Key": "practice-fixture-v0-first-answer"},
@@ -266,7 +267,7 @@ def test_practice_repair_appends_byte_exact_answers_and_turns_are_db_immutable(
     created = _create_run(client, arranged)
     assert created.status_code == 201, created.text
     run_id = created.json()["id"]
-    client.app.state.evaluation_adapter = FixtureV0EvaluationAdapter()
+    install_provider_fake(client, FixtureV0EvaluationAdapter())
     first_text = "\n  Fixture-v0 first answer with exact bytes.\t"
     second_text = "  Fixture-v0 repaired answer remains distinct.\n"
 
@@ -356,7 +357,7 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
     assert failed_created.status_code == 201, failed_created.text
     failed_run_id = failed_created.json()["id"]
     failed_body = "  Fixture-v0 failed attempt is retried in place.\n"
-    client.app.state.evaluation_adapter = _FailingFixtureV0EvaluationAdapter()
+    install_provider_fake(client, _FailingFixtureV0EvaluationAdapter())
     failed_job = client.post(
         f"/api/v1/interview-runs/{failed_run_id}/answers",
         headers={"Idempotency-Key": "practice-fixture-v0-failed-answer"},
@@ -371,7 +372,7 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
     assert failed_run["results"] == []
     assert failed_attempt["body"] == failed_body
 
-    client.app.state.evaluation_adapter = FixtureV0EvaluationAdapter()
+    install_provider_fake(client, FixtureV0EvaluationAdapter())
     retried = client.post(
         f"/api/v1/interview-runs/{failed_run_id}/retry-evaluation",
         headers={"Idempotency-Key": "practice-fixture-v0-retry"},
@@ -385,3 +386,8 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
     ]
     assert len(recovered["results"]) == 1
     assert recovered["results"][0]["answer_turn_id"] == failed_attempt["id"]
+
+
+@pytest.fixture(autouse=True)
+def accepted_provider_disclosure(client):
+    accept_provider_disclosure(client)

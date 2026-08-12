@@ -4,19 +4,36 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse
 
 from yuno.api.contracts import (
     ArtifactProvenanceResponse,
     ArtifactSnapshotResponse,
     CitationResponse,
     ClaimResponse,
+    JobRefResponse,
     SourceResponse,
+    SourceSnapshotResponse,
+    accepted_job,
 )
-from yuno.api.dependencies import get_owner_id, get_unit_of_work
+from yuno.api.dependencies import (
+    get_job_dispatcher,
+    get_owner_id,
+    get_unit_of_work,
+    idempotency_key,
+)
 from yuno.modules.learning_content.service import resolve_generation_context
-from yuno.shared.domain.errors import NotFoundError
+from yuno.modules.provenance.domain import SourceAvailability
+from yuno.modules.provenance.service import (
+    list_source_snapshots,
+    reserve_source_retrieval,
+)
+from yuno.modules.provider.service import require_disclosure
+from yuno.shared.application.jobs import JobDispatcher, JobLane, JobRequest
+from yuno.shared.domain.errors import ConflictError, NotFoundError
 from yuno.shared.domain.hashing import hash_payload
+from yuno.shared.domain.ids import new_id
 from yuno.unit_of_work import SqlAlchemyUnitOfWork
 
 router = APIRouter(tags=["provenance"])
@@ -69,6 +86,72 @@ def source(
     return _source(value)
 
 
+@router.get(
+    "/sources/{source_id}/snapshots",
+    response_model=list[SourceSnapshotResponse],
+)
+def source_snapshots(
+    source_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[SqlAlchemyUnitOfWork, Depends(get_unit_of_work)],
+) -> list[SourceSnapshotResponse]:
+    return [
+        _source_snapshot(value)
+        for value in list_source_snapshots(uow, owner_id, source_id)
+    ]
+
+
+@router.post(
+    "/sources/{source_id}/retrieve",
+    response_model=JobRefResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retrieve_source(
+    source_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[SqlAlchemyUnitOfWork, Depends(get_unit_of_work)],
+    dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> JSONResponse:
+    prior = uow.provenance.get_retrieval_command_by_idempotency(owner_id, key)
+    if prior is not None:
+        command, _ = reserve_source_retrieval(
+            uow, owner_id, source_id, key, prior.job_id
+        )
+        current = dispatcher.get(owner_id, command.job_id)
+        if current is not None:
+            return accepted_job(current)
+    value = uow.provenance.get_source(owner_id, source_id)
+    if value is None:
+        raise NotFoundError("The source was not found.")
+    if value.availability_status is SourceAvailability.WITHDRAWN:
+        raise ConflictError("A withdrawn source cannot be retrieved.")
+    disclosure = require_disclosure(
+        uow,
+        owner_id,
+        category="source-retrieval",
+        disclosure_version="source-network-v1",
+    )
+    command, _ = reserve_source_retrieval(uow, owner_id, source_id, key, new_id())
+    uow.commit()
+    return accepted_job(
+        dispatcher.enqueue(
+            JobRequest(
+                "retrieve_source_snapshot",
+                owner_id,
+                {"source_id": source_id},
+                dedupe_key=source_id,
+                idempotency_key=key,
+                requested_job_id=command.job_id,
+                lane=JobLane.BACKGROUND,
+                schema_version="source-snapshot-v1",
+                request_ref=f"Source:{source_id}",
+                disclosure_ref=disclosure.id,
+            )
+        )
+    )
+
+
 @router.get("/claims/{claim_id}", response_model=ClaimResponse)
 def claim(
     claim_id: str,
@@ -79,6 +162,18 @@ def claim(
     if value is None:
         raise NotFoundError("The claim was not found.")
     return _claim(uow, owner_id, value)
+
+
+def _source_snapshot(value) -> SourceSnapshotResponse:
+    return SourceSnapshotResponse(
+        id=value.id,
+        source_id=value.source_id,
+        retrieved_at=value.retrieved_at,
+        content_ref=value.content_ref,
+        content_hash=value.content_hash,
+        status=value.status,
+        version_label=value.version_label,
+    )
 
 
 @router.get(
@@ -124,7 +219,7 @@ def artifact_provenance(
             }
         )
         evidence_hash = snapshot.evidence_state_hash
-    adapter = request.app.state.generation_adapter
+    adapter = request.app.state.provider_port
     current_hash = hash_payload(
         {
             "profile_hash": profile_hash,

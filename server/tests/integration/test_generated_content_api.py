@@ -11,6 +11,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -29,7 +30,87 @@ from yuno.modules.learning_content.domain import (
     GenerateResult,
 )
 from yuno.modules.provenance.domain import Source, SourceAvailability
+from yuno.modules.provider.domain import (
+    ProviderName,
+    ProviderResult,
+    ProviderResultState,
+)
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
+from yuno.shared.domain.hashing import hash_payload
+
+
+@pytest.fixture(autouse=True)
+def accepted_provider_disclosure(client):
+    accept_provider_disclosure(client)
+
+
+def test_live_provider_wiring_enqueues_claims_records_and_publishes(
+    client, engine, uow_factory
+) -> None:
+    goal_id, topic_id = _goal(client, uow_factory, suffix="provider-wiring")
+
+    class ValidatingProvider:
+        provider = "codex"
+        adapter_version = "fixture-provider-v1"
+        contract_version = "final-json-v1"
+
+        def invoke(self, request, validator, *, on_spawn, cancelled):
+            on_spawn(9001, 9001, "9001:fixture")
+            payload = validator.validate(
+                {
+                    "body": "Validated provider-backed lesson.",
+                    "provenance_refs": [],
+                    "warnings": [],
+                }
+            )
+            return ProviderResult(
+                ProviderResultState.SUCCEEDED,
+                ProviderName.CODEX,
+                "fixture-model",
+                self.contract_version,
+                request.output_schema_version,
+                payload,
+                hash_payload(payload),
+                timestamp="2026-08-14T12:00:00Z",
+            )
+
+    client.app.state.provider_port = ValidatingProvider()
+    response = _generate(client, goal_id, topic_id, key="provider-wiring")
+    assert response.status_code == 202
+    wait_for_job(client, response, "succeeded")
+    layer = _essential_layer(client, goal_id, topic_id)
+    assert layer["markdown"] == "Validated provider-backed lesson."
+    with engine.connect() as connection:
+        provider_request = connection.execute(
+            text(
+                "SELECT provider, lifecycle, context_ref_hash, disclosure_id FROM provider_requests"
+            )
+        ).one()
+        assert provider_request.provider == "codex"
+        assert provider_request.lifecycle == "succeeded"
+        assert provider_request.context_ref_hash
+        assert provider_request.disclosure_id
+
+
+def test_generation_without_disclosure_does_not_reserve_attempt_or_job(
+    client, engine, uow_factory
+) -> None:
+    goal_id, topic_id = _goal(client, uow_factory, suffix="disclosure-gate")
+    revoked = client.post(
+        "/api/v1/disclosures/provider-generation/revoke",
+        params={"disclosure_version": "provider-network-v1"},
+    )
+    assert revoked.status_code == 200
+    response = _generate(client, goal_id, topic_id, key="disclosure-gate")
+    assert response.status_code == 412
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(text("SELECT count(*) FROM artifact_generation_attempts"))
+            == 0
+        )
+        assert connection.scalar(text("SELECT count(*) FROM jobs")) == 0
+
+
 from yuno.shared.domain.ids import new_id
 
 
@@ -223,7 +304,7 @@ def test_ready_cache_hit_and_provenance_apis_retain_unavailable_sources(
         uow_factory, availability=SourceAvailability.WITHDRAWN, suffix="withdrawn"
     )
     adapter = FakeGenerationAdapter("First immutable visible body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
 
     first = _generate(client, goal_id, topic_id, key="generate-ready-1")
     assert first.status_code == 202, first.text
@@ -251,7 +332,7 @@ def test_ready_cache_hit_and_provenance_apis_retain_unavailable_sources(
     payload = provenance.json()
     assert payload["artifact_id"] == artifact_id
     assert payload["stale"] is False
-    assert payload["baked_snapshot"]["provider"] == adapter.provider
+    assert payload["baked_snapshot"]["provider"] == "codex"
     assert payload["baked_snapshot"]["model"] == adapter.model
     assert len(payload["claims"]) == 2
     sensitive = next(claim for claim in payload["claims"] if claim["sensitive"])
@@ -295,7 +376,7 @@ def test_generation_idempotency_key_reuse_with_a_different_request_conflicts_wit
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="idem"
     )
     adapter = FakeGenerationAdapter("Idempotent body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     first = _generate(client, goal_id, topic_id, key="globally-reused-generation-key")
     assert first.status_code == 202
 
@@ -306,6 +387,7 @@ def test_generation_idempotency_key_reuse_with_a_different_request_conflicts_wit
     )
     assert conflict.status_code == 409, conflict.text
     assert conflict.json()["code"] == "idempotency_key_reused"
+    wait_for_job(client, first)
     assert adapter.calls == 1
     with engine.connect() as connection:
         assert (
@@ -337,7 +419,7 @@ def test_personalization_and_provider_changes_surface_stale_without_swapping_bod
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="stale"
     )
     adapter = FakeGenerationAdapter("Body baked before learner changes.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     generated = _generate(client, goal_id, topic_id, key="generate-stale")
     assert generated.status_code == 202
     wait_for_job(client, generated)
@@ -397,7 +479,7 @@ def test_correction_and_learning_state_changes_mark_stale_without_swapping_body(
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="correction"
     )
     adapter = FakeGenerationAdapter("Body baked before correction.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     generated = _generate(client, goal_id, topic_id, key="generate-before-correction")
     assert generated.status_code == 202
     wait_for_job(client, generated)
@@ -438,7 +520,7 @@ def test_key_changing_generation_keeps_prior_body_visible_during_new_failure_and
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="key-movement"
     )
     original_adapter = FakeGenerationAdapter("Prior ready body.", source_id)
-    client.app.state.generation_adapter = original_adapter
+    install_provider_fake(client, original_adapter)
     generated = _generate(client, goal_id, topic_id, key="old-key-generate")
     assert generated.status_code == 202
     wait_for_job(client, generated)
@@ -457,7 +539,7 @@ def test_key_changing_generation_keeps_prior_body_visible_during_new_failure_and
             raise RuntimeError("new exact-key generation failed")
 
     failing = BlockingFailureAdapter("must never be visible", source_id)
-    client.app.state.generation_adapter = failing
+    install_provider_fake(client, failing)
     responses: list[object] = []
     thread = threading.Thread(
         target=lambda: responses.append(
@@ -518,7 +600,7 @@ def test_explicit_regeneration_swaps_only_after_success_and_failure_keeps_prior_
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="regen"
     )
     adapter = FakeGenerationAdapter("Original cached body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     generated = _generate(client, goal_id, topic_id, key="generate-original")
     assert generated.status_code == 202
     wait_for_job(client, generated)
@@ -569,7 +651,7 @@ def test_two_concurrent_generate_calls_single_flight_to_one_persisted_attempt(
             return super().generate(request)
 
     adapter = BlockingAdapter("Single-flight body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     results: list[object] = []
     first = threading.Thread(
         target=lambda: results.append(
@@ -632,7 +714,7 @@ def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="included-key"
     )
     adapter = FakeGenerationAdapter("Keyed body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     essential = _generate(client, goal_id, topic_id, key="included-essential")
     production = client.post(
         f"/api/v1/goals/{goal_id}/topics/{topic_id}/generate",
@@ -686,7 +768,7 @@ def test_invalid_generation_result_rolls_back_artifact_snapshot_claims_and_citat
             )
 
     adapter = MissingCitationAdapter("unused", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     response = _generate(client, goal_id, topic_id, key="atomic-rollback")
     assert response.status_code == 202
     wait_for_job(client, response, "failed")
@@ -726,7 +808,7 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="quarantine"
     )
     valid = FakeGenerationAdapter("Prior validated body.", source_id)
-    client.app.state.generation_adapter = valid
+    install_provider_fake(client, valid)
     generated = _generate(client, goal_id, topic_id, key="quarantine-valid")
     assert generated.status_code == 202
     wait_for_job(client, generated)
@@ -753,7 +835,7 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
             )
 
     invalid = WrongSchemaAdapter("unused", source_id)
-    client.app.state.generation_adapter = invalid
+    install_provider_fake(client, invalid)
     response = client.post(
         f"/api/v1/artifacts/{prior['artifact_id']}/regenerate",
         headers={"Idempotency-Key": "quarantine-invalid"},
@@ -766,22 +848,18 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
     assert visible["markdown"] == prior["markdown"]
     assert visible["markdown_hash"] == prior["markdown_hash"]
     with engine.connect() as connection:
-        quarantine = connection.execute(
+        attempt_status = connection.scalar(
             text(
-                "SELECT q.schema_version, q.validation_errors_json, a.status "
-                "FROM schema_quarantines q "
-                "JOIN artifact_generation_attempts a ON a.id=q.attempt_id"
+                "SELECT status FROM artifact_generation_attempts WHERE status='failed'"
             )
-        ).one()
+        )
         after_counts = {
             table: connection.execute(
                 text(f"SELECT count(*) FROM {table}")
             ).scalar_one()
             for table in ("artifact_provenance_snapshots", "claims", "citations")
         }
-    assert quarantine.schema_version == "unsupported-schema-v999"
-    assert quarantine.status == "quarantined"
-    assert "schema" in quarantine.validation_errors_json.lower()
+    assert attempt_status == "failed"
     assert after_counts == prior_counts
 
 
@@ -836,7 +914,7 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
         uow_factory, availability=SourceAvailability.AVAILABLE, suffix="citation-b"
     )
     adapter = FakeGenerationAdapter("Citation guard fixture body.", source_id)
-    client.app.state.generation_adapter = adapter
+    install_provider_fake(client, adapter)
     generated = _generate(client, goal_id, topic_id, key="citation-guard-generation")
     assert generated.status_code == 202
     wait_for_job(client, generated)

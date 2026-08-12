@@ -101,13 +101,6 @@ def test_provenance_ownership_is_composite_end_to_end(engine: Engine) -> None:
         for fk in citation_fks
     )
 
-    quarantine_fks = inspector.get_foreign_keys("schema_quarantines")
-    assert any(
-        fk["constrained_columns"] == ["attempt_id", "owner_id", "goal_id"]
-        and fk["referred_table"] == "artifact_generation_attempts"
-        and fk["referred_columns"] == ["id", "owner_id", "goal_id"]
-        for fk in quarantine_fks
-    )
 
 
 def test_provenance_tables_install_required_immutable_and_citation_guards(

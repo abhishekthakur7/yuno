@@ -210,6 +210,45 @@ class GenerationIdempotencyRecord:
     created_at: str
 
 
+class ConversationRole(StrEnum):
+    LEARNER = "learner"
+    TUTOR = "tutor"
+
+
+@dataclass(frozen=True)
+class TopicConversationTurn:
+    id: str
+    owner_id: str
+    goal_id: str
+    graph_version_id: str
+    topic_stable_id: str
+    role: ConversationRole
+    body: str
+    response_to_id: str | None
+    job_id: str | None
+    idempotency_key: str | None
+    request_hash: str | None
+    created_at: str
+
+
+@dataclass(frozen=True)
+class TutorRequest:
+    owner_id: str
+    goal_id: str
+    graph_version_id: str
+    topic_id: str
+    learner_turn_id: str
+    message: str
+    conversation: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class TutorResult:
+    body: str
+    provenance_references: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class GenerationSnapshot:
     id: str

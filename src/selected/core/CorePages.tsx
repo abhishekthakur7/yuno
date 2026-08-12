@@ -26,7 +26,7 @@ import {
   type TopicLayerContent,
   type TopicLayerName,
 } from '../../shared/api/learning-content'
-import { useArtifactProvenance, useTopicContent } from '../../shared/use-topic-content'
+import { useArtifactProvenance, useTopicContent, useTopicConversation } from '../../shared/use-topic-content'
 import { useNotebookReview } from '../../shared/use-notebook-review'
 import { useGoalEvidenceReport } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
@@ -644,6 +644,8 @@ function Topic({ navigate }: PageProps) {
 
 export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown }: { goalId: string | null; topicId: string; conversationScope: string | null; sourcesMarkdown: string | null }) {
   const review = useNotebookReview(goalId)
+  const tutor = useTopicConversation(goalId, topicId)
+  const [tutorDraft, setTutorDraft] = useState('')
   const [entryMarkdown, setEntryMarkdown] = useState('')
   const [responses, setResponses] = useState<Record<string, string>>({})
   const [confidence, setConfidence] = useState<Record<string, 'low' | 'medium' | 'high' | ''>>({})
@@ -662,6 +664,11 @@ export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown
     review.attempt.mutate({ itemId: item.id, body: { response, ...(selectedConfidence ? { confidence: selectedConfidence } : {}) } }, {
       onSuccess: (attempt) => setRevealed((current) => ({ ...current, [item.id]: attempt })),
     })
+  }
+  const sendTutorMessage = () => {
+    const message = tutorDraft.trim()
+    if (!message || !goalId) return
+    tutor.send.mutate(message, { onSuccess: () => setTutorDraft('') })
   }
   return <Tabs.Root id="sb-lesson-tools" defaultValue="notes" className="sb-tools">
     <Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="review"><Clock3 size={16} /> Review</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List>
@@ -700,7 +707,16 @@ export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown
       ? <div className="sb-tool-content"><FileText size={18} /><div><strong>Approved sources</strong><p>{sourcesMarkdown}</p></div></div>
       : <div className="sb-empty"><FileText /><strong>No approved sources yet</strong><span>Check the Sources layer after content is published.</span></div>}
     </Tabs.Content>
-    <Tabs.Content value="help"><div className="sb-empty" data-conversation-scope={conversationScope ?? undefined}><MessageSquareText /><strong>{conversationScope ? 'Conversation attached to this topic' : 'Topic conversation unavailable'}</strong><span>{conversationScope ? 'Messages stay with this topic. Chat is not connected yet.' : 'Retry the topic content request to restore it.'}</span></div></Tabs.Content>
+    <Tabs.Content value="help"><div className="sb-tool-heading" data-conversation-scope={conversationScope ?? undefined}><div><strong>{conversationScope ? 'Conversation attached to this topic' : 'Topic conversation unavailable'}</strong><span>{conversationScope ? 'Messages and tutor replies stay with this topic.' : 'Retry the topic content request to restore it.'}</span></div></div>
+      {!conversationScope ? <div className="sb-empty"><MessageSquareText /><strong>Topic conversation unavailable</strong></div>
+        : tutor.conversation.isPending ? <div className="sb-tool-status" aria-live="polite">Loading conversation…</div>
+          : tutor.conversation.isError ? <div className="sb-tool-status" role="alert">Conversation unavailable. <Button tone="quiet" onClick={() => void tutor.conversation.refetch()}>Retry</Button></div>
+            : <><ol className="sb-notebook-list" aria-label="Topic conversation">{(tutor.conversation.data ?? []).map(turn => <li key={turn.id}><header><span className="sb-entry-kind">{turn.role}</span></header><p>{turn.body}</p></li>)}</ol>
+              {(tutor.conversation.data ?? []).length === 0 && <div className="sb-empty sb-empty--compact"><MessageSquareText /><strong>No messages yet</strong><span>Ask about this topic when you want focused help.</span></div>}
+              <label htmlFor="sb-tutor-message">Ask the topic tutor</label><textarea id="sb-tutor-message" value={tutorDraft} onChange={event => setTutorDraft(event.target.value)} placeholder="Ask a question about this topic…" />
+              {tutor.send.isError && <p className="sb-tool-error" role="alert">The message was not sent. Accept the provider disclosure if prompted, then retry.</p>}
+              <div className="sb-tool-actions"><Button disabled={!tutorDraft.trim() || tutor.send.isPending} onClick={sendTutorMessage}>{tutor.send.isPending ? 'Sending…' : 'Send question'}</Button></div></>}
+    </Tabs.Content>
   </Tabs.Root>
 }
 

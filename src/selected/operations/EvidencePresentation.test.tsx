@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ workspace: {} as any, settings: {} as any }))
@@ -18,15 +19,19 @@ beforeEach(() => {
   const assessment = { id: 'assessment-1', feedback: 'The implementation supports atomic duplicate handling.', state: 'ambiguity-unresolved', created_at: '2026-08-12T09:00:00Z', limitation_labels: ['Runtime behavior was not observed.'], warnings: [], revision_invitation: 'Exercise the acknowledgement failure window next.', dimensions: [{ dimension_id: 'correctness', outcome: 'ambiguity-unresolved', rationale: 'The boundary is atomic, but runtime ordering is unknown.', evidence_refs: ['evidence-1'] }], assumptions: ['The database enforces uniqueness.'], ambiguities: ['The acknowledgement timing is not observable in this artifact.'], evaluation_method: 'static review', citations: ['source-1 · section 4'], provenance_refs: ['artifact-1'], source_refs: ['source-1'], disputes: [], predecessor_assessment_id: 'assessment-0' }
   mocks.workspace = {
     evidence: query([evidence]), detail: query({ ...evidence, transfers: [], tombstoned: false }), assessment: query(assessment), assessmentHistory: { ...query([assessment, predecessor]), queries: [] },
-    sources: { ...query([{ id: 'source-1', title: 'Retired delivery guide', availability_status: 'withdrawn' }]), queries: [] },
+    sources: { ...query([
+      { id: 'source-1', title: 'Retired delivery guide', availability_status: 'withdrawn' },
+      { id: 'source-2', title: 'Current delivery guide', availability_status: 'available' },
+    ]), queries: [] },
     progress: query({ coverage: { classification: 'partial', definition: 'Coverage', uncertainty: 'One artifact.', supporting_evidence_refs: ['evidence-1'] }, proficiency: { classification: 'partial', definition: 'Proficiency', uncertainty: 'Limited.', supporting_evidence_refs: [] }, retention: { classification: 'unverified', definition: 'Retention', uncertainty: 'Not retested.', supporting_evidence_refs: [] }, readiness: { classification: 'partial', definition: 'Readiness', uncertainty: 'Transfer needed.', supporting_evidence_refs: [] } }),
     dispute: { mutate: vi.fn(), isPending: false, isError: false }, reevaluate: { mutate: vi.fn(), isPending: false, isError: false },
+    sourceRetrieval: { mutate: vi.fn(), isPending: false, isError: false },
   }
   mocks.settings = { settings: query({ progress_display: 'detailed' }), saveProgressDisplay: { mutate: vi.fn(), isPending: false, isError: false } }
 })
 
 describe('learner-readable Evidence presentation', () => {
-  it('orders conclusion, limitation, and next action before every disclosure and warns for tombstoned sources', () => {
+  it('prioritizes the conclusion, warns about tombstones, and retrieves available sources explicitly', async () => {
     const { container } = render(<OperationalPageView page="evidence" navigate={vi.fn()} />)
     const conclusion = screen.getByRole('heading', { name: 'The implementation supports atomic duplicate handling.' })
     const limitation = screen.getByText(/Runtime behavior was not observed/)
@@ -38,6 +43,10 @@ describe('learner-readable Evidence presentation', () => {
     }
     expect(screen.getByText(/Tombstoned source warning/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Retired delivery guide/).length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByText('Sources and provenance'))
+    await userEvent.click(screen.getByRole('button', { name: 'Retrieve current snapshot' }))
+    expect(mocks.workspace.sourceRetrieval.mutate).toHaveBeenCalledWith('source-2')
   })
 
   it('shows unresolved ambiguity and the full predecessor assessment chain', () => {

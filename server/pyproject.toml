@@ -10,12 +10,12 @@ dependencies = [
     "sqlalchemy>=2",
     "alembic",
     "python-ulid",
+    "httpx",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",
     "import-linter",
     "ruff",
 ]
@@ -83,6 +83,7 @@ containers = [
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
+    "yuno.modules.provider",
 ]
 layers = [
     "(service)",
@@ -135,6 +136,9 @@ source_modules = [
     "yuno.modules.settings_data.domain",
     "yuno.modules.settings_data.ports",
     "yuno.modules.settings_data.service",
+    "yuno.modules.provider.domain",
+    "yuno.modules.provider.ports",
+    "yuno.modules.provider.service",
 ]
 forbidden_modules = [
     "fastapi",
@@ -176,6 +180,7 @@ modules = [
     "yuno.modules.notebook_review",
     "yuno.modules.provenance",
     "yuno.modules.settings_data",
+    "yuno.modules.provider",
 ]
 ignore_imports = [
     "yuno.modules.jobs_events.service -> yuno.modules.audit.**",
@@ -196,4 +201,5 @@ ignore_imports = [
     "yuno.modules.notebook_review.service -> yuno.modules.audit.**",
     "yuno.modules.settings_data.ports -> yuno.modules.audit.**",
     "yuno.modules.settings_data.service -> yuno.modules.audit.**",
+    "yuno.modules.provider.service -> yuno.modules.audit.**",
 ]
