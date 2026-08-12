@@ -49,6 +49,29 @@ class GoalRepository(Protocol):
     def get_goal(self, owner_id: str, goal_id: str) -> GoalView | None: ...
 
 
+class AssessmentView(Protocol):
+    id: str
+    goal_id: str
+    run_id: str | None
+    evidence_id: str
+
+
+class AssessmentRepository(Protocol):
+    def get_assessment(
+        self, owner_id: str, assessment_id: str
+    ) -> AssessmentView | None: ...
+    def get_active_assessment_for_evidence(
+        self, owner_id: str, evidence_id: str
+    ) -> AssessmentView | None: ...
+
+
 class InterviewUnitOfWork(UnitOfWork, Protocol):
     interview: InterviewRepository
     profiles_goals: GoalRepository
+    evidence: AssessmentRepository
+
+
+class MockInterviewAdapter(Protocol):
+    """External adaptive-question boundary."""
+
+    def next_question(self, run: PracticeRun) -> str: ...

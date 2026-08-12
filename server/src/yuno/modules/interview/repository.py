@@ -8,6 +8,7 @@ from yuno.modules.interview.domain import (
     InterviewBundleItem,
     InterviewIdempotencyRecord,
     InterviewTurnKind,
+    MockRunState,
     PracticeDimensionResult,
     PracticeRun,
     PracticeRunState,
@@ -64,7 +65,7 @@ class SqlAlchemyInterviewRepository(SqlAlchemyRepository):
             row.bundle_id,
             row.bundle_item_id,
             row.mode,
-            PracticeRunState(row.state),
+            PracticeRunState(row.state) if row.mode == "Practice" else MockRunState(row.state),
             row.question,
             row.hint_text,
             row.rubric_id,
@@ -74,6 +75,8 @@ class SqlAlchemyInterviewRepository(SqlAlchemyRepository):
             row.active_answer_turn_id,
             row.failure_reference,
             bool(row.retryable),
+            row.draft,
+            row.final_assessment_id,
             row.created_at,
             row.updated_at,
             tuple(_turn(item) for item in turns),
@@ -102,7 +105,7 @@ class SqlAlchemyInterviewRepository(SqlAlchemyRepository):
         values = {
             key: (
                 value.value
-                if isinstance(value, PracticeRunState)
+                if isinstance(value, (PracticeRunState, MockRunState))
                 else int(value)
                 if key == "retryable"
                 else value

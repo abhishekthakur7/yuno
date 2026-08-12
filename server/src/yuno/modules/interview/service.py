@@ -7,6 +7,7 @@ from yuno.modules.interview.domain import (
     InterviewBundle,
     InterviewBundleItem,
     InterviewTurnKind,
+    MockRunState,
     PracticeDimensionResult,
     PracticeRun,
     PracticeRunState,
@@ -18,6 +19,7 @@ from yuno.shared.domain.clock import Clock, SystemClock, now_text
 from yuno.shared.domain.errors import (
     ConflictError,
     DomainValidationError,
+    MockFeedbackWithheldError,
     NotFoundError,
     PreconditionFailedError,
 )
@@ -192,6 +194,8 @@ def create_practice_run(
         None,
         None,
         False,
+        "",
+        None,
         timestamp,
         timestamp,
         (),
@@ -220,6 +224,276 @@ def get_practice_run(
     run = uow.interview.get_run(owner_id, run_id)
     if run is None:
         raise NotFoundError("Practice run not found.")
+    if run.mode != "Practice":
+        raise NotFoundError("Practice run not found.")
+    return run
+
+
+def get_interview_run(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str
+) -> PracticeRun:
+    run = uow.interview.get_run(owner_id, run_id)
+    if run is None:
+        raise NotFoundError("Interview run not found.")
+    return run
+
+
+def create_mock_run(
+    uow: InterviewUnitOfWork,
+    owner_id: str,
+    goal_id: str,
+    bundle_id: str,
+    bundle_item_id: str,
+    rubric_id: str | None = None,
+    rubric_version: str | None = None,
+    requested_capability: str = "implement",
+    *,
+    clock: Clock | None = None,
+) -> PracticeRun:
+    require_goal(uow, owner_id, goal_id)
+    bundle = get_bundle(uow, owner_id, bundle_id)
+    if bundle.goal_id != goal_id:
+        raise DomainValidationError("The interview bundle does not belong to this goal.")
+    item = next((value for value in bundle.items if value.id == bundle_item_id), None)
+    if item is None or not item.included or item.question is None:
+        raise DomainValidationError("The selected bundle item is not an included question.")
+    timestamp = now_text(clock or SystemClock())
+    run = PracticeRun(
+        new_id(), owner_id, goal_id, bundle_id, bundle_item_id, "Mock",
+        MockRunState.ANSWERING, item.question, None, rubric_id, rubric_version,
+        requested_capability,
+        None, None, None, False, "", None, timestamp, timestamp, (), (),
+    )
+    uow.interview.add_run(run)
+    uow.interview.add_turn(PracticeTurn(
+        new_id(), owner_id, run.id, 1, InterviewTurnKind.QUESTION,
+        item.question, None, None, timestamp,
+    ))
+    return get_interview_run(uow, owner_id, run.id)
+
+
+def pause_mock(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, draft: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state not in {MockRunState.ANSWERING, MockRunState.FOLLOW_UP}:
+        raise ConflictError("Only an active Mock run can be paused.")
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.PAUSED, "draft": draft,
+        "updated_at": now_text(clock or SystemClock()),
+    })
+    assert updated is not None
+    return updated
+
+
+def resume_mock(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is not MockRunState.PAUSED:
+        raise ConflictError("Only a paused Mock run can be resumed.")
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.ANSWERING,
+        "updated_at": now_text(clock or SystemClock()),
+    })
+    assert updated is not None
+    return updated
+
+
+def submit_mock_answer(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, answer: str, job_id: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state not in {MockRunState.ANSWERING, MockRunState.FOLLOW_UP}:
+        raise ConflictError("The Mock run cannot accept an answer in its current state.")
+    if not answer.strip():
+        raise DomainValidationError("An answer must not be blank.")
+    timestamp = now_text(clock or SystemClock())
+    turn = PracticeTurn(new_id(), owner_id, run.id, _next_number(run),
+                        InterviewTurnKind.ANSWER, answer, None, None, timestamp)
+    uow.interview.add_turn(turn)
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.FOLLOW_UP, "draft": "", "active_job_id": job_id,
+        "active_answer_turn_id": turn.id, "failure_reference": None,
+        "retryable": False, "updated_at": timestamp,
+    })
+    assert updated is not None
+    return updated
+
+
+def append_mock_next_question(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, answer_turn_id: str,
+    question: str, *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is not MockRunState.FOLLOW_UP or run.active_answer_turn_id != answer_turn_id:
+        raise ConflictError("The generated Mock question is stale.")
+    if not question.strip():
+        raise DomainValidationError("A generated Mock question must not be blank.")
+    timestamp = now_text(clock or SystemClock())
+    uow.interview.add_turn(PracticeTurn(
+        new_id(), owner_id, run.id, _next_number(run), InterviewTurnKind.FOLLOW_UP,
+        question, answer_turn_id, None, timestamp,
+    ))
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.ANSWERING, "question": question,
+        "active_job_id": None, "failure_reference": None, "retryable": False,
+        "updated_at": timestamp,
+    })
+    assert updated is not None
+    return updated
+
+
+def fail_mock_generation(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, answer_turn_id: str,
+    failure_reference: str, *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.active_answer_turn_id != answer_turn_id:
+        return run
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.FAILED_RECOVERABLE, "active_job_id": None,
+        "failure_reference": failure_reference, "retryable": True,
+        "updated_at": now_text(clock or SystemClock()),
+    })
+    assert updated is not None
+    return updated
+
+
+def cancel_mock_generation(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is not MockRunState.FOLLOW_UP or run.active_answer_turn_id is None:
+        raise ConflictError("There is no in-flight Mock question generation to cancel.")
+    return fail_mock_generation(uow, owner_id, run.id, run.active_answer_turn_id,
+                                "next_turn_cancelled", clock=clock)
+
+
+def reserve_mock_retry(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, job_id: str,
+    *, clock: Clock | None = None,
+) -> tuple[PracticeRun, str]:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is not MockRunState.FAILED_RECOVERABLE or not run.retryable:
+        raise ConflictError("This Mock operation is not retryable.")
+    if run.active_answer_turn_id is None:
+        raise ConflictError("The failed Mock operation has no preserved answer.")
+    final_evaluation = bool(
+        run.failure_reference and run.failure_reference.endswith(":mock-final-evaluation")
+    )
+    kind = "evaluate_mock_final" if final_evaluation else "generate_mock_next_turn"
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.COMPLETING if final_evaluation else MockRunState.FOLLOW_UP,
+        "active_job_id": job_id, "failure_reference": None, "retryable": False,
+        "updated_at": now_text(clock or SystemClock()),
+    })
+    assert updated is not None
+    return updated, kind
+
+
+def reserve_mock_completion(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, draft: str, job_id: str,
+    evidence_id: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = validate_mock_completion(uow, owner_id, run_id, draft)
+    if run.state in {MockRunState.COMPLETING, MockRunState.COMPLETED}:
+        return run
+    timestamp = now_text(clock or SystemClock())
+    turn = PracticeTurn(new_id(), owner_id, run.id, _next_number(run),
+                        InterviewTurnKind.ANSWER, draft, None, evidence_id, timestamp)
+    uow.interview.add_turn(turn)
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.COMPLETING, "draft": draft, "active_job_id": job_id,
+        "active_answer_turn_id": turn.id, "failure_reference": None,
+        "retryable": False, "updated_at": timestamp,
+    })
+    assert updated is not None
+    return updated
+
+
+def validate_mock_completion(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, draft: str
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state in {MockRunState.COMPLETING, MockRunState.COMPLETED}:
+        return run
+    if run.state not in {
+        MockRunState.ANSWERING,
+        MockRunState.FOLLOW_UP,
+        MockRunState.PAUSED,
+    }:
+        raise ConflictError("The Mock run cannot be completed in its current state.")
+    if not draft.strip():
+        raise ConflictError("A blank or incomplete Mock transcript cannot be completed.")
+    last_answer = next(
+        (
+            turn
+            for turn in reversed(run.turns)
+            if turn.kind is InterviewTurnKind.ANSWER
+        ),
+        None,
+    )
+    if last_answer is not None and last_answer.body == draft:
+        raise ConflictError(
+            "The Mock answer is unchanged since the last submitted turn."
+        )
+    return run
+
+
+def complete_mock_evaluation(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str, assessment_id: str,
+    *, clock: Clock | None = None,
+) -> PracticeRun:
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is MockRunState.COMPLETED:
+        return run
+    if run.state is not MockRunState.COMPLETING:
+        raise ConflictError("The Mock transcript is not fixed for final evaluation.")
+    updated = uow.interview.update_run(owner_id, run.id, {
+        "state": MockRunState.COMPLETED, "active_job_id": None,
+        "final_assessment_id": assessment_id, "failure_reference": None,
+        "retryable": False, "updated_at": now_text(clock or SystemClock()),
+    })
+    assert updated is not None
+    return updated
+
+
+def get_terminal_mock_report(
+    uow: InterviewUnitOfWork, owner_id: str, run_id: str
+):
+    run = _mock_run(uow, owner_id, run_id)
+    if run.state is not MockRunState.COMPLETED or run.final_assessment_id is None:
+        raise MockFeedbackWithheldError(
+            "The Mock report is withheld until terminal completion."
+        )
+    assessment = uow.evidence.get_assessment(
+        owner_id, run.final_assessment_id
+    )
+    if assessment is None:
+        raise MockFeedbackWithheldError(
+            "The terminal Mock assessment is unavailable."
+        )
+    active = uow.evidence.get_active_assessment_for_evidence(
+        owner_id, assessment.evidence_id
+    )
+    assessment = active or assessment
+    if assessment.goal_id != run.goal_id or assessment.run_id != run.id:
+        raise MockFeedbackWithheldError(
+            "The terminal Mock assessment is unavailable."
+        )
+    return run, assessment
+
+
+def _mock_run(uow: InterviewUnitOfWork, owner_id: str, run_id: str) -> PracticeRun:
+    run = get_interview_run(uow, owner_id, run_id)
+    if run.mode != "Mock":
+        raise NotFoundError("Mock run not found.")
     return run
 
 

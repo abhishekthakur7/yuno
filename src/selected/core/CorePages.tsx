@@ -9,8 +9,8 @@ import {
   LockKeyhole, NotebookPen, Pause, Play, RefreshCcw, RotateCcw, Settings2, ShieldCheck, X,
 } from 'lucide-react'
 import {
-  CURRENT_LESSON_ID, FIXTURE_REPORT,
-  MOCK_CURRENT_QUESTION, SIMULATION_LIMITATION,
+  CURRENT_LESSON_ID,
+  SIMULATION_LIMITATION,
   type Depth,
 } from '../../shared/model'
 import { useLearningState } from '../../shared/state'
@@ -30,7 +30,7 @@ import { useArtifactProvenance, useTopicContent } from '../../shared/use-topic-c
 import { useNotebookReview } from '../../shared/use-notebook-review'
 import { useGoalEvidenceReport } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
-import { useInterview, usePracticeRun } from '../../shared/use-interview'
+import { useInterview, useMockReport, useMockRun, usePracticeRun } from '../../shared/use-interview'
 import type { InterviewBundle, InterviewLevel, InterviewQuestion, InterviewRefresher } from '../../shared/api/interview'
 import type { ReviewAttempt, ReviewItem } from '../../shared/api/notebook-review'
 import { roadmapQueryOptions, type LearnerCorrection, type OverlayProposal, type OverlayProposalDecision } from '../../shared/api/roadmap'
@@ -808,8 +808,7 @@ function QuestionsContent({ goalId, bundleId, items, query, navigate }: { goalId
   </section>
 }
 
-export function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) {
-  const { state, dispatch } = useLearningState()
+export function InterviewHub({ navigate, mode, selection }: PageProps & { mode?: InterviewMode }) {
   const workspace = useProfileGoals()
   const interview = useInterview(workspace.currentGoal?.id ?? null)
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
@@ -817,17 +816,16 @@ export function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewM
     { title: 'Refresher', text: 'Review the message delivery contract and evidence gaps.', meta: 'Focused reading', Icon: BookOpen, target: 'topic-studio', lessonId: 'delivery-contract', hubMode: 'refresher' as InterviewMode },
     { title: 'Question bank', text: 'Choose a scenario without completing the Learn path.', meta: 'Select included questions', Icon: HelpCircle, target: 'practice', hubMode: 'questions' as InterviewMode },
     { title: 'Guided practice', text: 'Request a hint, submit, inspect feedback, and repair.', meta: 'Hints on request', Icon: Code2, target: 'practice' },
-    { title: 'Mock interview', text: state.mock.status === 'paused' ? 'Resume the exact locally saved draft.' : 'Answer without hints, rubrics, or evaluation until completion.', meta: state.mock.status === 'paused' ? 'Paused' : 'Neutral while active', Icon: MessageSquareText, target: 'mock' },
+    { title: 'Mock interview', text: selection?.runId ? 'Resume the exact server-saved draft.' : 'Answer without hints, rubrics, or evaluation until completion.', meta: selection?.runId ? 'Paused' : 'Neutral while active', Icon: MessageSquareText, target: 'mock' },
   ]
   const activeChoice = mode ? choices.find((choice) => choice.hubMode === mode) : undefined
   const openChoice = (choice: (typeof choices)[number], asMode?: InterviewMode) => {
     if (asMode) { navigate('interview-hub', asMode); return }
-    if (choice.title === 'Mock interview' && state.mock.status === 'paused') dispatch({ type: 'RESUME_MOCK' })
     if (choice.lessonId && workspace.currentGoal) {
       workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: choice.lessonId, destination: '/app/topic-studio' }, { onSuccess: () => navigate(choice.target) })
       return
     }
-    navigate(choice.target)
+    navigate(choice.target, undefined, choice.title === 'Mock interview' && selection?.runId ? { runId: selection.runId } : undefined)
   }
   const openModeContent = () => document.getElementById('sb-interview-mode-content')?.focus()
   const bundleState = interview.bundles.isPending && !interview.bundles.data ? 'loading' : interview.bundles.isError && !interview.bundles.data ? 'unavailable' : interview.bundles.data?.length === 0 ? 'empty' : interview.bundles.isRefetchError ? 'unavailable' : 'ready'
@@ -877,6 +875,7 @@ function Practice({ navigate, selection }: PageProps) {
     if (started.current || !goal || !question || !testScenario) return
     started.current = true
     practice.create.mutate({
+      mode: 'Practice',
       goal_id: goal.id,
       bundle_id: question.bundle_id,
       bundle_item_id: question.id,
@@ -904,16 +903,43 @@ function Practice({ navigate, selection }: PageProps) {
     {run?.state === 'failed-recoverable' && <aside className="sb-neutral" role="alert"><AlertTriangle /><div><strong>Evaluation failed</strong><p>Your submitted attempt is preserved. Retry resumes evaluation without resubmitting it.</p><Button onClick={() => practice.retry.mutate()} disabled={!run.retryable || practice.retry.isPending}>Retry evaluation</Button></div></aside>}{earlier.length > 0 && <details className="sb-history"><summary>Earlier attempts ({earlier.length}) <ChevronDown /></summary>{earlier.map(item => <article key={item.id}><strong>Attempt {item.turn_number}</strong><p>{item.body}</p></article>)}</details>}</article><ClassroomProgress navigate={navigate} previous="Topic studio" previousTarget="topic-studio" next="Interview prep" nextTarget="interview-hub" /></Classroom>
 }
 
-function Mock({ navigate }: PageProps) {
-  const { state, dispatch } = useLearningState()
+export function Mock({ navigate, selection }: PageProps) {
+  const workspace = useProfileGoals()
+  const [runId, setRunId] = useState<string | null>(selection?.runId ?? null)
+  const [draft, setDraft] = useState('')
   const [exitOpen, setExitOpen] = useState(false)
   const [completeOpen, setCompleteOpen] = useState(false)
   const exitRef = useRef<HTMLButtonElement>(null)
   const completeRef = useRef<HTMLButtonElement>(null)
-  if (state.mock.status === 'completed') return <main className="sb-mock-complete"><div><Check /></div><span className="sb-eyebrow">Interview complete</span><h1>The active session has ended.</h1><p>Your transcript is fixed. The available report gate is determined by the exact response fixture.</p><Button onClick={() => navigate('reports')}>Open report <ArrowRight size={16} /></Button></main>
-  return <main className="sb-mock"><header><div><span /> Mock in progress</div><strong>Question 3 · final question</strong><button ref={exitRef} onClick={() => setExitOpen(true)}><Pause size={16} /> Save &amp; exit</button></header><section><div className="sb-interviewer"><span>03</span><div><strong>Interviewer</strong><small>Current bounded follow-up</small></div></div><h1>{MOCK_CURRENT_QUESTION}</h1><label htmlFor="sb-mock-answer">Your response</label><textarea id="sb-mock-answer" value={state.mock.draft} onChange={e => dispatch({ type: 'SET_MOCK_DRAFT', value: e.target.value })} placeholder="Answer with your decision and reasoning…" autoFocus /><footer><span>Draft retained in this browser. No hints or evaluation are available during the run.</span><Button ref={completeRef} disabled={!state.mock.draft.trim()} onClick={() => setCompleteOpen(true)}>Complete interview</Button></footer></section>
-    <Confirm open={exitOpen} onOpenChange={setExitOpen} title="Pause this mock?" description="Your exact response draft will be retained in shared browser state. Resume it from Interview prep." trigger={exitRef} cancel="Keep answering" action="Save & exit" onAction={() => { dispatch({ type: 'SAFE_EXIT_MOCK' }); navigate('interview-hub') }} />
-    <Confirm open={completeOpen} onOpenChange={setCompleteOpen} title="Complete the interview?" description="This terminal action ends the active session. The transcript cannot accept more answers afterward." trigger={completeRef} cancel="Return to answer" action="Complete & view report" onAction={() => { dispatch({ type: 'COMPLETE_MOCK' }); navigate('reports') }} />
+  const completeKey = useRef(crypto.randomUUID())
+  const initializedRun = useRef<string | null>(null)
+  const started = useRef(false)
+  const mock = useMockRun(runId, id => { setRunId(id); navigate('mock', undefined, { runId: id }) })
+  const goal = workspace.currentGoal
+  useEffect(() => {
+    if (started.current || runId || !goal || !selection?.bundleId || !selection.bundleItemId) return
+    started.current = true
+    mock.create.mutate({ mode: 'Mock', goal_id: goal.id, bundle_id: selection.bundleId, bundle_item_id: selection.bundleItemId, requested_capability: goal.target_capability })
+  }, [goal, mock.create, runId, selection?.bundleId, selection?.bundleItemId])
+  const run = mock.run.data
+  useEffect(() => {
+    if (!run || (initializedRun.current === run.id && run.state !== 'paused')) return
+    initializedRun.current = run.id
+    setDraft(run.draft)
+  }, [run])
+  useEffect(() => {
+    if (run?.state === 'paused' && !mock.resume.isPending) mock.resume.mutate()
+  }, [mock.resume, run?.state])
+  const questions = run?.turns.filter(turn => turn.kind === 'question' || turn.kind === 'follow-up') ?? []
+  const currentQuestion = questions.at(-1)
+  const busy = run?.state === 'follow-up' || run?.state === 'completing' || mock.answer.isPending || mock.complete.isPending
+  if (!runId && (!goal || !selection?.bundleId || !selection.bundleItemId)) return <main className="sb-mock-complete"><div><MessageSquareText /></div><span className="sb-eyebrow">Mock unavailable</span><h1>Choose a Mock question first.</h1><p>No placeholder question or evaluative content is shown.</p><Button onClick={() => navigate('interview-hub', 'questions')}>Choose questions <ArrowRight size={16} /></Button></main>
+  if (mock.create.isPending || (runId && mock.run.isPending)) return <main className="sb-mock-complete" aria-live="polite"><div><Clock3 /></div><span className="sb-eyebrow">Mock interview</span><h1>Loading your focused session.</h1></main>
+  if (mock.create.isError || mock.run.isError || !run) return <main className="sb-mock-complete" role="alert"><div><AlertTriangle /></div><span className="sb-eyebrow">Mock unavailable</span><h1>The interview run could not be loaded.</h1><p>No feedback or replacement question was inferred.</p><Button onClick={() => void mock.run.refetch()}>Retry</Button></main>
+  if (run.state === 'completed') return <main className="sb-mock-complete"><div><Check /></div><span className="sb-eyebrow">Interview complete</span><h1>The active session has ended.</h1><p>Your server-stored transcript is fixed and cannot accept more answers.</p><Button onClick={() => navigate('reports', undefined, { runId: run.id })}>Open report <ArrowRight size={16} /></Button></main>
+  return <main className="sb-mock" data-mock-state={run.state}><header><div><span /> Mock {run.state}</div><strong>Question {currentQuestion?.turn_number ?? questions.length}</strong><button ref={exitRef} disabled={busy} onClick={() => setExitOpen(true)}><Pause size={16} /> Save &amp; exit</button></header><section><div className="sb-interviewer"><span>{String(currentQuestion?.turn_number ?? questions.length).padStart(2, '0')}</span><div><strong>Interviewer</strong><small>{currentQuestion?.kind === 'follow-up' ? 'Adaptive follow-up' : 'Current question'}</small></div></div><h1>{currentQuestion?.body ?? run.question}</h1><label htmlFor="sb-mock-answer">Your response</label><textarea id="sb-mock-answer" value={draft} onChange={event => { setDraft(event.target.value); completeKey.current = crypto.randomUUID() }} disabled={busy} placeholder="Answer with your decision and reasoning…" autoFocus /><footer><span>Your draft is stored exactly when you save or complete. No hints or evaluation are available during the run.</span><div><Button tone="secondary" disabled={!draft.trim() || busy} onClick={() => mock.answer.mutate(draft, { onSuccess: () => { setDraft(''); completeKey.current = crypto.randomUUID() } })}>{busy && run.state === 'follow-up' ? 'Generating next question…' : 'Submit answer'}</Button><Button ref={completeRef} disabled={!draft.trim() || busy} onClick={() => setCompleteOpen(true)}>Complete interview</Button></div></footer>{(mock.pause.isError || mock.resume.isError || mock.answer.isError || mock.complete.isError || run.state === 'failed-recoverable') && <aside className="sb-neutral" role="alert"><AlertTriangle /><div><strong>The Mock action could not be completed</strong><p>Your fixed transcript remains unchanged. Retry from the current server state.</p>{run.state === 'failed-recoverable' ? <Button tone="quiet" disabled={mock.retry.isPending} onClick={() => mock.retry.mutate()}>Retry Mock operation</Button> : <Button tone="quiet" onClick={() => void mock.run.refetch()}>Reload session</Button>}</div></aside>}</section>
+    <Confirm open={exitOpen} onOpenChange={setExitOpen} title="Pause this mock?" description="Your exact response draft will be retained by the server. Resume it from Interview prep." trigger={exitRef} cancel="Keep answering" action="Save & exit" onAction={() => { void mock.pause.mutateAsync(draft).then(saved => navigate('interview-hub', undefined, { runId: saved.id })) }} />
+    <Confirm open={completeOpen} onOpenChange={setCompleteOpen} title="Complete the interview?" description="This terminal action ends the active session. The transcript cannot accept more answers afterward." trigger={completeRef} cancel="Return to answer" action="Complete interview" onAction={() => { mock.complete.mutate({ draft, idempotencyKey: completeKey.current }) }} />
   </main>
 }
 
@@ -921,18 +947,20 @@ function Confirm({ open, onOpenChange, title, description, trigger, cancel, acti
   return <AlertDialog.Root open={open} onOpenChange={onOpenChange}><AlertDialog.Portal><AlertDialog.Overlay className="sb-overlay" /><AlertDialog.Content className="sb-alert" onCloseAutoFocus={e => { e.preventDefault(); trigger.current?.focus() }}><AlertDialog.Title>{title}</AlertDialog.Title><AlertDialog.Description>{description}</AlertDialog.Description><div><AlertDialog.Cancel asChild><Button tone="secondary">{cancel}</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button onClick={onAction}>{action}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
 }
 
-export function Reports({ navigate }: PageProps) {
-  const { state } = useLearningState()
+export function Reports({ navigate, selection }: PageProps) {
   const { currentGoal } = useProfileGoals()
+  const runId = selection?.runId ?? null
+  const mock = useMockRun(runId, () => undefined)
+  const report = useMockReport(runId, mock.run.data?.state === 'completed')
   const learning = useGoalEvidenceReport(currentGoal?.id ?? null)
   const ownerSettings = useOwnerSettings()
   const evidence = learning.evidence.data ?? []
   const unavailableSources = [...new Map(learning.entries.flatMap(entry => entry.sources.unavailable).map(source => [source.id, source])).values()]
-  const fixture = state.mock.reportKind === 'fixture-evaluation'
-  const transcriptOnly = state.mock.reportKind === 'transcript-only'
-  const turns = state.mock.completedTurns.length ? state.mock.completedTurns : state.mock.priorTurns
-  const nextAction = !state.mock.reportKind
-    ? { eyebrow: state.mock.status === 'paused' ? 'Saved draft' : 'Active mock', title: state.mock.status === 'paused' ? 'Resume your exact saved response' : 'Finish the active mock when your response is ready', detail: `${state.mock.draft.trim() ? 'A response draft is saved.' : 'The response is still empty.'} Terminal completion is required before any report gate is set.`, label: state.mock.status === 'paused' ? 'Resume mock' : 'Return to mock', target: 'mock' as CorePage }
+  const reportData = report.data
+  const assessment = reportData?.assessment
+  const reportPending = Boolean(runId) && (mock.run.isPending || (mock.run.data?.state === 'completed' && report.isPending))
+  const nextAction = !assessment
+    ? { eyebrow: reportPending ? 'Report loading' : 'Report unavailable', title: reportPending ? 'Loading the terminal report' : 'Complete the Mock interview before opening its report', detail: reportPending ? 'No conclusion is inferred until the terminal report read completes.' : 'No evaluative content is available for an active, paused, completing, failed, or unknown run.', label: selection?.runId ? 'Return to mock' : 'Choose a Mock question', target: selection?.runId ? 'mock' as CorePage : 'interview-hub' as CorePage }
     : learning.evidence.isError
       ? { eyebrow: 'Evidence unavailable', title: 'Retry the learning evidence region', detail: 'No learning conclusion is inferred while the evidence list is unavailable. Interview report content remains usable.', label: 'Retry evidence', target: 'reports' as CorePage }
       : learning.evidence.isPending
@@ -940,12 +968,18 @@ export function Reports({ navigate }: PageProps) {
       : evidence.length === 0
       ? { eyebrow: 'Next action', title: 'Review your current lab artifact', detail: 'This report contains no submitted lab evidence. Return to the implementation lab to inspect the draft; static browser checks do not submit evidence.', label: 'Open topic studio', target: 'topic-studio' as CorePage }
       : { eyebrow: 'Next action', title: 'Test the decision in guided practice', detail: `You have ${evidence.length} submitted lab evidence ${evidence.length === 1 ? 'entry' : 'entries'}. Practice attempts are stored by the server and remain available from Guided practice.`, label: 'Start guided practice', target: 'practice' as CorePage }
-  return <main className="sb-page sb-reports"><PageIntro eyebrow="Evidence report · mock interview" title={fixture ? FIXTURE_REPORT.conclusion : transcriptOnly ? 'Transcript preserved; evaluation withheld.' : 'No terminal mock report is available.'} action={<Button tone="quiet" onClick={() => navigate('interview-hub')}><ArrowLeft size={16} /> Interview prep</Button>}><span>{fixture ? 'Exact deterministic fixture match. This is not a provider evaluation or hiring prediction.' : transcriptOnly ? 'Your answer differs from the exact fixture, so this browser presentation makes no evaluative claim.' : 'Complete the active mock to create a transcript.'}</span></PageIntro>
-    <section className="sb-report-next" aria-labelledby="sb-report-next-title"><div><span className="sb-eyebrow">{nextAction.eyebrow}</span><h2 id="sb-report-next-title">{nextAction.title}</h2><p>{nextAction.detail}</p></div>{learning.evidence.isError && state.mock.reportKind ? <Button onClick={() => void learning.evidence.refetch()}>{nextAction.label} <RefreshCcw size={16} /></Button> : <Button onClick={() => navigate(nextAction.target)}>{nextAction.label} <ArrowRight size={16} /></Button>}</section>
-    <section className="sb-report-gate"><span>Report gate</span><strong>{fixture ? 'Exact-fixture evaluation' : transcriptOnly ? 'Transcript only' : 'Unavailable'}</strong><p>{fixture ? 'Eligible only because every response matches the bundled deterministic fixture.' : transcriptOnly ? 'No score, rubric outcome, factual judgment, or readiness result is produced.' : 'Prior turns are displayed for context, not as a completed interview.'}</p></section>
+  const latestDispute = assessment?.disputes.at(-1)
+  return <main className="sb-page sb-reports"><PageIntro eyebrow="Evidence report · mock interview" title={assessment?.feedback ?? (reportPending ? 'Loading the terminal Mock report.' : 'No terminal mock report is available.')} action={<Button tone="quiet" onClick={() => navigate('interview-hub')}><ArrowLeft size={16} /> Interview prep</Button>}><span>{assessment ? 'Conclusion from the immutable terminal assessment.' : 'No evaluation is shown before explicit terminal completion.'}</span></PageIntro>
+    <section className="sb-report-next" aria-labelledby="sb-report-next-title"><div><span className="sb-eyebrow">{nextAction.eyebrow}</span><h2 id="sb-report-next-title">{assessment?.revision_invitation ?? nextAction.title}</h2><p>{nextAction.detail}</p></div>{learning.evidence.isError && assessment ? <Button onClick={() => void learning.evidence.refetch()}>{nextAction.label} <RefreshCcw size={16} /></Button> : <Button onClick={() => navigate(nextAction.target, undefined, selection?.runId ? { runId: selection.runId } : undefined)}>{nextAction.label} <ArrowRight size={16} /></Button>}</section>
+    {!assessment && !reportPending && <section className="sb-report-gate" role="status"><span>Report gate</span><strong>{mock.run.data?.state === 'completing' ? 'Evaluating' : 'Unavailable'}</strong><p>The run is not terminal or its terminal assessment is unavailable. No evaluative payload is displayed.</p>{mock.run.data?.state === 'completed' && report.isError && <Button tone="secondary" onClick={() => void report.refetch()}>Retry report</Button>}</section>}
+    {assessment && <><section className="sb-report-gate"><span>Assumptions</span><h2>Assumptions</h2>{assessment.assumptions.length ? <ul>{assessment.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>No assumptions recorded.</p>}</section>
+    <section className="sb-report-grid"><article><h2>Facts and corrections</h2>{assessment.facts.length ? assessment.facts.map(item => <p key={item}><Check size={16} /> {item}</p>) : <p>No facts or corrections recorded.</p>}</article><article><h2>Trade-offs</h2>{assessment.trade_offs.length ? assessment.trade_offs.map(item => <p key={item}><Settings2 size={16} /> {item}</p>) : <p>No trade-offs recorded.</p>}</article></section>
+    <section className="sb-report-gate"><span>Rubric dimensions</span><h2>Rubric dimensions</h2>{assessment.dimensions.length ? assessment.dimensions.map(dimension => <article key={dimension.dimension_id}><strong>{dimension.dimension_id} · {dimension.outcome}</strong><p>{dimension.rationale}</p></article>) : <p>No rubric dimensions recorded.</p>}</section>
+    <section className="sb-report-gate"><span>Ambiguity</span><h2>Ambiguity</h2>{assessment.ambiguities.length ? <ul>{assessment.ambiguities.map(item => <li key={item}>{item}</li>)}</ul> : <p>No unresolved ambiguity recorded.</p>}</section>
+    <details className="sb-report-detail" open><summary>Interview transcript <ChevronDown /></summary><div><section><h2>Interview transcript</h2>{reportData!.transcript.map(turn => <article key={turn.id}><span>{turn.kind === 'answer' ? 'You' : 'Interviewer'}</span><p>{turn.body}</p></article>)}</section></div></details>
+    <details className="sb-report-detail" open><summary>Provenance <ChevronDown /></summary><div><aside><h2>Provenance</h2><dl><dt>Assessment</dt><dd>{assessment.id}</dd><dt>Method</dt><dd>{assessment.evaluation_method}</dd><dt>Citations</dt><dd>{assessment.citations.join(', ') || 'None'}</dd><dt>Provenance refs</dt><dd>{assessment.provenance_refs.join(', ') || 'None'}</dd><dt>Limitations</dt><dd>{assessment.limitation_labels.join(', ') || 'None'}</dd></dl></aside></div></details>
+    <section className="sb-report-gate"><span>Correction and dispute</span><h2>{latestDispute ? 'Assessment dispute recorded' : 'Something about this assessment is wrong?'}</h2><p>The original assessment remains immutable.</p>{latestDispute && !latestDispute.reevaluation ? <Button tone="secondary" disabled={learning.reevaluate.isPending} onClick={() => learning.reevaluate.mutate({ assessmentId: assessment.id, disputeId: latestDispute.id })}>Request re-evaluation</Button> : <Button tone="secondary" disabled={Boolean(latestDispute) || learning.dispute.isPending} onClick={() => learning.dispute.mutate({ assessmentId: assessment.id, reason: 'The learner requested correction and re-evaluation.' })}>{latestDispute ? latestDispute.reevaluation ? `Re-evaluation ${latestDispute.reevaluation.status}` : 'Dispute recorded' : 'Record dispute'}</Button>}{(learning.dispute.isError || learning.reevaluate.isError) && <p role="alert">The request was not saved. The assessment remains unchanged.</p>}</section></>}
     {unavailableSources.length > 0 && <aside className="sb-neutral" role="alert"><AlertTriangle /><div><strong>Tombstoned source warning: cited source withdrawn or unavailable</strong><p>{unavailableSources.map(source => source.title).join(', ')} remains named in provenance history; it has not silently disappeared.</p></div></aside>}
-    {fixture && <section className="sb-report-grid"><article><h2>Facts in transcript</h2>{FIXTURE_REPORT.facts.map(x => <p key={x}><Check size={16} /> {x}</p>)}</article><article><h2>Trade-offs named</h2>{FIXTURE_REPORT.tradeoffs.map(x => <p key={x}><Settings2 size={16} /> {x}</p>)}</article></section>}
-    <details className="sb-report-detail" open><summary>Transcript and provenance <ChevronDown /></summary><div><section><h2>Interview transcript</h2>{turns.map(turn => <article key={turn.id}><span>Interviewer</span><p>{turn.question}</p><span>You</span><p>{turn.answer}</p></article>)}</section><aside><h2>Provenance</h2><dl><dt>Kind</dt><dd>{state.mock.reportKind ?? 'Unavailable'}</dd><dt>Turns</dt><dd>{turns.length}</dd><dt>Method</dt><dd>{fixture ? 'Exact string match to bundled fixture' : 'Transcript preservation only'}</dd></dl>{fixture && <><h3>Assumptions</h3><ul>{FIXTURE_REPORT.assumptions.map(x => <li key={x}>{x}</li>)}</ul></>}</aside></div></details>
     <details className="sb-report-detail"><summary>Submitted lab evidence ({evidence.length}) <ChevronDown /></summary><div className="sb-evidence-history">{learning.evidence.isError ? <ReportRegionFailure label="Evidence" retry={() => void learning.evidence.refetch()} /> : learning.evidence.isPending ? <p>Loading submitted lab evidence…</p> : learning.entries.length ? learning.entries.map(entry => <article key={entry.evidence.id}><strong>{entry.evidence.summary}</strong><p>{entry.evidence.evidence_type} · {entry.evidence.capability} · {entry.evidence.origin}</p>{entry.detail.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} detail`} retry={() => void entry.detail.refetch()} /> : entry.detail.isPending ? <p>Loading evidence detail…</p> : entry.detail.data ? <dl><dt>Content version</dt><dd>{entry.detail.data.content_version ?? 'Tombstoned'}</dd><dt>Transfer lineage</dt><dd>{entry.detail.data.transfers.length ? entry.detail.data.transfers.map(item => `${item.classification} → ${item.target_goal_id}`).join(', ') : 'None'}</dd></dl> : null}{entry.assessment.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} assessment`} retry={() => void entry.assessment.refetch()} /> : entry.assessment.isPending ? <p>Loading assessment…</p> : entry.assessment.data ? <section><h3>{entry.assessment.data.feedback}</h3><p>Assessment state: {entry.assessment.data.state}</p>{entry.assessment.data.ambiguities.length > 0 && <p>Ambiguities: {entry.assessment.data.ambiguities.join('; ')}. Unresolved ambiguity carries no readiness penalty.</p>}</section> : <p>No assessment attached.</p>}<ReportAssessmentHistory entry={entry} />{entry.sources.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} cited sources`} retry={() => void entry.sources.refetch()} /> : entry.sources.isPending ? <p>Loading cited sources…</p> : entry.sources.data.length > 0 ? <p>Sources: {entry.sources.data.map(source => `${source.title} (${source.availability_status})`).join(', ')}</p> : null}</article>) : <p>No submitted lab evidence.</p>}</div></details>
     <ReportProgressDisclosure progress={learning.progress} display={ownerSettings.settings.data?.progress_display ?? null} settings={ownerSettings.settings} />
   </main>
@@ -977,10 +1011,10 @@ export function CorePageView({ page, navigate, mode, selection }: { page: CorePa
     case 'onboarding': content = <Onboarding navigate={navigate} />; break
     case 'learn-roadmap': content = <Roadmap navigate={navigate} />; break
     case 'topic-studio': content = <Topic navigate={navigate} />; break
-    case 'interview-hub': content = <InterviewHub navigate={navigate} {...(mode ? { mode } : {})} />; break
+    case 'interview-hub': content = <InterviewHub navigate={navigate} {...(mode ? { mode } : {})} {...(selection ? { selection } : {})} />; break
     case 'practice': content = <Practice navigate={navigate} {...(selection ? { selection } : {})} />; break
-    case 'mock': content = <Mock navigate={navigate} />; break
-    case 'reports': content = <Reports navigate={navigate} />; break
+    case 'mock': content = <Mock navigate={navigate} {...(selection ? { selection } : {})} />; break
+    case 'reports': content = <Reports navigate={navigate} {...(selection ? { selection } : {})} />; break
   }
   return <div className={`sb-core sb-page-${page}`}>{content}</div>
 }

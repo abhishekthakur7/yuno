@@ -14,11 +14,21 @@ import {
   submitPracticeAnswer,
   retryPracticeEvaluation,
   cancelPracticeEvaluation,
+  completeMockRun,
+  createMockRun,
+  mockRunQueryOptions,
+  mockReportQueryOptions,
+  pauseMockRun,
+  resumeMockRun,
+  retryMockRun,
+  submitMockAnswer,
   type InterviewBundle,
   type InterviewBundleCopy,
   type InterviewBundleCreate,
   type InterviewBundlePatch,
   type PracticeRunCreate,
+  type MockRun,
+  type MockRunCreate,
 } from './api/interview'
 
 export function useInterview(goalId: string | null) {
@@ -57,6 +67,27 @@ export function useInterview(goalId: string | null) {
     },
   })
   return { bundles, refreshers, questions, create, update, copy, remove, refreshBundles }
+}
+
+export function useMockRun(runId: string | null, onRun: (runId: string) => void) {
+  const queryClient = useQueryClient()
+  const run = useQuery(mockRunQueryOptions(runId))
+  const accept = (value: MockRun) => {
+    onRun(value.id)
+    queryClient.setQueryData(['interview-runs', value.id], value)
+  }
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] })
+  const create = useMutation({ mutationFn: (body: MockRunCreate) => createMockRun(body), onSuccess: accept })
+  const pause = useMutation({ mutationFn: (draft: string) => pauseMockRun(runId!, draft), onSuccess: accept })
+  const resume = useMutation({ mutationFn: () => resumeMockRun(runId!), onSuccess: accept })
+  const answer = useMutation({ mutationFn: (value: string) => submitMockAnswer(runId!, value), onSuccess: () => void refresh() })
+  const complete = useMutation({ mutationFn: ({ draft, idempotencyKey }: { draft: string; idempotencyKey: string }) => completeMockRun(runId!, draft, idempotencyKey), onSuccess: () => void refresh() })
+  const retry = useMutation({ mutationFn: () => retryMockRun(runId!), onSuccess: () => void refresh() })
+  return { run, create, pause, resume, answer, complete, retry }
+}
+
+export function useMockReport(runId: string | null, enabled = true) {
+  return useQuery(mockReportQueryOptions(runId, enabled))
 }
 
 export function usePracticeRun(runId: string | null, onRun: (runId: string) => void) {

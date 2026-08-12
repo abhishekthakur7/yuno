@@ -1008,6 +1008,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/interview-runs/{run_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Mock Complete */
+        post: operations["post_mock_complete_api_v1_interview_runs__run_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interview-runs/{run_id}/hints": {
         parameters: {
             query?: never;
@@ -1019,6 +1036,57 @@ export interface paths {
         put?: never;
         /** Post Interview Hint */
         post: operations["post_interview_hint_api_v1_interview_runs__run_id__hints_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interview-runs/{run_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Mock Pause */
+        post: operations["post_mock_pause_api_v1_interview_runs__run_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interview-runs/{run_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Mock Report */
+        get: operations["read_mock_report_api_v1_interview_runs__run_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interview-runs/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Mock Resume */
+        post: operations["post_mock_resume_api_v1_interview_runs__run_id__resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2307,6 +2375,65 @@ export interface components {
          * @enum {string}
          */
         MappingState: "unmapped" | "mapped" | "duplicate";
+        /** MockDraftRequest */
+        MockDraftRequest: {
+            /** Draft */
+            draft: string;
+        };
+        /** MockReportResponse */
+        MockReportResponse: {
+            assessment: components["schemas"]["AssessmentResponse"];
+            /** Goal Id */
+            goal_id: string;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State
+             * @constant
+             */
+            state: "completed";
+            /** Transcript */
+            transcript: components["schemas"]["PracticeTurnResponse"][];
+        };
+        /** MockRunResponse */
+        MockRunResponse: {
+            /** Active Job Id */
+            active_job_id: string | null;
+            /** Bundle Id */
+            bundle_id: string;
+            /** Bundle Item Id */
+            bundle_item_id: string;
+            /** Created At */
+            created_at: string;
+            /** Draft */
+            draft: string;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Final Assessment Id */
+            final_assessment_id: string | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "Mock";
+            /** Question */
+            question: string;
+            /** Retryable */
+            retryable: boolean;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "answering" | "follow-up" | "paused" | "completing" | "completed" | "failed-recoverable";
+            /** Turns */
+            turns: components["schemas"]["PracticeTurnResponse"][];
+            /** Updated At */
+            updated_at: string;
+        };
         /** NotebookEntryCreateRequest */
         NotebookEntryCreateRequest: {
             entry_kind: components["schemas"]["NotebookEntryKind"];
@@ -2478,14 +2605,20 @@ export interface components {
             /** Hint */
             hint?: string | null;
             /**
+             * Mode
+             * @default Practice
+             * @enum {string}
+             */
+            mode: "Practice" | "Mock";
+            /**
              * Requested Capability
              * @default implement
              */
             requested_capability: string;
             /** Rubric Id */
-            rubric_id: string;
+            rubric_id?: string | null;
             /** Rubric Version */
-            rubric_version: string;
+            rubric_version?: string | null;
         };
         /** PracticeRunResponse */
         PracticeRunResponse: {
@@ -5194,7 +5327,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PracticeRunResponse"];
+                    "application/json": components["schemas"]["PracticeRunResponse"] | components["schemas"]["MockRunResponse"];
                 };
             };
             /** @description Default Response */
@@ -5225,7 +5358,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PracticeRunResponse"];
+                    "application/json": components["schemas"]["PracticeRunResponse"] | components["schemas"]["MockRunResponse"];
                 };
             };
             /** @description Default Response */
@@ -5293,7 +5426,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PracticeRunResponse"];
+                    "application/json": components["schemas"]["PracticeRunResponse"] | components["schemas"]["MockRunResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_mock_complete_api_v1_interview_runs__run_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockRunResponse"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
                 };
             };
             /** @description Default Response */
@@ -5325,6 +5504,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PracticeRunResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_mock_pause_api_v1_interview_runs__run_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockRunResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_mock_report_api_v1_interview_runs__run_id__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockReportResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_mock_resume_api_v1_interview_runs__run_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockRunResponse"];
                 };
             };
             /** @description Default Response */

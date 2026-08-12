@@ -3440,6 +3440,173 @@
         "title": "MappingState",
         "type": "string"
       },
+      "MockDraftRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "title": "Draft",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft"
+        ],
+        "title": "MockDraftRequest",
+        "type": "object"
+      },
+      "MockReportResponse": {
+        "properties": {
+          "assessment": {
+            "$ref": "#/components/schemas/AssessmentResponse"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "const": "completed",
+            "title": "State",
+            "type": "string"
+          },
+          "transcript": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeTurnResponse"
+            },
+            "title": "Transcript",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "goal_id",
+          "state",
+          "assessment",
+          "transcript"
+        ],
+        "title": "MockReportResponse",
+        "type": "object"
+      },
+      "MockRunResponse": {
+        "properties": {
+          "active_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Job Id"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_item_id": {
+            "title": "Bundle Item Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft": {
+            "title": "Draft",
+            "type": "string"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "final_assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Assessment Id"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "const": "Mock",
+            "title": "Mode",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "answering",
+              "follow-up",
+              "paused",
+              "completing",
+              "completed",
+              "failed-recoverable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeTurnResponse"
+            },
+            "title": "Turns",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "bundle_id",
+          "bundle_item_id",
+          "mode",
+          "state",
+          "question",
+          "draft",
+          "active_job_id",
+          "failure_reference",
+          "retryable",
+          "final_assessment_id",
+          "created_at",
+          "updated_at",
+          "turns"
+        ],
+        "title": "MockRunResponse",
+        "type": "object"
+      },
       "NotebookEntryCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3977,26 +4144,47 @@
             ],
             "title": "Hint"
           },
+          "mode": {
+            "default": "Practice",
+            "enum": [
+              "Practice",
+              "Mock"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "requested_capability": {
             "default": "implement",
             "title": "Requested Capability",
             "type": "string"
           },
           "rubric_id": {
-            "title": "Rubric Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Id"
           },
           "rubric_version": {
-            "title": "Rubric Version",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Version"
           }
         },
         "required": [
           "goal_id",
           "bundle_id",
-          "bundle_item_id",
-          "rubric_id",
-          "rubric_version"
+          "bundle_item_id"
         ],
         "title": "PracticeRunCreateRequest",
         "type": "object"
@@ -9160,7 +9348,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PracticeRunResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PracticeRunResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MockRunResponse"
+                    }
+                  ],
+                  "title": "Response Post Interview Run Api V1 Interview Runs Post"
                 }
               }
             },
@@ -9202,7 +9398,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PracticeRunResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PracticeRunResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MockRunResponse"
+                    }
+                  ],
+                  "title": "Response Read Interview Run Api V1 Interview Runs  Run Id  Get"
                 }
               }
             },
@@ -9312,7 +9516,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PracticeRunResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PracticeRunResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MockRunResponse"
+                    }
+                  ],
+                  "title": "Response Post Interview Cancel Api V1 Interview Runs  Run Id  Cancel Evaluation Post"
                 }
               }
             },
@@ -9330,6 +9542,93 @@
           }
         },
         "summary": "Post Interview Cancel",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/complete": {
+      "post": {
+        "operationId": "post_mock_complete_api_v1_interview_runs__run_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse",
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/JobRefResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MockRunResponse"
+                    }
+                  ],
+                  "title": "Response Post Mock Complete Api V1 Interview Runs  Run Id  Complete Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Mock Complete",
         "tags": [
           "interview"
         ]
@@ -9372,6 +9671,142 @@
           }
         },
         "summary": "Post Interview Hint",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/pause": {
+      "post": {
+        "operationId": "post_mock_pause_api_v1_interview_runs__run_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Mock Pause",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/report": {
+      "get": {
+        "operationId": "read_mock_report_api_v1_interview_runs__run_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read Mock Report",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/resume": {
+      "post": {
+        "operationId": "post_mock_resume_api_v1_interview_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Mock Resume",
         "tags": [
           "interview"
         ]

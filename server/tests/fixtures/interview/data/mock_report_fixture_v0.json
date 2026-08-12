@@ -1,0 +1,12 @@
+{
+  "fixture_marker": "fixture-v0-non-production",
+  "answer": "Fail closed, retain the message for bounded retry, and make the durable duplicate decision before acknowledgement.",
+  "assessment": {
+    "feedback": "The transcript states a durable duplicate boundary and a bounded recovery action.",
+    "next_action": "Test the same boundary when acknowledgement is lost after commit.",
+    "assumptions": [],
+    "facts": ["The duplicate decision precedes acknowledgement."],
+    "trade_offs": ["Failing closed protects integrity while reducing write-path availability."],
+    "provenance_refs": ["fixture-v0-non-production"]
+  }
+}

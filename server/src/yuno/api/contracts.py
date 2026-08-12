@@ -179,11 +179,12 @@ class RefresherResponse(BaseModel):
 
 class PracticeRunCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    mode: Literal["Practice", "Mock"] = "Practice"
     goal_id: str
     bundle_id: str
     bundle_item_id: str
-    rubric_id: str
-    rubric_version: str
+    rubric_id: str | None = None
+    rubric_version: str | None = None
     requested_capability: str = "implement"
     hint: str | None = None
 
@@ -191,6 +192,11 @@ class PracticeRunCreateRequest(BaseModel):
 class PracticeAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     answer: str
+
+
+class MockDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    draft: str
 
 
 class PracticeTurnResponse(BaseModel):
@@ -239,6 +245,27 @@ class PracticeRunResponse(BaseModel):
     updated_at: str
     turns: list[PracticeTurnResponse]
     results: list[PracticeTurnResultResponse]
+
+
+class MockRunResponse(BaseModel):
+    id: str
+    goal_id: str
+    bundle_id: str
+    bundle_item_id: str
+    mode: Literal["Mock"]
+    state: Literal[
+        "ready", "answering", "follow-up", "paused", "completing", "completed",
+        "failed-recoverable",
+    ]
+    question: str
+    draft: str
+    active_job_id: str | None
+    failure_reference: str | None
+    retryable: bool
+    final_assessment_id: str | None
+    created_at: str
+    updated_at: str
+    turns: list[PracticeTurnResponse]
 
 
 class JobRefResponse(BaseModel):
@@ -683,6 +710,14 @@ class AssessmentResponse(BaseModel):
     created_at: str
     dimensions: list[AssessmentDimensionResponse]
     disputes: list[AssessmentDisputeDetailResponse]
+
+
+class MockReportResponse(BaseModel):
+    run_id: str
+    goal_id: str
+    state: Literal["completed"]
+    assessment: AssessmentResponse
+    transcript: list[PracticeTurnResponse]
 
 
 class AssessmentDisputeRequest(BaseModel):

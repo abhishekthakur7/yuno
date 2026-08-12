@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import type { DiagnosticPreviewEdit, DiagnosticSession, DiagnosticSetup } from '../../src/shared/api/diagnostics'
 import type { Assessment, EvidenceDetail, GoalProgress, Source } from '../../src/shared/api/evidence'
 import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
-import type { InterviewBundle, InterviewQuestion, InterviewRefresher, PracticeRun } from '../../src/shared/api/interview'
+import type { InterviewBundle, InterviewQuestion, InterviewRefresher, MockRun, PracticeRun } from '../../src/shared/api/interview'
 import type { OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
 
 const routes = [
@@ -13,7 +13,7 @@ const routes = [
   ['/app/topic-studio', /Implement an idempotency boundary/i],
   ['/app/interview-hub', /Choose the mode you need/i],
   ['/app/practice', /No practice question is selected/i],
-  ['/app/mock', /idempotency store is unavailable/i],
+  ['/app/mock?bundleId=bundle-e2e-1&bundleItemId=bundle-item-technical', /durable idempotency boundary/i],
   ['/app/reports', /No terminal mock report is available/i],
   ['/app/evidence', /What your work supports/i],
   ['/app/imports', /Bring notes in as untrusted material/i],
@@ -30,7 +30,6 @@ const viewports = [
   { width: 390, height: 844 },
 ] as const
 
-const fixtureDraft = 'Fail closed for reservation creation, return a retryable failure, and keep the message unacknowledged. Failing open can create an irreversible duplicate. Bound retries, expose the dependency failure, and recover from the queue rather than claiming availability.'
 const exactDraft = '  Preserve this leading space.\nSecond line with a trailing space.  '
 const practiceDraft = 'The commit-before-ack window needs an atomic idempotency key with an explicit retention policy.'
 const roadmapTopics = [
@@ -170,6 +169,7 @@ test.beforeEach(async ({ page }) => {
   const interviewRefreshers: InterviewRefresher[] = [{ artifact_id: 'artifact-e2e-1', state: 'stale', subject: 'Messaging', layer: 'Production', content: 'Revisit the durable decision before acknowledgement.', source_ref: 'source-e2e-1', source_title: 'Approved messaging guide', evidence_gap_ref: 'evidence-gap-e2e-1', evidence_gap: 'Recovery after commit was not yet supported.' }]
   const interviewQuestions: InterviewQuestion[] = [{ id: 'question-e2e-1', bundle_id: 'bundle-e2e-1', subject: 'technical', topic_stable_id: 'idempotency-retry', question: 'Where is the durable idempotency boundary?', position: 0, included: true }]
   let practiceRun: PracticeRun | null = null
+  let mockRun: MockRun | null = null
   let projectedTopics = roadmapTopics.map(([stable_id, title]) => ({
     stable_id, title, subject: 'Java / Spring Boot · AWS', level_tag: 'Senior',
     target_capability: 'implement', scope_tags: ['java'], classification: 'unverified' as const,
@@ -335,9 +335,63 @@ test.beforeEach(async ({ page }) => {
     const path = new URL(request.url()).pathname.split('/')
     const action = path.at(-1)
     if (request.method() === 'POST' && action === 'interview-runs') {
-      const body = request.postDataJSON() as { goal_id: string; bundle_id: string; bundle_item_id: string; rubric_id: string; rubric_version: string; requested_capability: string }
+      const body = request.postDataJSON() as { mode?: string; goal_id: string; bundle_id: string; bundle_item_id: string; rubric_id: string; rubric_version: string; requested_capability: string }
+      if (body.mode === 'Mock') {
+        mockRun = {
+          id: 'mock-run-e2e-1', goal_id: body.goal_id, bundle_id: body.bundle_id,
+          bundle_item_id: body.bundle_item_id, mode: 'Mock', state: 'answering', draft: '',
+          question: interviewQuestions[0]!.question, active_job_id: null, final_assessment_id: null,
+          failure_reference: null, retryable: false,
+          created_at: '2026-08-12T00:05:00Z', updated_at: '2026-08-12T00:05:00Z',
+          turns: [{ id: 'mock-question-e2e-1', turn_number: 1, kind: 'question', body: interviewQuestions[0]!.question, answer_turn_id: null, created_at: '2026-08-12T00:05:00Z' }],
+        }
+        await route.fulfill({ status: 201, json: mockRun }); return
+      }
       practiceRun = { ...body, id: 'practice-run-e2e-1', mode: 'Practice', state: 'ready', question: interviewQuestions[0]!.question, active_job_id: null, failure_reference: null, retryable: false, created_at: '2026-08-12T00:05:00Z', updated_at: '2026-08-12T00:05:00Z', turns: [{ id: 'practice-question-e2e-1', turn_number: 1, kind: 'question', body: interviewQuestions[0]!.question, answer_turn_id: null, created_at: '2026-08-12T00:05:00Z' }], results: [] }
       await route.fulfill({ status: 201, json: practiceRun }); return
+    }
+    if (mockRun && path.includes(String(mockRun.id))) {
+      if (request.method() === 'POST' && action === 'pause') {
+        const body = request.postDataJSON() as { draft: string }
+        mockRun = { ...mockRun, state: 'paused', draft: body.draft, updated_at: '2026-08-12T00:06:00Z' }
+        await route.fulfill({ json: mockRun }); return
+      }
+      if (request.method() === 'POST' && action === 'resume') {
+        mockRun = { ...mockRun, state: 'answering', updated_at: '2026-08-12T00:07:00Z' }
+        await route.fulfill({ json: mockRun }); return
+      }
+      if (request.method() === 'POST' && action === 'complete') {
+        const body = request.postDataJSON() as { draft: string }
+        mockRun = {
+          ...mockRun, state: 'completing', draft: body.draft,
+          active_job_id: 'mock-final-evaluation-e2e-1', updated_at: '2026-08-12T00:08:00Z',
+          turns: [...mockRun.turns, { id: 'mock-answer-e2e-1', turn_number: 2, kind: 'answer', body: body.draft, answer_turn_id: null, created_at: '2026-08-12T00:08:00Z' }],
+        }
+        await route.fulfill({ status: 202, json: { job_id: 'mock-final-evaluation-e2e-1', kind: 'evaluate_mock', status: 'queued', enqueued_at: '2026-08-12T00:08:00Z', deduplicated: false } }); return
+      }
+      if (action === 'report' && mockRun.state === 'completed') {
+        await route.fulfill({ json: {
+          run_id: mockRun.id, goal_id: mockRun.goal_id, state: 'completed', transcript: mockRun.turns,
+          assessment: {
+            id: 'mock-assessment-e2e-1', goal_id: mockRun.goal_id, evidence_id: 'mock-evidence-e2e-1', run_id: mockRun.id,
+            rubric_id: 'mock-rubric-e2e-1', rubric_version: 'v1', state: 'feedback-ready', task_ref: 'mock-terminal', requested_capability: 'implement', role: 'backend', level: 'senior', evaluation_method: 'interactive',
+            assumptions: ['Redelivery follows a committed write.'], source_refs: [], provenance_refs: ['mock-provider-e2e-1'],
+            facts: ['The durable write precedes acknowledgement.'], trade_offs: ['Failing closed reduces write-path availability.'], citations: [], ambiguities: [],
+            feedback: 'The transcript identifies the durable idempotency boundary.', cross_question_candidate: null,
+            revision_invitation: 'Test the boundary during acknowledgement loss.', warnings: [], limitation_labels: ['Terminal Mock transcript only.'],
+            predecessor_assessment_id: null, derivation_excluded: false, created_at: '2026-08-12T00:09:00Z',
+            dimensions: [{ dimension_id: 'boundary', outcome: 'pass', rationale: 'The answer names the atomic boundary.', evidence_refs: ['mock-evidence-e2e-1'] }], disputes: [],
+          },
+        } }); return
+      }
+      if (request.method() === 'GET' && request.url().includes('finish=1')) {
+        mockRun = { ...mockRun, state: 'completed', active_job_id: null, final_assessment_id: 'mock-assessment-e2e-1', updated_at: '2026-08-12T00:09:00Z' }
+        await route.fulfill({ json: mockRun }); return
+      }
+      if (action === 'hints' || action === 'report') {
+        await route.fulfill({ status: 409, json: { message: 'Mock feedback is withheld until terminal completion.', code: 'mock_feedback_withheld' } }); return
+      }
+      await route.fulfill({ json: mockRun }); return
     }
     if (!practiceRun) { await route.fulfill({ status: 404, json: { message: 'Not found' } }); return }
     if (action === 'hints') {
@@ -766,23 +820,8 @@ function artifactProvenanceFixture() {
   }
 }
 
-async function learningState(page: Page) {
-  return page.evaluate(() => {
-    const key = Object.keys(localStorage).filter(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup').at(-1)
-    return JSON.parse(key ? localStorage.getItem(key) || 'null' : 'null')
-  })
-}
-
 async function apiEvidence(page: Page, goalId = 'goal-default') {
   return page.evaluate(id => fetch(`/api/v1/goals/${id}/evidence`).then(response => response.json()), goalId) as Promise<Array<{ id: string; active_assessment_id: string | null }>>
-}
-
-async function hasClientEvidenceSlice(page: Page) {
-  return page.evaluate(() => {
-    const key = Object.keys(localStorage).find(item => item.startsWith('yuno.learning.state.v1.') && item !== 'yuno.learning.state.v1.setup')
-    const value = JSON.parse(key ? localStorage.getItem(key) || 'null' : 'null')
-    return Boolean(value && Object.prototype.hasOwnProperty.call(value, 'evidence'))
-  })
 }
 
 async function seedAssessedEvidence(page: Page) {
@@ -833,15 +872,10 @@ async function skipOptionalSetup(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: /Create a goal from this roadmap/i })).toBeVisible()
 }
 
-test('malformed bounded draft storage falls back field by field without runtime errors', async ({ page, diagnostics }) => {
+test('malformed operations storage falls back field by field without runtime errors', async ({ page, diagnostics }) => {
   void diagnostics
   await open(page, '/app/settings')
   await page.evaluate(() => {
-    localStorage.setItem('yuno.learning.state.v1.goal-default', JSON.stringify({
-      version: 1,
-      mock: { priorTurns: [null], completedTurns: [null], reportKind: 'invented' },
-      evidence: [null],
-    }))
     localStorage.setItem('yuno.operations.state.v1', JSON.stringify({
       version: 1,
       owner: null,
@@ -853,20 +887,6 @@ test('malformed bounded draft storage falls back field by field without runtime 
   await page.reload()
 
   await expect(page.getByRole('heading', { level: 1, name: /^Settings$/i })).toBeVisible()
-  await expect.poll(async () => {
-    const learning = await learningState(page)
-    return {
-      hasPractice: Boolean(learning && Object.prototype.hasOwnProperty.call(learning, 'practice')),
-      mockPriorTurns: learning?.mock.priorTurns.length,
-      mockReport: learning?.mock.reportKind,
-      hasEvidence: Boolean(learning && Object.prototype.hasOwnProperty.call(learning, 'evidence')),
-    }
-  }).toEqual({
-    hasPractice: false,
-    mockPriorTurns: 2,
-    mockReport: null,
-    hasEvidence: false,
-  })
   await expect.poll(async () => {
     const operations = await operationsState(page)
     return { owner: operations?.owner, hasReviewState: 'review' in operations, hasImportState: 'importSource' in operations || 'importStatements' in operations, updates: operations?.acceptedUpdates }
@@ -1131,8 +1151,6 @@ test('Topic Studio static checks do not create client-side evidence', async ({ p
   await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
   await page.getByRole('button', { name: 'Run static checks', exact: true }).click()
   await expect(page.getByText(/Carries a stable request key/i)).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.runResult?.status).toBeTruthy()
-  await expect.poll(() => hasClientEvidenceSlice(page)).toBe(false)
   await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
 })
 
@@ -1165,9 +1183,13 @@ test('Practice reveals a requested hint, then feedback, repair, and append-only 
   })).toBe(repairedDraft)
 })
 
-test('Mock pause/resume preserves the exact draft and evaluation appears only after terminal completion', async ({ page, diagnostics }) => {
+test('Mock pause/resume preserves the exact API draft and Complete remains an explicit terminal action', async ({ page, diagnostics }) => {
   void diagnostics
-  await open(page, '/app/mock')
+  let completeRequests = 0
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().endsWith('/mock-run-e2e-1/complete')) completeRequests += 1
+  })
+  await open(page, '/app/mock?bundleId=bundle-e2e-1&bundleItemId=bundle-item-technical')
   const answer = page.getByRole('textbox', { name: /Your response/i })
   await expect(answer).toHaveValue('')
   await expect(page.getByRole('button', { name: /Complete interview/i })).toBeDisabled()
@@ -1180,21 +1202,45 @@ test('Mock pause/resume preserves the exact draft and evaluation appears only af
   await expect(exit).toBeFocused()
   await exit.click()
   await pauseDialog.getByRole('button', { name: /^Save & exit$/i }).click()
-  await page.getByRole('button', { name: /Open Mock interview/i }).click()
+  await expect(page).toHaveURL(/\/app\/interview-hub\?runId=mock-run-e2e-1$/)
+  await expect.poll(async () => page.evaluate(() => fetch('/api/v1/interview-runs/mock-run-e2e-1').then(response => response.json()).then(run => ({ state: run.state, draft: run.draft })))).toEqual({ state: 'paused', draft: exactDraft })
+  await page.getByRole('button', { name: /Mock interview/i }).click()
+  await expect(page).toHaveURL(/\/app\/mock\?runId=mock-run-e2e-1$/)
   await expect(page.getByRole('textbox', { name: /Your response/i })).toHaveValue(exactDraft)
-  await expect.poll(async () => (await learningState(page))?.mock.draft).toBe(exactDraft)
-  await page.getByRole('textbox', { name: /Your response/i }).fill(fixtureDraft)
+  const withheld = await page.evaluate(() => fetch('/api/v1/interview-runs/mock-run-e2e-1/report').then(async response => ({ status: response.status, body: await response.json() })))
+  expect(withheld).toMatchObject({ status: 409, body: { code: 'mock_feedback_withheld' } })
   const complete = page.getByRole('button', { name: /Complete interview/i })
   await complete.click()
   const completeDialog = page.getByRole('alertdialog', { name: /Complete the interview/i })
   await completeDialog.getByRole('button', { name: /Return to answer/i }).click()
   await expect(complete).toBeFocused()
-  await expect(page.getByText(/Facts in transcript/i)).toHaveCount(0)
   await complete.click()
-  await completeDialog.getByRole('button', { name: /Complete & view report/i }).click()
-  await expect(page).toHaveURL(/\/app\/reports$/)
-  await expect(page.getByRole('heading', { name: /Facts in transcript/i })).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.mock.reportKind).toBe('fixture-evaluation')
+  await completeDialog.getByRole('button', { name: /^Complete interview$/i }).click()
+  await expect.poll(async () => page.evaluate(() => fetch('/api/v1/interview-runs/mock-run-e2e-1').then(response => response.json()).then(run => ({ state: run.state, draft: run.draft, activeJobId: run.active_job_id })))).toEqual({ state: 'completing', draft: exactDraft, activeJobId: 'mock-final-evaluation-e2e-1' })
+  await expect(page.getByRole('button', { name: /Open report/i })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/app\/mock\?runId=mock-run-e2e-1$/)
+  expect(completeRequests).toBe(1)
+  await page.evaluate(() => fetch('/api/v1/interview-runs/mock-run-e2e-1?finish=1'))
+  await expect(page.getByRole('button', { name: /Open report/i })).toBeVisible()
+  await page.getByRole('button', { name: /Open report/i }).click()
+  await expect(page).toHaveURL(/\/app\/reports\?runId=mock-run-e2e-1$/)
+  const report = page.locator('main.sb-reports')
+  await expect(report.getByText('Where is the durable idempotency boundary?')).toBeVisible()
+  const reportText = await report.innerText()
+  const orderedSections = [
+    'The transcript identifies the durable idempotency boundary.',
+    'Test the boundary during acknowledgement loss.',
+    'Assumptions',
+    'Facts and corrections',
+    'Trade-offs',
+    'Rubric dimensions',
+    'Ambiguity',
+    'Interview transcript',
+    'Provenance',
+  ]
+  const positions = orderedSections.map(section => reportText.indexOf(section))
+  expect(positions).not.toContain(-1)
+  expect(positions.every((position, index) => index === 0 || positions[index - 1]! < position)).toBe(true)
 })
 
 test('Evidence reads API-backed assessment history and records a dispute without overwriting evidence', async ({ page, diagnostics }) => {
@@ -1451,7 +1497,7 @@ test('focused Mock renders without GlobalHeader or CourseBand at every required 
   void diagnostics
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
-    await open(page, '/app/mock')
+    await open(page, '/app/mock?bundleId=bundle-e2e-1&bundleItemId=bundle-item-technical')
     await expect(page.locator('header.app-header')).toHaveCount(0)
     await expect(page.locator('.app-course-band')).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()

@@ -18,34 +18,4 @@ export const REFERENCE_CODE = `public Reservation reserve(String requestId, Supp
   });
 }`
 
-export const MOCK_PRIOR_TURNS = [
-  {
-    id: 'mock-turn-1',
-    question: 'Place the idempotency boundary for a reservation command consumed from SQS.',
-    answer: 'I would put the boundary at the consumer-to-domain command edge and carry the producer request ID into the same database transaction as the reservation write.',
-  },
-  {
-    id: 'mock-turn-2',
-    question: 'Now two consumers race with the same key. What makes your check safe?',
-    answer: 'A unique key plus an atomic insert wins the race. A prior read is only an optimization; the constraint or compare-and-set decides the outcome.',
-  },
-] as const
-
-export const MOCK_CURRENT_QUESTION = 'The idempotency store is unavailable for 30 seconds. What fails open or closed, and why?'
-export const MOCK_FIXTURE_DRAFT = 'Fail closed for reservation creation, return a retryable failure, and keep the message unacknowledged. Failing open can create an irreversible duplicate. Bound retries, expose the dependency failure, and recover from the queue rather than claiming availability.'
-
-export const FIXTURE_REPORT = {
-  conclusion: 'The transcript defends a duplicate-safe write boundary and names the availability cost of failing closed.',
-  nextAction: 'Practice the same decision when the duplicate key originates outside your trust boundary.',
-  facts: [
-    'The response keeps acknowledgement after the durable decision.',
-    'The response treats the unique constraint or atomic insert as the race arbiter.',
-  ],
-  tradeoffs: [
-    'Failing closed protects reservation integrity but makes the idempotency store part of the write-path availability budget.',
-    'Queue redelivery preserves work but can amplify load unless retries are bounded and observable.',
-  ],
-  assumptions: ['The queue permits redelivery.', 'The duplicate key is stable for the replay horizon.', 'The database operation is atomic.'],
-} as const
-
 export const SIMULATION_LIMITATION = 'Deterministic browser fixture only — no Java process, network request, AWS service, or production environment is used.'

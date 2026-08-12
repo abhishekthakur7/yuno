@@ -66,6 +66,12 @@ class ConflictError(YunoError):
     retryable = False
 
 
+class MockFeedbackWithheldError(ConflictError):
+    """409 — Mock hints and evaluation remain unavailable before completion."""
+
+    code = "mock_feedback_withheld"
+
+
 class IdempotencyConflictError(YunoError):
     """409 — an `Idempotency-Key` was reused with a different request payload."""
 

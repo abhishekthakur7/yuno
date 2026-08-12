@@ -161,5 +161,20 @@ export function useGoalEvidenceReport(goalId: string | null) {
     }
   })
   const progress = useQuery(progressQueryOptions(goalId))
-  return { evidence, entries, progress }
+  const refreshDerivedReads = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'evidence'] }),
+      queryClient.invalidateQueries({ queryKey: ['goals', goalId, 'progress'] }),
+      queryClient.invalidateQueries({ queryKey: ['assessments'] }),
+    ])
+  }
+  const dispute = useMutation({
+    mutationFn: ({ assessmentId, reason }: { assessmentId: string; reason: string }) => createAssessmentDispute(assessmentId, { reason }),
+    onSuccess: refreshDerivedReads,
+  })
+  const reevaluate = useMutation({
+    mutationFn: ({ assessmentId, disputeId }: { assessmentId: string; disputeId: string }) => requestAssessmentReevaluation(assessmentId, { dispute_id: disputeId }),
+    onSuccess: refreshDerivedReads,
+  })
+  return { evidence, entries, progress, dispute, reevaluate }
 }

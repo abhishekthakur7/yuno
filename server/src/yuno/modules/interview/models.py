@@ -136,14 +136,25 @@ class InterviewIdempotencyRow(Base):
 class InterviewRunRow(Base):
     __tablename__ = "interview_runs"
     __table_args__ = (
-        CheckConstraint("mode = 'Practice'", name="mode_valid"),
+        CheckConstraint("mode IN ('Practice','Mock')", name="mode_valid"),
         CheckConstraint(
-            "state IN ('ready','answering','follow-up','submitted','evaluating','feedback-ready','failed-recoverable')",
+            "(mode = 'Practice' AND state IN ('ready','answering','follow-up','submitted','evaluating','feedback-ready','failed-recoverable')) OR "
+            "(mode = 'Mock' AND state IN ('ready','answering','follow-up','paused','completing','completed','failed-recoverable'))",
             name="state_valid",
         ),
         CheckConstraint("length(trim(question)) > 0", name="question_non_blank"),
         CheckConstraint(
             "hint_text IS NULL OR length(trim(hint_text)) > 0", name="hint_non_blank"
+        ),
+        CheckConstraint(
+            "(mode = 'Practice' AND rubric_id IS NOT NULL AND rubric_version IS NOT NULL) OR "
+            "(mode = 'Mock' AND ((rubric_id IS NULL AND rubric_version IS NULL) OR "
+            "(rubric_id IS NOT NULL AND rubric_version IS NOT NULL)) AND hint_text IS NULL)",
+            name="mode_references_valid",
+        ),
+        CheckConstraint(
+            "mode != 'Mock' OR state != 'completed' OR final_assessment_id IS NOT NULL",
+            name="mock_completed_assessment",
         ),
         CheckConstraint("retryable IN (0,1)", name="retryable_valid"),
         UniqueConstraint("id", "owner_id", name="uq_interview_runs_id_owner"),
@@ -165,6 +176,11 @@ class InterviewRunRow(Base):
             ["interview_bundle_items.id", "interview_bundle_items.owner_id"],
             name="fk_interview_runs_item_owner",
         ),
+        ForeignKeyConstraint(
+            ["final_assessment_id", "owner_id", "goal_id"],
+            ["assessments.id", "assessments.owner_id", "assessments.goal_id"],
+            name="fk_interview_runs_final_assessment_owner_goal",
+        ),
     )
     id: Mapped[str] = id_column()
     owner_id: Mapped[str] = mapped_column(
@@ -177,13 +193,15 @@ class InterviewRunRow(Base):
     state: Mapped[str] = mapped_column(Text, nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     hint_text: Mapped[str | None] = mapped_column(Text)
-    rubric_id: Mapped[str] = mapped_column(Text, nullable=False)
-    rubric_version: Mapped[str] = mapped_column(Text, nullable=False)
+    rubric_id: Mapped[str | None] = mapped_column(Text)
+    rubric_version: Mapped[str | None] = mapped_column(Text)
     requested_capability: Mapped[str] = mapped_column(Text, nullable=False)
     active_job_id: Mapped[str | None] = mapped_column(Text)
     active_answer_turn_id: Mapped[str | None] = mapped_column(Text)
     failure_reference: Mapped[str | None] = mapped_column(Text)
     retryable: Mapped[int] = boolean_column("retryable", default=False)
+    draft: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    final_assessment_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
     updated_at: Mapped[str] = utc_timestamp_column()
 

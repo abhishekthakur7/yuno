@@ -22,6 +22,16 @@ class PracticeRunState(StrEnum):
     FAILED_RECOVERABLE = "failed-recoverable"
 
 
+class MockRunState(StrEnum):
+    READY = "ready"
+    ANSWERING = "answering"
+    FOLLOW_UP = "follow-up"
+    PAUSED = "paused"
+    COMPLETING = "completing"
+    COMPLETED = "completed"
+    FAILED_RECOVERABLE = "failed-recoverable"
+
+
 class InterviewTurnKind(StrEnum):
     QUESTION = "question"
     ANSWER = "answer"
@@ -73,16 +83,18 @@ class PracticeRun:
     bundle_id: str
     bundle_item_id: str
     mode: str
-    state: PracticeRunState
+    state: PracticeRunState | MockRunState
     question: str
     hint_text: str | None
-    rubric_id: str
-    rubric_version: str
+    rubric_id: str | None
+    rubric_version: str | None
     requested_capability: str
     active_job_id: str | None
     active_answer_turn_id: str | None
     failure_reference: str | None
     retryable: bool
+    draft: str
+    final_assessment_id: str | None
     created_at: str
     updated_at: str
     turns: tuple[PracticeTurn, ...]

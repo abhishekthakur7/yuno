@@ -20,6 +20,8 @@ from yuno.api.routes.interview import (
     router as interview_router,
 )
 from yuno.api.routes.interview import (
+    run_mock_final_evaluation_job,
+    run_mock_next_turn_job,
     run_practice_evaluation_job,
 )
 from yuno.api.routes.learning_content import router as learning_content_router
@@ -101,6 +103,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     raise RuntimeError("Live evaluation is not configured.")
 
             app.state.evaluation_adapter = UnavailableEvaluationAdapter()
+
+            class UnavailableMockInterviewAdapter:
+                def next_question(self, _run: object) -> str:
+                    raise RuntimeError("Live Mock question generation is not configured.")
+
+            app.state.mock_interview_adapter = UnavailableMockInterviewAdapter()
             dispatcher.register(
                 "assess_evidence",
                 lambda request: run_assessment_job(
@@ -116,6 +124,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             dispatcher.register(
                 "evaluate_practice_answer",
                 lambda request: run_practice_evaluation_job(
+                    request, uow_factory, app.state.evaluation_adapter
+                ),
+            )
+            dispatcher.register(
+                "generate_mock_next_turn",
+                lambda request: run_mock_next_turn_job(
+                    request, uow_factory, app.state.mock_interview_adapter
+                ),
+            )
+            dispatcher.register(
+                "evaluate_mock_final",
+                lambda request: run_mock_final_evaluation_job(
                     request, uow_factory, app.state.evaluation_adapter
                 ),
             )

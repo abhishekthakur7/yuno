@@ -20,14 +20,76 @@ export type PracticeTurn = components['schemas']['PracticeTurnResponse']
 export type PracticeDimension = components['schemas']['PracticeDimensionResultResponse']
 export type PracticeResult = components['schemas']['PracticeTurnResultResponse']
 export type PracticeRun = components['schemas']['PracticeRunResponse']
-export type PracticeRunCreate = components['schemas']['PracticeRunCreateRequest']
+export type PracticeRunCreate = components['schemas']['PracticeRunCreateRequest'] & { mode: 'Practice' }
 export type PracticeJob = components['schemas']['JobRefResponse']
+
+export type MockRun = components['schemas']['MockRunResponse']
+export type MockRunCreate = Omit<components['schemas']['PracticeRunCreateRequest'], 'mode' | 'rubric_id' | 'rubric_version' | 'hint'> & { mode: 'Mock' }
+export type MockReport = components['schemas']['MockReportResponse']
+
+export const mockRunQueryOptions = (runId: string | null) => queryOptions({
+  queryKey: ['interview-runs', runId],
+  enabled: Boolean(runId),
+  queryFn: async () => {
+    const { data, error, response } = await client.GET('/api/v1/interview-runs/{run_id}', { params: { path: { run_id: runId! } } })
+    if (error || !data || data.mode !== 'Mock') failure(error, response.status, 'The Mock run could not be loaded.')
+    return data
+  },
+  refetchInterval: query => ['follow-up', 'completing'].includes((query.state.data as MockRun | undefined)?.state ?? '') ? 500 : false,
+})
+
+export async function createMockRun(body: MockRunCreate) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs', { body })
+  if (error || !data || data.mode !== 'Mock') failure(error, response.status, 'The Mock run could not be created.')
+  return data
+}
+
+export async function pauseMockRun(runId: string, draft: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/pause', { params: { path: { run_id: runId } }, body: { draft } })
+  if (error || !data) failure(error, response.status, 'The Mock draft could not be saved.')
+  return data
+}
+
+export async function resumeMockRun(runId: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/resume', { params: { path: { run_id: runId } } })
+  if (error || !data) failure(error, response.status, 'The Mock run could not be resumed.')
+  return data
+}
+
+export async function submitMockAnswer(runId: string, answer: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/answers', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } }, body: { answer } })
+  if (error || !data) failure(error, response.status, 'The Mock answer could not be submitted.')
+  return data
+}
+
+export async function completeMockRun(runId: string, draft: string, idempotencyKey: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/complete', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': idempotencyKey } }, body: { draft } })
+  if (error || !data) failure(error, response.status, 'The Mock interview could not be completed.')
+  return data
+}
+
+export async function retryMockRun(runId: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/retry-evaluation', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } } })
+  if (error || !data) failure(error, response.status, 'The Mock operation could not be retried.')
+  return data
+}
+
+export const mockReportQueryOptions = (runId: string | null, enabled = true) => queryOptions({
+  queryKey: ['interview-runs', runId, 'report'],
+  enabled: Boolean(runId) && enabled,
+  retry: false,
+  queryFn: async () => {
+    const { data, error, response } = await client.GET('/api/v1/interview-runs/{run_id}/report', { params: { path: { run_id: runId! } } })
+    if (error || !data) failure(error, response.status, 'The Mock report is not available.')
+    return data
+  },
+})
 
 export const practiceRunQueryOptions = (runId: string | null) => queryOptions({
   queryKey: ['interview-runs', runId], enabled: Boolean(runId),
   queryFn: async () => {
     const { data, error, response } = await client.GET('/api/v1/interview-runs/{run_id}', { params: { path: { run_id: runId! } } })
-    if (error || !data) failure(error, response.status, 'The Practice run could not be loaded.')
+    if (error || !data || data.mode !== 'Practice') failure(error, response.status, 'The Practice run could not be loaded.')
     return data
   },
   refetchInterval: query => ['submitted', 'evaluating'].includes(query.state.data?.state ?? '') ? 500 : false,
@@ -35,7 +97,7 @@ export const practiceRunQueryOptions = (runId: string | null) => queryOptions({
 
 export async function createPracticeRun(body: PracticeRunCreate) {
   const { data, error, response } = await client.POST('/api/v1/interview-runs', { body })
-  if (error || !data) failure(error, response.status, 'The Practice run could not be created.')
+  if (error || !data || data.mode !== 'Practice') failure(error, response.status, 'The Practice run could not be created.')
   return data
 }
 
@@ -64,7 +126,7 @@ export async function retryPracticeEvaluation(runId: string) {
 
 export async function cancelPracticeEvaluation(runId: string) {
   const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/cancel-evaluation', { params: { path: { run_id: runId } } })
-  if (error || !data) failure(error, response.status, 'The Practice evaluation could not be cancelled.')
+  if (error || !data || data.mode !== 'Practice') failure(error, response.status, 'The Practice evaluation could not be cancelled.')
   return data
 }
 

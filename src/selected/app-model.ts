@@ -43,7 +43,7 @@ export function appHref(page: AppPage): string {
 
 export const INTERVIEW_MODES = ['refresher', 'questions'] as const
 export type InterviewMode = (typeof INTERVIEW_MODES)[number]
-export type InterviewSelection = { bundleId: string; bundleItemId: string }
+export type InterviewSelection = { bundleId?: string; bundleItemId?: string; runId?: string }
 
 export function isInterviewMode(value: unknown): value is InterviewMode {
   return typeof value === 'string' && (INTERVIEW_MODES as readonly string[]).includes(value)
