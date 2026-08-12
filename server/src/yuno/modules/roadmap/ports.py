@@ -35,10 +35,55 @@ class RoadmapRepository(Protocol):
     def list_transferred_evidence_topic_ids(
         self, owner_id: str, goal_id: str
     ) -> Sequence[str]: ...
+    def add_transferred_evidence(
+        self,
+        learning_state: TransferLearningStateView,
+        transfer_ref: TransferEvidenceRefView,
+    ) -> None: ...
+    def get_learning_state_for_topic(
+        self, owner_id: str, goal_id: str, topic_stable_id: str
+    ) -> LearningState | None: ...
+    def list_transfer_dependents(
+        self, owner_id: str, source_goal_id: str
+    ) -> Sequence[tuple[str, str]]: ...
+    def downgrade_transfer_dependents(
+        self, owner_id: str, source_goal_id: str, *, derived_at: str
+    ) -> None: ...
     def get_idempotency(
         self, owner_id: str, operation: str, key: str
     ) -> RoadmapIdempotencyRecord | None: ...
     def add_idempotency(self, record: RoadmapIdempotencyRecord) -> None: ...
+
+
+class TransferClassificationView(Protocol):
+    value: str
+
+
+class TransferLearningStateView(Protocol):
+    id: str
+    owner_id: str
+    goal_id: str
+    topic_stable_id: str
+    graph_version_id: str
+    classification: TransferClassificationView
+    origin: str
+    recommended_depth: str
+    explanation: str
+    derivation_version: str
+    input_hash: str
+    derived_at: str
+
+
+class TransferEvidenceRefView(Protocol):
+    id: str
+    owner_id: str
+    goal_id: str
+    learning_state_id: str
+    source_goal_id: str
+    source_evidence_id: str
+    classification: TransferClassificationView
+    rationale: str
+    created_at: str
 
 
 class GoalView(Protocol):

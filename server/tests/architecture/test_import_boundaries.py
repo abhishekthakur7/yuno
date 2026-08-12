@@ -51,6 +51,8 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.evidence_evaluation",
+    "yuno.modules.learning_content",
     "yuno.modules.roadmap",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
@@ -72,6 +74,10 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.diagnostics.domain",
     "yuno.modules.diagnostics.ports",
     "yuno.modules.diagnostics.service",
+    "yuno.modules.evidence_evaluation.domain",
+    "yuno.modules.learning_content.domain",
+    "yuno.modules.learning_content.ports",
+    "yuno.modules.learning_content.service",
     "yuno.modules.roadmap.domain",
     "yuno.modules.roadmap.ports",
 }
@@ -81,6 +87,8 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.evidence_evaluation",
+    "yuno.modules.learning_content",
     "yuno.modules.roadmap",
 }
 
@@ -153,6 +161,8 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
         "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
         "yuno.modules.diagnostics.service -> yuno.modules.audit.**",
+        "yuno.modules.evidence_evaluation.ports -> yuno.modules.audit.**",
+        "yuno.modules.evidence_evaluation.service -> yuno.modules.audit.**",
     }
 
 

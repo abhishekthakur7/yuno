@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import {
   ALL_LESSONS, CURRICULUM_MODULES, CURRENT_LESSON_ID, FIXTURE_REPORT,
-  MOCK_CURRENT_QUESTION, PRACTICE_QUESTIONS, SIMULATION_LIMITATION, TOPIC_BRIEF,
+  MOCK_CURRENT_QUESTION, PRACTICE_QUESTIONS, SIMULATION_LIMITATION,
   type Depth, type Lesson,
 } from '../../shared/model'
 import { currentPracticeQuestion, useLearningState } from '../../shared/state'
@@ -19,6 +19,13 @@ import { goalDestination, resumePage, useProfileGoals } from '../../shared/use-p
 import type { GoalCreate, GoalWorkspace } from '../../shared/api/profile-goals'
 import { useDiagnostic, type DiagnosticConfidence, type DiagnosticPreviewEdit, type DiagnosticSetup } from '../../shared/use-diagnostic'
 import { useRoadmap } from '../../shared/use-roadmap'
+import {
+  TOPIC_LAYERS,
+  type TopicCheckpoint,
+  type TopicLayerContent,
+  type TopicLayerName,
+} from '../../shared/api/learning-content'
+import { useTopicContent } from '../../shared/use-topic-content'
 import type { LearnerCorrection } from '../../shared/api/roadmap'
 import type { InterviewMode } from '../app-model'
 import './core.css'
@@ -29,28 +36,6 @@ type Navigate = (page: CorePage | string, mode?: InterviewMode) => void
 type PageProps = { navigate: Navigate }
 const DEPTHS: readonly Depth[] = ['Essential', 'Implementation', 'Production', 'Interview']
 const LESSONS = ALL_LESSONS as readonly Lesson[]
-
-const LESSON_CONTEXT: Readonly<Record<string, { heading: string; explanation: string; evidence: string }>> = {
-  'delivery-contract': { heading: 'Start with the delivery contract', explanation: 'Standard queue delivery may repeat. Separate what the queue promises from what your handler must make safe before choosing a framework pattern.', evidence: 'State the delivery guarantee, the acknowledgement boundary, and one consequence for the consumer.' },
-  'commit-window': { heading: 'Trace the commit window before fixing it', explanation: 'A business write can commit before acknowledgement succeeds. Walk the crash and redelivery sequence so the duplicate risk is concrete.', evidence: 'Produce a failure timeline that identifies the last durable fact at each step.' },
-  'idempotency-retry': { heading: 'Close the race, not just the retry', explanation: 'A read followed by a write is not the arbiter when two consumers observe the same absence. Put the decision in a unique constraint or atomic operation and return the durable winner.', evidence: TOPIC_BRIEF.evidence },
-  'atomic-write': { heading: 'Make one durable decision', explanation: 'The business outcome and duplicate marker need a boundary that cannot expose one without the other. Name the transaction or atomic primitive that provides it.', evidence: 'Explain the atomic boundary and what the losing concurrent request receives.' },
-  'delayed-duplicates': { heading: 'Keep correctness beyond the immediate retry', explanation: 'Delayed and out-of-order deliveries make retention and ordering assumptions visible. Treat both as bounded design inputs, not hidden guarantees.', evidence: 'Defend a duplicate-retention horizon and the behavior after it expires.' },
-  'visibility-timeout': { heading: 'Tune timeouts from observed work', explanation: 'Visibility must cover expected processing while renewals and retries stay bounded. A long timeout reduces churn but lengthens recovery from a lost worker.', evidence: 'Choose a timeout and retry budget from an explicit processing-latency assumption.' },
-  'dead-letter': { heading: 'Quarantine without bypassing correctness', explanation: 'A dead-letter queue isolates poison work; replay still crosses the same duplicate boundary as first delivery.', evidence: 'Outline diagnose, correct, and replay steps that retain the original request key.' },
-  observability: { heading: 'Instrument the decision boundary', explanation: 'Retry count alone cannot distinguish healthy recovery from duplicate amplification. Observe duplicate wins, handler latency, acknowledgement failures, and terminal quarantine.', evidence: 'Propose signals that can separate redelivery, contention, and poison-message failure.' },
-  'failure-injection': { heading: 'Break one boundary at a time', explanation: 'Bounded failure injection makes recovery inspectable when the crash point and expected durable state are declared before the run.', evidence: 'Define one injected failure, the expected durable state, and the recovery observation.' },
-  'tradeoff-review': { heading: 'Defend the availability cost', explanation: 'A duplicate-safe boundary changes the write-path availability budget. Compare fail-closed, fail-open, and deferred-reconciliation consequences under stated assumptions.', evidence: 'Defend one choice while naming the strongest alternative and its cost.' },
-  'transfer-check': { heading: 'Transfer the pattern to a new trust boundary', explanation: 'A client-supplied key changes collision, abuse, and retention assumptions even when the atomic write pattern stays familiar.', evidence: 'Adapt the boundary for an untrusted key and identify the new validation requirement.' },
-}
-
-function lessonById(id: string): Lesson {
-  return LESSONS.find((lesson) => lesson.id === id) ?? LESSONS.find((lesson) => lesson.id === CURRENT_LESSON_ID)!
-}
-
-function moduleForLesson(id: string) {
-  return CURRICULUM_MODULES.find((module) => module.lessons.some((lesson) => lesson.id === id)) ?? CURRICULUM_MODULES[0]!
-}
 
 const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'secondary' | 'quiet' }>(function Button({ children, tone = 'primary', className = '', ...props }, ref) {
   return <button ref={ref} className={`sb-button sb-button--${tone} ${className}`} {...props}>{children}</button>
@@ -447,39 +432,121 @@ function ClassroomProgress({ navigate, previous, previousTarget, next, nextTarge
   return <nav className="sb-classroom-progress" aria-label="Classroom progression"><button onClick={() => onPrevious ? onPrevious() : previousTarget && navigate(previousTarget)} aria-label={`Previous: ${previous}`}><ArrowLeft size={18} /><span><small>Previous</small><strong>{previous}</strong></span></button><button className="sb-progress-roadmap" onClick={() => navigate('learn-roadmap')}><ListTree size={17} /> Return to roadmap</button><button onClick={() => onNext ? onNext() : nextTarget && navigate(nextTarget)} aria-label={`Next: ${next}`}><span><small>Next</small><strong>{next}</strong></span><ArrowRight size={18} /></button></nav>
 }
 
+function TopicLayerTabs({ selected, onSelect }: { selected: TopicLayerName; onSelect: (layer: TopicLayerName) => void }) {
+  return <nav className="sb-layer-tabs" aria-label="Topic layers">
+    {TOPIC_LAYERS.map(layer => <button key={layer} className={selected === layer ? 'is-active' : ''} aria-current={selected === layer ? 'page' : undefined} onClick={() => onSelect(layer)}>{layer}</button>)}
+  </nav>
+}
+
+function CheckpointContract({ checkpoint }: { checkpoint: TopicCheckpoint }) {
+  const fields = [
+    ['Target capability', checkpoint.target_capability],
+    ['Expected artifact', checkpoint.expected_artifact],
+    ['Constraints', checkpoint.constraints.join(' · ')],
+    ['Rubric', checkpoint.rubric.join(' · ')],
+    ['Assumptions', checkpoint.assumptions.join(' · ')],
+    ['Evidence criterion', checkpoint.evidence_criterion],
+    ['Material limitation', checkpoint.limitation],
+  ] as const
+
+  return <aside className="sb-checkpoint-contract">
+    <strong>Checkpoint · {checkpoint.estimated_minutes} minutes</strong>
+    <h3>{checkpoint.scenario}</h3>
+    <dl>{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+  </aside>
+}
+
+function TopicLayerPanel({
+  layerName,
+  layer,
+  checkpointNumber,
+  isPending,
+  isError,
+  onRetry,
+  anchorId,
+}: {
+  layerName: TopicLayerName
+  layer: TopicLayerContent | undefined
+  checkpointNumber: number
+  isPending: boolean
+  isError: boolean
+  onRetry: () => void
+  anchorId: string | undefined
+}) {
+  if (isPending) {
+    return <section className="sb-layer-state" aria-live="polite"><RefreshCcw /><h2>Loading {layerName}</h2><p>Loading approved topic content.</p></section>
+  }
+  if (isError) {
+    return <section className="sb-layer-state" data-layer-state="unavailable" aria-live="polite"><LockKeyhole /><h2>Topic content unavailable</h2><p>Notes and Help are still available.</p><Button onClick={onRetry}>Retry</Button></section>
+  }
+  if (layer?.state === 'ready') {
+    return <section className="sb-reading" id={anchorId}>
+      <span>{String(checkpointNumber).padStart(2, '0')}</span>
+      <div>
+        <h2>{layer.layer}</h2>
+        <div className="sb-layer-copy">{layer.markdown}</div>
+        {layer.checkpoint && <CheckpointContract checkpoint={layer.checkpoint} />}
+      </div>
+    </section>
+  }
+
+  const state = layer?.state ?? 'empty'
+  const stale = state === 'stale'
+  return <section className="sb-layer-state" data-layer-state={state} aria-live="polite">
+    <FileText />
+    <h2>{stale ? `${layerName} is out of date` : `No ${layerName} content yet`}</h2>
+    <p>{stale ? 'This layer needs to be regenerated before you use it.' : 'No content has been approved for this layer.'}</p>
+  </section>
+}
+
 function Topic({ navigate }: PageProps) {
   const { state, dispatch } = useLearningState()
   const workspace = useProfileGoals()
   const goal = workspace.currentGoal
   const roadmap = useRoadmap(goal?.id ?? null)
-  const roadmapIds = (roadmap.roadmap.data?.topics ?? []).filter(topic => !topic.is_skipped).map(topic => topic.stable_id)
+  const [selectedLayer, setSelectedLayer] = useState<TopicLayerName>('Essential')
+  const roadmapTopics = (roadmap.roadmap.data?.topics ?? []).filter(topic => !topic.is_skipped)
+  const roadmapIds = roadmapTopics.map(topic => topic.stable_id)
   const currentLessonId = goal?.resume_position && roadmapIds.includes(goal.resume_position) ? goal.resume_position : (roadmapIds[0] ?? CURRENT_LESSON_ID)
-  const lesson = lessonById(currentLessonId)
-  const module = moduleForLesson(lesson.id)
+  const topicContent = useTopicContent(goal?.id ?? null, currentLessonId)
+  const projectedTopic = roadmapTopics.find(topic => topic.stable_id === currentLessonId)
+  const fixtureLesson = LESSONS.find(lesson => lesson.id === currentLessonId)
   const activeIds = roadmapIds.length ? roadmapIds : [CURRENT_LESSON_ID]
-  const currentIndex = activeIds.indexOf(lesson.id)
-  const previousLesson = currentIndex > 0 ? lessonById(activeIds[currentIndex - 1]!) : null
+  const currentIndex = Math.max(0, activeIds.indexOf(currentLessonId))
+  const previousId = currentIndex > 0 ? activeIds[currentIndex - 1] : null
   const nextId = activeIds[currentIndex + 1]
-  const nextLesson = nextId ? lessonById(nextId) : null
-  const context = LESSON_CONTEXT[lesson.id] ?? LESSON_CONTEXT[CURRENT_LESSON_ID]!
   const selectLesson = (id: string) => {
     if (!workspace.currentGoal) return
     workspace.recordNavigation.mutate({ goal: workspace.currentGoal, position: id, destination: '/app/topic-studio' }, { onSuccess: () => { window.scrollTo({ top: 0 }) } })
   }
-  const projectedTopic = roadmap.roadmap.data?.topics.find(topic => topic.stable_id === lesson.id)
+  const activeLayer = topicContent.data?.layers.find(layer => layer.layer === selectedLayer)
+  const sourcesLayer = topicContent.data?.layers.find(layer => layer.layer === 'Sources')
+  const sourcesMarkdown = sourcesLayer?.state === 'ready' ? sourcesLayer.markdown : null
+  const title = projectedTopic?.title ?? fixtureLesson?.title ?? currentLessonId
+  const previousTitle = roadmapTopics.find(topic => topic.stable_id === previousId)?.title ?? previousId ?? 'Course roadmap'
+  const nextTitle = roadmapTopics.find(topic => topic.stable_id === nextId)?.title ?? nextId ?? 'Guided practice'
   return <Classroom navigate={navigate}><article className="sb-topic">
-    <PageIntro eyebrow={`Section ${CURRICULUM_MODULES.indexOf(module) + 1} · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={lesson.title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{lesson.id === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{projectedTopic?.depth_override ?? projectedTopic?.recommended_depth ?? lesson.recommendedDepth} · {lesson.duration} · target capability: {projectedTopic?.target_capability ?? lesson.capability}</span></PageIntro>
-    <section className="sb-reading"><span>{String(currentIndex + 1).padStart(2, '0')}</span><div><h2>{context.heading}</h2>{lesson.id === CURRENT_LESSON_ID && <p>{TOPIC_BRIEF.problem}</p>}<p>{context.explanation}</p><aside><strong>Evidence target</strong><p>{context.evidence}</p></aside></div></section>
-    {lesson.id === CURRENT_LESSON_ID ? <section className="sb-code" id="sb-lesson-artifact"><header><span><Code2 size={17} /> ReservationService.java</span><Button tone="quiet" onClick={() => dispatch({ type: 'RESET_CODE' })}><RotateCcw size={15} /> Reset</Button></header><label className="sb-sr-only" htmlFor="sb-code">Java code</label><textarea id="sb-code" value={state.codeDraft} onChange={e => dispatch({ type: 'SET_CODE', value: e.target.value })} spellCheck={false} />
+    <PageIntro eyebrow={`Topic Studio · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{currentLessonId === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{projectedTopic?.depth_override ?? projectedTopic?.recommended_depth ?? 'Essential'} · target capability: {projectedTopic?.target_capability ?? 'unverified'}</span></PageIntro>
+    <TopicLayerTabs selected={selectedLayer} onSelect={setSelectedLayer} />
+    <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
+    {currentLessonId === CURRENT_LESSON_ID ? <section className="sb-code" id="sb-lesson-artifact"><header><span><Code2 size={17} /> ReservationService.java</span><Button tone="quiet" onClick={() => dispatch({ type: 'RESET_CODE' })}><RotateCcw size={15} /> Reset</Button></header><label className="sb-sr-only" htmlFor="sb-code">Java code</label><textarea id="sb-code" value={state.codeDraft} onChange={e => dispatch({ type: 'SET_CODE', value: e.target.value })} spellCheck={false} />
       <footer><p>{SIMULATION_LIMITATION}</p><div><Button tone="secondary" onClick={() => dispatch({ type: 'RUN_CHECKS' })}><Play size={16} /> Run static checks</Button><Button onClick={() => dispatch({ type: 'SUBMIT_CODE' })}><ShieldCheck size={16} /> Submit evidence</Button></div></footer>
       <div className="sb-output" aria-live="polite"><header><strong>Static check output</strong><span>{state.runResult?.status ?? 'Not run'}</span></header>{state.runResult ? state.runResult.checks.map(check => <div key={check.label}><span className={check.passed ? 'is-pass' : 'is-fail'}>{check.passed ? <Check size={14} /> : <X size={14} />}</span><p><strong>{check.label}</strong><small>{check.detail}</small></p></div>) : <p>No process will run. These deterministic browser checks inspect text patterns only.</p>}</div>
-    </section> : <section className="sb-checkpoint-note" id="sb-lesson-artifact"><FileText size={22} /><div><strong>Reading checkpoint</strong><p>This lesson has no runnable artifact in the selected local fixture. Continue through the sequenced curriculum or use the roadmap to change its depth and inferred state.</p></div></section>}
-  </article><TopicTools /><ClassroomProgress navigate={navigate} previous={previousLesson?.title ?? 'Course roadmap'} previousTarget={previousLesson ? undefined : 'learn-roadmap'} onPrevious={previousLesson ? () => selectLesson(previousLesson.id) : undefined} next={nextLesson?.title ?? 'Guided practice'} nextTarget={nextLesson ? undefined : 'practice'} onNext={nextLesson ? () => selectLesson(nextLesson.id) : undefined} /></Classroom>
+    </section> : null}
+  </article><TopicTools conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
 }
 
-function TopicTools() {
+function TopicTools({ conversationScope, sourcesMarkdown }: { conversationScope: string | null; sourcesMarkdown: string | null }) {
   const { state, dispatch } = useLearningState()
-  return <Tabs.Root id="sb-lesson-tools" defaultValue="notes" className="sb-tools"><Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List><Tabs.Content value="notes"><label htmlFor="sb-notes">Goal notebook · user entry</label><textarea id="sb-notes" value={state.codeNotes} onChange={e => dispatch({ type: 'SET_NOTES', value: e.target.value })} /></Tabs.Content><Tabs.Content value="resources"><a href={TOPIC_BRIEF.sourceUrl} target="_blank" rel="noreferrer"><FileText size={18} /><span><strong>{TOPIC_BRIEF.source}</strong><small>Official source · opens a new tab</small></span><ArrowRight size={16} /></a></Tabs.Content><Tabs.Content value="help"><div className="sb-empty"><MessageSquareText /><strong>Topic help is unavailable in this static presentation</strong><span>No provider or network request is configured.</span></div></Tabs.Content></Tabs.Root>
+  return <Tabs.Root id="sb-lesson-tools" defaultValue="notes" className="sb-tools">
+    <Tabs.List aria-label="Secondary lesson tools"><Tabs.Trigger value="notes"><NotebookPen size={16} /> Notes</Tabs.Trigger><Tabs.Trigger value="resources"><BookOpen size={16} /> Resources</Tabs.Trigger><Tabs.Trigger value="help"><HelpCircle size={16} /> Help</Tabs.Trigger></Tabs.List>
+    <Tabs.Content value="notes"><label htmlFor="sb-notes">Goal notebook</label><textarea id="sb-notes" value={state.codeNotes} onChange={e => dispatch({ type: 'SET_NOTES', value: e.target.value })} /></Tabs.Content>
+    <Tabs.Content value="resources">{sourcesMarkdown
+      ? <div className="sb-tool-content"><FileText size={18} /><div><strong>Approved sources</strong><p>{sourcesMarkdown}</p></div></div>
+      : <div className="sb-empty"><FileText /><strong>No approved sources yet</strong><span>Check the Sources layer after content is published.</span></div>}
+    </Tabs.Content>
+    <Tabs.Content value="help"><div className="sb-empty" data-conversation-scope={conversationScope ?? undefined}><MessageSquareText /><strong>{conversationScope ? 'Conversation attached to this topic' : 'Topic conversation unavailable'}</strong><span>{conversationScope ? 'Messages stay with this topic. Chat is not connected yet.' : 'Retry the topic content request to restore it.'}</span></div></Tabs.Content>
+  </Tabs.Root>
 }
 
 function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) {

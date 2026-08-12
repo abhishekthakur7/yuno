@@ -76,16 +76,28 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         return _profile(row)
 
     def list_goals(self, owner_id: str) -> Sequence[GoalWorkspace]:
-        stmt = owner_scoped_select(GoalWorkspaceRow, owner_id).order_by(
-            GoalWorkspaceRow.updated_at.desc()
+        stmt = (
+            owner_scoped_select(GoalWorkspaceRow, owner_id)
+            .where(GoalWorkspaceRow.status != "tombstoned")
+            .order_by(GoalWorkspaceRow.updated_at.desc())
         )
         return tuple(_goal(row) for row in self._session.scalars(stmt).all())
 
     def get_goal(self, owner_id: str, goal_id: str) -> GoalWorkspace | None:
         stmt = owner_scoped_select(GoalWorkspaceRow, owner_id).where(
-            GoalWorkspaceRow.id == goal_id
+            GoalWorkspaceRow.id == goal_id, GoalWorkspaceRow.status != "tombstoned"
         )
         row = self._session.scalars(stmt).one_or_none()
+        return _goal(row) if row is not None else None
+
+    def get_goal_for_lifecycle(
+        self, owner_id: str, goal_id: str
+    ) -> GoalWorkspace | None:
+        row = self._session.scalars(
+            owner_scoped_select(GoalWorkspaceRow, owner_id).where(
+                GoalWorkspaceRow.id == goal_id
+            )
+        ).one_or_none()
         return _goal(row) if row is not None else None
 
     def create_goal(self, goal: GoalWorkspace) -> GoalWorkspace:
@@ -109,6 +121,28 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         self._session.add(row)
         self._session.flush()
         return _goal(row)
+
+    def tombstone_goal(
+        self, owner_id: str, goal_id: str, expected_version: int
+    ) -> GoalWorkspace | None:
+        result = self._session.execute(
+            update(GoalWorkspaceRow)
+            .where(
+                GoalWorkspaceRow.owner_id == owner_id,
+                GoalWorkspaceRow.id == goal_id,
+                GoalWorkspaceRow.row_version == expected_version,
+                GoalWorkspaceRow.status != "tombstoned",
+            )
+            .values(
+                status="tombstoned",
+                row_version=expected_version + 1,
+                updated_at=now_text(self._clock),
+            )
+        )
+        if result.rowcount != 1:
+            return None
+        self._session.flush()
+        return self.get_goal_for_lifecycle(owner_id, goal_id)
 
     def update_goal(
         self,

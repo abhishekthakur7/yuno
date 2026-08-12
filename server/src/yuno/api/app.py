@@ -17,6 +17,7 @@ from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
 from yuno.api.routes.canonical import router as canonical_router
 from yuno.api.routes.diagnostics import router as diagnostics_router
+from yuno.api.routes.learning_content import router as learning_content_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
 from yuno.api.routes.roadmap import router as roadmap_router
 from yuno.api.routes.system import router as system_router
@@ -61,6 +62,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             dispatcher = InProcessJobDispatcher()
 
+            def unavailable_generation(_request: object) -> None:
+                raise RuntimeError("Live generation is not configured.")
+
+            dispatcher.register("generate_topic_content", unavailable_generation)
+            dispatcher.register("regenerate_artifact", unavailable_generation)
+
             app.state.engine = engine
             app.state.session_factory = session_factory
             app.state.uow_factory = uow_factory
@@ -91,6 +98,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(canonical_router)
     api_router.include_router(profiles_goals_router)
     api_router.include_router(diagnostics_router)
+    api_router.include_router(learning_content_router)
     api_router.include_router(roadmap_router)
     app.include_router(api_router)
 

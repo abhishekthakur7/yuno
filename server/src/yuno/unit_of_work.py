@@ -32,6 +32,8 @@ from yuno.modules.canonical.ports import CanonicalGraphRepository
 from yuno.modules.canonical.repository import SqlAlchemyCanonicalRepository
 from yuno.modules.diagnostics.ports import DiagnosticsRepository
 from yuno.modules.diagnostics.repository import SqlAlchemyDiagnosticsRepository
+from yuno.modules.evidence_evaluation.ports import EvidenceRepository
+from yuno.modules.evidence_evaluation.repository import SqlAlchemyEvidenceRepository
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.modules.identity.repository import SqlAlchemyOwnerRepository
 from yuno.modules.profiles_goals.ports import ProfilesGoalsRepository
@@ -75,6 +77,7 @@ class SqlAlchemyUnitOfWork:
     audit: AuditRepository
     canonical: CanonicalGraphRepository
     diagnostics: DiagnosticsRepository
+    evidence: EvidenceRepository
     profiles_goals: ProfilesGoalsRepository
     roadmap: RoadmapRepository
 
@@ -94,6 +97,7 @@ class SqlAlchemyUnitOfWork:
         self.audit = SqlAlchemyAuditRepository(self._session)
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
         self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
+        self.evidence = SqlAlchemyEvidenceRepository(self._session)
         self.profiles_goals = SqlAlchemyProfilesGoalsRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
         return self
@@ -158,7 +162,9 @@ class SqlAlchemyUnitOfWork:
         return self._session
 
 
-def create_unit_of_work_factory(session_factory: sessionmaker[Session]) -> UnitOfWorkFactory:
+def create_unit_of_work_factory(
+    session_factory: sessionmaker[Session],
+) -> UnitOfWorkFactory:
     """Return a zero-arg callable that builds a fresh `SqlAlchemyUnitOfWork`
     bound to `session_factory` on every call (spec §3.4: one UoW per HTTP
     command -- a caller invokes this factory once per command, uses the

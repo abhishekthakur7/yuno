@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, status
 
 from yuno.api.contracts import (
     GoalCreateRequest,
+    GoalDeleteImpactResponse,
+    GoalDeleteRequest,
     GoalPatchRequest,
     GoalResponse,
     LearnerProfilePatchRequest,
@@ -19,6 +21,12 @@ from yuno.api.dependencies import (
     idempotency_key,
     if_match,
     parse_if_match,
+)
+from yuno.modules.evidence_evaluation.domain import DeleteImpact
+from yuno.modules.evidence_evaluation.ports import EvidenceUnitOfWork
+from yuno.modules.evidence_evaluation.service import (
+    create_delete_preflight,
+    delete_goal,
 )
 from yuno.modules.profiles_goals.domain import (
     GoalWorkspace,
@@ -208,6 +216,88 @@ def post_archive_goal(
     )
     uow.commit()
     return response
+
+
+@router.post(
+    "/goals/{goal_id}/delete-preflight", response_model=GoalDeleteImpactResponse
+)
+def post_goal_delete_preflight(
+    goal_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> GoalDeleteImpactResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
+    operation = f"delete_preflight:{goal_id}"
+    request_hash = hash_payload({"goal_id": goal_id})
+    prior = uow.profiles_goals.get_idempotency(owner_id, operation, key)
+    if prior is not None:
+        if prior.request_hash != request_hash:
+            raise IdempotencyConflictError(
+                "The Idempotency-Key was reused with a different preflight request."
+            )
+        return GoalDeleteImpactResponse.model_validate_json(prior.response_json)
+    impact = create_delete_preflight(uow, owner_id, goal_id)
+    response = _delete_impact_response(impact)
+    uow.profiles_goals.add_idempotency(
+        IdempotencyRecord(
+            id=new_id(),
+            owner_id=owner_id,
+            operation=operation,
+            idempotency_key=key,
+            request_hash=request_hash,
+            goal_id=goal_id,
+            response_json=response.model_dump_json(),
+            created_at=now_text(SystemClock()),
+        )
+    )
+    uow.commit()
+    return response
+
+
+@router.post("/goals/{goal_id}/delete", response_model=GoalDeleteImpactResponse)
+def post_goal_delete(
+    goal_id: str,
+    body: GoalDeleteRequest,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
+    key: Annotated[str, Depends(idempotency_key)],
+) -> GoalDeleteImpactResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
+    operation = f"delete_goal:{goal_id}"
+    request_hash = hash_payload({"goal_id": goal_id, "snapshot_id": body.snapshot_id})
+    prior = uow.profiles_goals.get_idempotency(owner_id, operation, key)
+    if prior is not None:
+        if prior.request_hash != request_hash:
+            raise IdempotencyConflictError(
+                "The Idempotency-Key was reused with a different delete request."
+            )
+        return GoalDeleteImpactResponse.model_validate_json(prior.response_json)
+    impact = delete_goal(uow, owner_id, goal_id, body.snapshot_id)
+    response = _delete_impact_response(impact)
+    uow.profiles_goals.add_idempotency(
+        IdempotencyRecord(
+            id=new_id(),
+            owner_id=owner_id,
+            operation=operation,
+            idempotency_key=key,
+            request_hash=request_hash,
+            goal_id=goal_id,
+            response_json=response.model_dump_json(),
+            created_at=now_text(SystemClock()),
+        )
+    )
+    uow.commit()
+    return response
+
+
+def _delete_impact_response(impact: DeleteImpact) -> GoalDeleteImpactResponse:
+    return GoalDeleteImpactResponse(
+        snapshot_id=impact.snapshot_id,
+        goal_id=impact.goal_id,
+        evidence_ids=list(impact.evidence_ids),
+        learning_state_ids=list(impact.learning_state_ids),
+    )
 
 
 def _profile_response(profile: LearnerProfile) -> LearnerProfileResponse:

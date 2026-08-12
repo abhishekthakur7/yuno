@@ -21,6 +21,7 @@ from yuno.modules.diagnostics.domain import (
     DiagnosticTargetLevel,
     UntrustedSeedKind,
 )
+from yuno.modules.learning_content.domain import Capability, LayerState, TopicLayer
 from yuno.modules.profiles_goals.domain import (
     GoalPath,
     GoalStatus,
@@ -135,6 +136,58 @@ class GoalResponse(BaseModel):
     row_version: int
     created_at: str
     updated_at: str
+
+
+class GoalDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    snapshot_id: str
+
+
+class GoalDeleteImpactResponse(BaseModel):
+    snapshot_id: str
+    goal_id: str
+    evidence_ids: list[str]
+    learning_state_ids: list[str]
+
+
+class TopicCheckpointResponse(BaseModel):
+    scenario: str
+    constraints: list[str]
+    target_capability: Capability
+    expected_artifact: str
+    estimated_minutes: int = Field(ge=30, le=60)
+    rubric: list[str]
+    assumptions: list[str]
+    evidence_criterion: str
+    limitation: str
+
+
+class TopicLayerResponse(BaseModel):
+    layer: TopicLayer
+    state: LayerState
+    revision_id: str | None
+    markdown: str | None
+    markdown_hash: str | None
+    checkpoint: TopicCheckpointResponse | None
+
+
+class TopicLayersResponse(BaseModel):
+    goal_id: str
+    graph_version_id: str
+    topic_id: str
+    conversation_scope: str
+    layers: list[TopicLayerResponse]
+
+
+class TopicDetailResponse(BaseModel):
+    graph_version_id: str
+    stable_id: str
+    title: str
+    subject: str
+    scope_tags: list[str]
+    level_tag: str
+    target_capability: Capability
+    recommended_layer: str
 
 
 class DiagnosticCreateRequest(BaseModel):

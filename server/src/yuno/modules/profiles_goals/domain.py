@@ -31,6 +31,7 @@ class TargetCapability(StrEnum):
 class GoalStatus(StrEnum):
     ACTIVE = "active"
     ARCHIVED = "archived"
+    TOMBSTONED = "tombstoned"
 
 
 class ResumeDestination(StrEnum):

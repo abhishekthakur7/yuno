@@ -14,6 +14,7 @@ from __future__ import annotations
 from yuno.modules.audit import models as audit_models
 from yuno.modules.canonical import models as canonical_models
 from yuno.modules.diagnostics import models as diagnostics_models
+from yuno.modules.evidence_evaluation import models as evidence_evaluation_models
 from yuno.modules.identity import models as identity_models
 from yuno.modules.profiles_goals import models as profiles_goals_models
 from yuno.modules.roadmap import models as roadmap_models
@@ -22,6 +23,7 @@ __all__ = [
     "audit_models",
     "canonical_models",
     "diagnostics_models",
+    "evidence_evaluation_models",
     "identity_models",
     "profiles_goals_models",
     "roadmap_models",

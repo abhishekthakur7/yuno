@@ -221,6 +221,18 @@
         "title": "CanonicalVersionSummaryResponse",
         "type": "object"
       },
+      "Capability": {
+        "enum": [
+          "know",
+          "understand",
+          "choose",
+          "implement",
+          "diagnose",
+          "defend"
+        ],
+        "title": "Capability",
+        "type": "string"
+      },
       "CorrectionType": {
         "enum": [
           "correction",
@@ -942,6 +954,54 @@
         "title": "GoalCreateRequest",
         "type": "object"
       },
+      "GoalDeleteImpactResponse": {
+        "properties": {
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "learning_state_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Learning State Ids",
+            "type": "array"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "goal_id",
+          "evidence_ids",
+          "learning_state_ids"
+        ],
+        "title": "GoalDeleteImpactResponse",
+        "type": "object"
+      },
+      "GoalDeleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id"
+        ],
+        "title": "GoalDeleteRequest",
+        "type": "object"
+      },
       "GoalPatchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1177,7 +1237,8 @@
       "GoalStatus": {
         "enum": [
           "active",
-          "archived"
+          "archived",
+          "tombstoned"
         ],
         "title": "GoalStatus",
         "type": "string"
@@ -1200,6 +1261,60 @@
         ],
         "title": "HealthResponse",
         "type": "object"
+      },
+      "JobRefResponse": {
+        "description": "Mirrors `application.jobs.JobRef` \u2014 the `202` enqueue response body\nevery async endpoint returns via `accepted_job`.",
+        "properties": {
+          "deduplicated": {
+            "default": false,
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "enqueued_at": {
+            "title": "Enqueued At",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          }
+        },
+        "required": [
+          "job_id",
+          "kind",
+          "status",
+          "enqueued_at"
+        ],
+        "title": "JobRefResponse",
+        "type": "object"
+      },
+      "JobStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "title": "JobStatus",
+        "type": "string"
+      },
+      "LayerState": {
+        "enum": [
+          "ready",
+          "empty",
+          "stale",
+          "unavailable"
+        ],
+        "title": "LayerState",
+        "type": "string"
       },
       "LearnerCorrectionRequest": {
         "additionalProperties": false,
@@ -1632,6 +1747,232 @@
         "title": "TargetLevel",
         "type": "string"
       },
+      "TopicCheckpointResponse": {
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "estimated_minutes": {
+            "maximum": 60.0,
+            "minimum": 30.0,
+            "title": "Estimated Minutes",
+            "type": "integer"
+          },
+          "evidence_criterion": {
+            "title": "Evidence Criterion",
+            "type": "string"
+          },
+          "expected_artifact": {
+            "title": "Expected Artifact",
+            "type": "string"
+          },
+          "limitation": {
+            "title": "Limitation",
+            "type": "string"
+          },
+          "rubric": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rubric",
+            "type": "array"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "target_capability": {
+            "$ref": "#/components/schemas/Capability"
+          }
+        },
+        "required": [
+          "scenario",
+          "constraints",
+          "target_capability",
+          "expected_artifact",
+          "estimated_minutes",
+          "rubric",
+          "assumptions",
+          "evidence_criterion",
+          "limitation"
+        ],
+        "title": "TopicCheckpointResponse",
+        "type": "object"
+      },
+      "TopicDetailResponse": {
+        "properties": {
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "level_tag": {
+            "title": "Level Tag",
+            "type": "string"
+          },
+          "recommended_layer": {
+            "title": "Recommended Layer",
+            "type": "string"
+          },
+          "scope_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope Tags",
+            "type": "array"
+          },
+          "stable_id": {
+            "title": "Stable Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "target_capability": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph_version_id",
+          "stable_id",
+          "title",
+          "subject",
+          "scope_tags",
+          "level_tag",
+          "target_capability",
+          "recommended_layer"
+        ],
+        "title": "TopicDetailResponse",
+        "type": "object"
+      },
+      "TopicLayer": {
+        "enum": [
+          "Essential",
+          "Implementation",
+          "Internals",
+          "Production",
+          "Alternatives",
+          "Failures",
+          "Interview",
+          "Sources"
+        ],
+        "title": "TopicLayer",
+        "type": "string"
+      },
+      "TopicLayerResponse": {
+        "properties": {
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicCheckpointResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "layer": {
+            "$ref": "#/components/schemas/TopicLayer"
+          },
+          "markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markdown"
+          },
+          "markdown_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markdown Hash"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "state": {
+            "$ref": "#/components/schemas/LayerState"
+          }
+        },
+        "required": [
+          "layer",
+          "state",
+          "revision_id",
+          "markdown",
+          "markdown_hash",
+          "checkpoint"
+        ],
+        "title": "TopicLayerResponse",
+        "type": "object"
+      },
+      "TopicLayersResponse": {
+        "properties": {
+          "conversation_scope": {
+            "title": "Conversation Scope",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "graph_version_id": {
+            "title": "Graph Version Id",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/TopicLayerResponse"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "graph_version_id",
+          "topic_id",
+          "conversation_scope",
+          "layers"
+        ],
+        "title": "TopicLayersResponse",
+        "type": "object"
+      },
       "UntrustedSeedKind": {
         "enum": [
           "notes",
@@ -1648,6 +1989,64 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/artifacts/{artifact_id}/regenerate": {
+      "post": {
+        "operationId": "regenerate_artifact_api_v1_artifacts__artifact_id__regenerate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Regenerate Artifact",
+        "tags": [
+          "learning-content"
+        ]
+      }
+    },
     "/api/v1/canonical/versions": {
       "get": {
         "description": "List every approved canonical graph version.",
@@ -2479,6 +2878,132 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/delete": {
+      "post": {
+        "operationId": "post_goal_delete_api_v1_goals__goal_id__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalDeleteImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Goal Delete",
+        "tags": [
+          "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/delete-preflight": {
+      "post": {
+        "operationId": "post_goal_delete_preflight_api_v1_goals__goal_id__delete_preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalDeleteImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Goal Delete Preflight",
+        "tags": [
+          "profiles-goals"
+        ]
+      }
+    },
     "/api/v1/goals/{goal_id}/depth-overrides": {
       "post": {
         "operationId": "post_depth_api_v1_goals__goal_id__depth_overrides_post",
@@ -2771,6 +3296,191 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/generate": {
+      "post": {
+        "operationId": "generate_topic_layer_api_v1_goals__goal_id__topics__topic_id__generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TopicLayer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Generate Topic Layer",
+        "tags": [
+          "learning-content"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/layers": {
+      "get": {
+        "operationId": "get_topic_layers_api_v1_goals__goal_id__topics__topic_id__layers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicLayersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Topic Layers",
+        "tags": [
+          "learning-content"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/layers/{layer}": {
+      "get": {
+        "operationId": "get_topic_layer_api_v1_goals__goal_id__topics__topic_id__layers__layer__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TopicLayer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicLayerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Topic Layer",
+        "tags": [
+          "learning-content"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "description": "Liveness/readiness probe. The server only starts once\n`api.app.create_app` has confirmed a single Alembic head, so a `200`\nhere implies the schema is at a known revision.",
@@ -2888,6 +3598,57 @@
         "summary": "Update Profile",
         "tags": [
           "profiles-goals"
+        ]
+      }
+    },
+    "/api/v1/topics/{topic_id}": {
+      "get": {
+        "operationId": "get_topic_detail_api_v1_topics__topic_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "topic_id",
+            "required": true,
+            "schema": {
+              "title": "Topic Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "graph_version",
+            "required": true,
+            "schema": {
+              "title": "Graph Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Topic Detail",
+        "tags": [
+          "learning-content"
         ]
       }
     }

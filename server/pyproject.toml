@@ -74,6 +74,8 @@ containers = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.evidence_evaluation",
+    "yuno.modules.learning_content",
     "yuno.modules.roadmap",
 ]
 layers = [
@@ -104,6 +106,10 @@ source_modules = [
     "yuno.modules.diagnostics.domain",
     "yuno.modules.diagnostics.ports",
     "yuno.modules.diagnostics.service",
+    "yuno.modules.evidence_evaluation.domain",
+    "yuno.modules.learning_content.domain",
+    "yuno.modules.learning_content.ports",
+    "yuno.modules.learning_content.service",
     "yuno.modules.roadmap.domain",
     "yuno.modules.roadmap.ports",
 ]
@@ -138,6 +144,8 @@ modules = [
     "yuno.modules.canonical",
     "yuno.modules.profiles_goals",
     "yuno.modules.diagnostics",
+    "yuno.modules.evidence_evaluation",
+    "yuno.modules.learning_content",
     "yuno.modules.roadmap",
 ]
 ignore_imports = [
@@ -148,4 +156,6 @@ ignore_imports = [
     "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
     "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
     "yuno.modules.diagnostics.service -> yuno.modules.audit.**",
+    "yuno.modules.evidence_evaluation.ports -> yuno.modules.audit.**",
+    "yuno.modules.evidence_evaluation.service -> yuno.modules.audit.**",
 ]

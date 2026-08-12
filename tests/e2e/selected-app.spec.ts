@@ -137,6 +137,25 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'layers' && path.includes('topics')) {
+      const scopedGoalId = path.at(-4)!
+      const topicId = path.at(-2)!
+      await route.fulfill({ json: {
+        goal_id: scopedGoalId, graph_version_id: 'graph-1', topic_id: topicId,
+        conversation_scope: `${scopedGoalId}:${topicId}`,
+        layers: ['Essential', 'Implementation', 'Internals', 'Production', 'Alternatives', 'Failures', 'Interview', 'Sources'].map((layer, index) => ({
+          layer, state: 'ready', revision_id: `${topicId}-${layer}`, markdown_hash: `hash-${topicId}-${layer}`,
+          markdown: `# ${layer}\n\nApproved fixture content for ${topicId}.`,
+          checkpoint: {
+            scenario: `Apply ${topicId} under a declared failure constraint.`, constraints: ['Keep the durable boundary explicit.'],
+            target_capability: 'implement', expected_artifact: 'A reviewed implementation or design decision.', estimated_minutes: 30 + index,
+            rubric: ['Names the boundary and trade-off.'], assumptions: ['The approved fixture graph applies.'],
+            evidence_criterion: 'Submit the artifact and explain the decision.', limitation: 'Static review cannot prove runtime behavior.',
+          },
+        })),
+      } })
+      return
+    }
     const goalId = path.at(-2)
     if (path.at(-1) === 'roadmap') {
       await route.fulfill({ json: {
@@ -726,7 +745,7 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   await expect(page.getByRole('tab', { name: /Resources/i })).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('tab', { name: /Help/i })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText(/Topic help is unavailable/i)).toBeVisible()
+  await expect(page.getByText(/Conversation attached to this topic/i)).toBeVisible()
 
   const courseContent = page.getByRole('button', { name: /Course content/i })
   await courseContent.focus()

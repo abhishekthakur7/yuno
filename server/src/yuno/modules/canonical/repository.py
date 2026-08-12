@@ -199,6 +199,40 @@ class SqlAlchemyCanonicalRepository(SqlAlchemyRepository):
         rows = self._session.scalars(stmt).all()
         return [_relation_to_domain(row) for row in rows]
 
+    def get_published_content_revisions(
+        self, version_id: str, topic_stable_id: str
+    ) -> Sequence[ContentRevision]:
+        stmt = (
+            select(ContentRevisionRow)
+            .join(
+                EditorialApprovalRow,
+                EditorialApprovalRow.graph_version_id
+                == ContentRevisionRow.graph_version_id,
+            )
+            .where(
+                ContentRevisionRow.graph_version_id == version_id,
+                ContentRevisionRow.topic_stable_id == topic_stable_id,
+            )
+            .order_by(ContentRevisionRow.created_at, ContentRevisionRow.id)
+        )
+        return [
+            ContentRevision(
+                id=row.id,
+                graph_version_id=row.graph_version_id,
+                topic_stable_id=row.topic_stable_id,
+                layer=row.layer,
+                kind=row.kind,
+                status=row.status,
+                markdown_ref=row.markdown_ref,
+                markdown_hash=row.markdown_hash,
+                prompt_template_version=row.prompt_template_version,
+                creator_owner_id=row.creator_owner_id,
+                supersedes_revision_id=row.supersedes_revision_id,
+                created_at=row.created_at,
+            )
+            for row in self._session.scalars(stmt).all()
+        ]
+
     # --- Pre-write lookups ----------------------------------------------
 
     def version_label_exists(self, version_label: str) -> bool:

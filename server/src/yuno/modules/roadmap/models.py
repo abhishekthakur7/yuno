@@ -208,11 +208,21 @@ class TransferredEvidenceRefRow(Base):
             ["goal_workspaces.id", "goal_workspaces.owner_id"],
             name="fk_transferred_evidence_refs_source_goal_owner",
         ),
+        ForeignKeyConstraint(
+            ["source_evidence_id", "owner_id", "source_goal_id"],
+            ["evidence.id", "evidence.owner_id", "evidence.goal_id"],
+            name="fk_transferred_evidence_refs_source_evidence_owner_goal",
+        ),
         UniqueConstraint(
             "id",
             "owner_id",
             "goal_id",
             name="uq_transferred_evidence_refs_id_owner_goal",
+        ),
+        UniqueConstraint(
+            "learning_state_id",
+            "source_evidence_id",
+            name="uq_transferred_evidence_refs_state_evidence",
         ),
     )
     id: Mapped[str] = id_column()

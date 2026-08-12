@@ -91,9 +91,8 @@ def test_every_read_path_in_the_codebase_is_enumerated_here() -> None:
     added to `test_half_seeded_version_unreadable_through_every_read_path`
     below, instead of that test silently covering fewer paths than exist.
 
-    No `roadmap`/`topic-studio`/`search`/`generation`/`diff` module exists
-    yet (spec §6.1 step 6 names these as future read surfaces); `canonical`'s
-    own repository and the two API routes are the entire set today.
+    IDK-201 adds the content-revision read; it must remain gated by the same
+    approval join as topics and relations.
     """
     read_methods = {
         name
@@ -105,6 +104,7 @@ def test_every_read_path_in_the_codebase_is_enumerated_here() -> None:
         "list_published_versions",
         "get_published_topics",
         "get_published_relations",
+        "get_published_content_revisions",
     }
 
     route_paths = {route.path for route in canonical_routes.router.routes}
@@ -186,12 +186,18 @@ def test_half_seeded_version_unreadable_through_every_read_path(
     version_id = _seed_half_seeded_material(uow_factory, owner_id=owner.id)
     fixture_version_label = load_fixture("half_seeded").manifest.version_label
 
-    # -- Repository reads (all four) --
+    # Repository reads
     with uow_factory() as uow:
         assert uow.canonical.get_published_version(version_id) is None
         assert version_id not in {v.id for v in uow.canonical.list_published_versions()}
         assert uow.canonical.get_published_topics(version_id) == []
         assert uow.canonical.get_published_relations(version_id) == []
+        assert (
+            uow.canonical.get_published_content_revisions(
+                version_id, "fixture-half-seeded-topic"
+            )
+            == []
+        )
 
     # -- API: GET /api/v1/canonical/versions --
     list_response = client.get("/api/v1/canonical/versions")

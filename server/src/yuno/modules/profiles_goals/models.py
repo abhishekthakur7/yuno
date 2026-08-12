@@ -28,7 +28,9 @@ class GoalWorkspaceRow(Base):
             "target_capability IN ('know','understand','choose','implement','diagnose','defend')",
             name="target_capability_valid",
         ),
-        CheckConstraint("status IN ('active','archived')", name="status_valid"),
+        CheckConstraint(
+            "status IN ('active','archived','tombstoned')", name="status_valid"
+        ),
         CheckConstraint("length(trim(name)) > 0", name="name_non_blank"),
         CheckConstraint(
             "path != 'learn' OR length(trim(subject)) > 0",

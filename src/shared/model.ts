@@ -82,14 +82,6 @@ export const REFERENCE_CODE = `public Reservation reserve(String requestId, Supp
   });
 }`
 
-export const TOPIC_BRIEF = {
-  problem: 'Two consumers receive the same reservation request while neither can see a committed duplicate marker.',
-  task: 'Close the check-then-write race without claiming that this prototype executes Java or proves production behavior.',
-  evidence: 'Submit a revision that makes the duplicate boundary explicit and explain the atomicity assumption.',
-  source: 'AWS SQS Developer Guide · Amazon SQS at-least-once delivery',
-  sourceUrl: 'https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/standard-queues-at-least-once-delivery.html',
-} as const
-
 export const PRACTICE_QUESTIONS = [
   {
     id: 'practice-commit-window',

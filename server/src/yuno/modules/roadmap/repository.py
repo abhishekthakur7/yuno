@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from yuno.modules.roadmap.domain import (
@@ -25,6 +25,10 @@ from yuno.modules.roadmap.models import (
     PersonalOverlayRow,
     RoadmapIdempotencyRow,
     TransferredEvidenceRefRow,
+)
+from yuno.modules.roadmap.ports import (
+    TransferEvidenceRefView,
+    TransferLearningStateView,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.ids import new_id
@@ -175,6 +179,96 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
             .order_by(LearningStateRow.topic_stable_id)
         )
         return tuple(self._session.scalars(stmt).all())
+
+    def get_learning_state_for_topic(
+        self, owner_id: str, goal_id: str, topic_stable_id: str
+    ) -> LearningState | None:
+        row = self._session.scalars(
+            owner_scoped_select(LearningStateRow, owner_id).where(
+                LearningStateRow.goal_id == goal_id,
+                LearningStateRow.topic_stable_id == topic_stable_id,
+            )
+        ).one_or_none()
+        return _state(row) if row else None
+
+    def add_transferred_evidence(
+        self,
+        learning_state: TransferLearningStateView,
+        transfer_ref: TransferEvidenceRefView,
+    ) -> None:
+        self._session.add(
+            LearningStateRow(
+                id=learning_state.id,
+                owner_id=learning_state.owner_id,
+                goal_id=learning_state.goal_id,
+                topic_stable_id=learning_state.topic_stable_id,
+                graph_version_id=learning_state.graph_version_id,
+                classification=learning_state.classification.value,
+                origin=learning_state.origin,
+                recommended_depth=learning_state.recommended_depth,
+                explanation=learning_state.explanation,
+                derivation_version=learning_state.derivation_version,
+                input_hash=learning_state.input_hash,
+                derived_at=learning_state.derived_at,
+            )
+        )
+        self._session.add(
+            TransferredEvidenceRefRow(
+                id=transfer_ref.id,
+                owner_id=transfer_ref.owner_id,
+                goal_id=transfer_ref.goal_id,
+                learning_state_id=transfer_ref.learning_state_id,
+                source_goal_id=transfer_ref.source_goal_id,
+                source_evidence_id=transfer_ref.source_evidence_id,
+                classification=transfer_ref.classification.value,
+                rationale=transfer_ref.rationale,
+                created_at=transfer_ref.created_at,
+            )
+        )
+        self._session.flush()
+
+    def list_transfer_dependents(
+        self, owner_id: str, source_goal_id: str
+    ) -> Sequence[tuple[str, str]]:
+        stmt = (
+            select(
+                TransferredEvidenceRefRow.source_evidence_id,
+                TransferredEvidenceRefRow.learning_state_id,
+            )
+            .where(
+                TransferredEvidenceRefRow.owner_id == owner_id,
+                TransferredEvidenceRefRow.source_goal_id == source_goal_id,
+            )
+            .order_by(
+                TransferredEvidenceRefRow.source_evidence_id,
+                TransferredEvidenceRefRow.learning_state_id,
+            )
+        )
+        return tuple(self._session.execute(stmt).tuples().all())
+
+    def downgrade_transfer_dependents(
+        self, owner_id: str, source_goal_id: str, *, derived_at: str
+    ) -> None:
+        state_ids = select(TransferredEvidenceRefRow.learning_state_id).where(
+            TransferredEvidenceRefRow.owner_id == owner_id,
+            TransferredEvidenceRefRow.source_goal_id == source_goal_id,
+        )
+        self._session.execute(
+            update(LearningStateRow)
+            .where(
+                LearningStateRow.owner_id == owner_id,
+                LearningStateRow.id.in_(state_ids),
+            )
+            .values(
+                classification="unverified",
+                origin="tombstoned-transfer",
+                explanation="The source evidence was tombstoned when its goal was deleted.",
+                derivation_version="transfer-tombstone-v1",
+                input_hash="tombstoned",
+                derived_at=derived_at,
+            )
+        )
+        self._session.flush()
 
     def get_idempotency(
         self, owner_id: str, operation: str, key: str

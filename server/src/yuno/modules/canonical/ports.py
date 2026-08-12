@@ -68,6 +68,10 @@ class CanonicalGraphRepository(Protocol):
 
     def get_published_relations(self, version_id: str) -> Sequence[TopicRelation]: ...
 
+    def get_published_content_revisions(
+        self, version_id: str, topic_stable_id: str
+    ) -> Sequence[ContentRevision]: ...
+
     # --- Publish-time lookups: pre-write checks the publisher needs before
     # opening (or while inside) the write transaction -- e.g. rejecting a
     # reused `version_label`/`manifest_hash` (spec §4.3's UNIQUE

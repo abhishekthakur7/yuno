@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/artifacts/{artifact_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Artifact */
+        post: operations["regenerate_artifact_api_v1_artifacts__artifact_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/canonical/versions": {
         parameters: {
             query?: never;
@@ -230,6 +247,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Goal Delete */
+        post: operations["post_goal_delete_api_v1_goals__goal_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/delete-preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Goal Delete Preflight */
+        post: operations["post_goal_delete_preflight_api_v1_goals__goal_id__delete_preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals/{goal_id}/depth-overrides": {
         parameters: {
             query?: never;
@@ -315,6 +366,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Topic Layer */
+        post: operations["generate_topic_layer_api_v1_goals__goal_id__topics__topic_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/layers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Topic Layers */
+        get: operations["get_topic_layers_api_v1_goals__goal_id__topics__topic_id__layers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goal_id}/topics/{topic_id}/layers/{layer}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Topic Layer */
+        get: operations["get_topic_layer_api_v1_goals__goal_id__topics__topic_id__layers__layer__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -353,6 +455,23 @@ export interface paths {
         head?: never;
         /** Update Profile */
         patch: operations["update_profile_api_v1_profile_patch"];
+        trace?: never;
+    };
+    "/api/v1/topics/{topic_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Topic Detail */
+        get: operations["get_topic_detail_api_v1_topics__topic_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -448,6 +567,11 @@ export interface components {
             /** Version Label */
             version_label: string;
         };
+        /**
+         * Capability
+         * @enum {string}
+         */
+        Capability: "know" | "understand" | "choose" | "implement" | "diagnose" | "defend";
         /**
          * CorrectionType
          * @enum {string}
@@ -683,6 +807,22 @@ export interface components {
             target_capability: components["schemas"]["TargetCapability"];
             target_level: components["schemas"]["TargetLevel"];
         };
+        /** GoalDeleteImpactResponse */
+        GoalDeleteImpactResponse: {
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Goal Id */
+            goal_id: string;
+            /** Learning State Ids */
+            learning_state_ids: string[];
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
+        /** GoalDeleteRequest */
+        GoalDeleteRequest: {
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
         /** GoalPatchRequest */
         GoalPatchRequest: {
             /** Dismiss Recommendation Key */
@@ -740,7 +880,7 @@ export interface components {
          * GoalStatus
          * @enum {string}
          */
-        GoalStatus: "active" | "archived";
+        GoalStatus: "active" | "archived" | "tombstoned";
         /**
          * HealthResponse
          * @description `GET /api/v1/health` response body.
@@ -751,6 +891,35 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * JobRefResponse
+         * @description Mirrors `application.jobs.JobRef` — the `202` enqueue response body
+         *     every async endpoint returns via `accepted_job`.
+         */
+        JobRefResponse: {
+            /**
+             * Deduplicated
+             * @default false
+             */
+            deduplicated: boolean;
+            /** Enqueued At */
+            enqueued_at: string;
+            /** Job Id */
+            job_id: string;
+            /** Kind */
+            kind: string;
+            status: components["schemas"]["JobStatus"];
+        };
+        /**
+         * JobStatus
+         * @enum {string}
+         */
+        JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * LayerState
+         * @enum {string}
+         */
+        LayerState: "ready" | "empty" | "stale" | "unavailable";
         /** LearnerCorrectionRequest */
         LearnerCorrectionRequest: {
             classification: components["schemas"]["LearningClassification"];
@@ -892,6 +1061,74 @@ export interface components {
          * @enum {string}
          */
         TargetLevel: "Mid-level" | "Senior" | "Staff";
+        /** TopicCheckpointResponse */
+        TopicCheckpointResponse: {
+            /** Assumptions */
+            assumptions: string[];
+            /** Constraints */
+            constraints: string[];
+            /** Estimated Minutes */
+            estimated_minutes: number;
+            /** Evidence Criterion */
+            evidence_criterion: string;
+            /** Expected Artifact */
+            expected_artifact: string;
+            /** Limitation */
+            limitation: string;
+            /** Rubric */
+            rubric: string[];
+            /** Scenario */
+            scenario: string;
+            target_capability: components["schemas"]["Capability"];
+        };
+        /** TopicDetailResponse */
+        TopicDetailResponse: {
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Level Tag */
+            level_tag: string;
+            /** Recommended Layer */
+            recommended_layer: string;
+            /** Scope Tags */
+            scope_tags: string[];
+            /** Stable Id */
+            stable_id: string;
+            /** Subject */
+            subject: string;
+            target_capability: components["schemas"]["Capability"];
+            /** Title */
+            title: string;
+        };
+        /**
+         * TopicLayer
+         * @enum {string}
+         */
+        TopicLayer: "Essential" | "Implementation" | "Internals" | "Production" | "Alternatives" | "Failures" | "Interview" | "Sources";
+        /** TopicLayerResponse */
+        TopicLayerResponse: {
+            checkpoint: components["schemas"]["TopicCheckpointResponse"] | null;
+            layer: components["schemas"]["TopicLayer"];
+            /** Markdown */
+            markdown: string | null;
+            /** Markdown Hash */
+            markdown_hash: string | null;
+            /** Revision Id */
+            revision_id: string | null;
+            state: components["schemas"]["LayerState"];
+        };
+        /** TopicLayersResponse */
+        TopicLayersResponse: {
+            /** Conversation Scope */
+            conversation_scope: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Graph Version Id */
+            graph_version_id: string;
+            /** Layers */
+            layers: components["schemas"]["TopicLayerResponse"][];
+            /** Topic Id */
+            topic_id: string;
+        };
         /**
          * UntrustedSeedKind
          * @enum {string}
@@ -906,6 +1143,39 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    regenerate_artifact_api_v1_artifacts__artifact_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_canonical_versions_api_v1_canonical_versions_get: {
         parameters: {
             query?: never;
@@ -1435,6 +1705,76 @@ export interface operations {
             };
         };
     };
+    post_goal_delete_api_v1_goals__goal_id__delete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalDeleteImpactResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_goal_delete_preflight_api_v1_goals__goal_id__delete_preflight_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalDeleteImpactResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_depth_api_v1_goals__goal_id__depth_overrides_post: {
         parameters: {
             query?: never;
@@ -1608,6 +1948,107 @@ export interface operations {
             };
         };
     };
+    generate_topic_layer_api_v1_goals__goal_id__topics__topic_id__generate_post: {
+        parameters: {
+            query: {
+                layer: components["schemas"]["TopicLayer"];
+            };
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_topic_layers_api_v1_goals__goal_id__topics__topic_id__layers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicLayersResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_topic_layer_api_v1_goals__goal_id__topics__topic_id__layers__layer__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+                topic_id: string;
+                layer: components["schemas"]["TopicLayer"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicLayerResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -1688,6 +2129,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LearnerProfileResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_topic_detail_api_v1_topics__topic_id__get: {
+        parameters: {
+            query: {
+                graph_version: string;
+            };
+            header?: never;
+            path: {
+                topic_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicDetailResponse"];
                 };
             };
             /** @description Default Response */
