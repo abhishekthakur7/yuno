@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Outlet, RouterProvider, createRootRoute, createRoute, createRouter, notFound } from '@tanstack/react-router'
 import LearningApp from '../selected/LearningApp'
-import { isAppPageId, isInterviewMode, type InterviewMode } from '../selected/app-model'
+import { isAppPageId, isInterviewMode, type InterviewMode, type InterviewSelection } from '../selected/app-model'
 import { LearningStateProvider } from '../shared/state'
 import { queryClient } from './query-client'
 import { useProfileGoals } from '../shared/use-profile-goals'
@@ -27,18 +27,25 @@ const indexRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/app/$pageId',
-  validateSearch: (search: Record<string, unknown>): { mode?: InterviewMode } => {
-    return isInterviewMode(search['mode']) ? { mode: search['mode'] } : {}
+  validateSearch: (search: Record<string, unknown>): { mode?: InterviewMode; bundleId?: string; bundleItemId?: string } => {
+    const mode = isInterviewMode(search['mode']) ? search['mode'] : undefined
+    const bundleId = typeof search['bundleId'] === 'string' && search['bundleId'].trim() ? search['bundleId'] : undefined
+    const bundleItemId = typeof search['bundleItemId'] === 'string' && search['bundleItemId'].trim() ? search['bundleItemId'] : undefined
+    return { ...(mode ? { mode } : {}), ...(bundleId && bundleItemId ? { bundleId, bundleItemId } : {}) }
   },
   beforeLoad: ({ params }) => { if (!isAppPageId(params.pageId)) throw notFound() },
   component: () => {
     const { pageId } = appRoute.useParams()
     // TanStack Router keeps unrecognised search params in location search rather than
     // stripping them, so re-narrow here: an unknown `?mode=` must still reach us as undefined.
-    const rawMode: unknown = appRoute.useSearch().mode
+    const search = appRoute.useSearch()
+    const rawMode: unknown = search.mode
     const mode = isInterviewMode(rawMode) ? rawMode : undefined
+    const selection: InterviewSelection | undefined = search.bundleId && search.bundleItemId
+      ? { bundleId: search.bundleId, bundleItemId: search.bundleItemId }
+      : undefined
     if (!isAppPageId(pageId)) return <MissingRoute />
-    return <GoalScopedLearningState><LearningApp page={pageId} {...(mode ? { mode } : {})} /></GoalScopedLearningState>
+    return <GoalScopedLearningState><LearningApp page={pageId} {...(mode ? { mode } : {})} {...(selection ? { selection } : {})} /></GoalScopedLearningState>
   },
 })
 

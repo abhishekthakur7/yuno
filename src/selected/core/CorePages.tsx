@@ -10,10 +10,10 @@ import {
 } from 'lucide-react'
 import {
   CURRENT_LESSON_ID, FIXTURE_REPORT,
-  MOCK_CURRENT_QUESTION, PRACTICE_QUESTIONS, SIMULATION_LIMITATION,
+  MOCK_CURRENT_QUESTION, SIMULATION_LIMITATION,
   type Depth,
 } from '../../shared/model'
-import { currentPracticeQuestion, useLearningState } from '../../shared/state'
+import { useLearningState } from '../../shared/state'
 import { ApiError, canonicalVersionsQueryOptions } from '../../shared/api/queries'
 import { goalDestination, resumePage, useProfileGoals } from '../../shared/use-profile-goals'
 import type { GoalCreate, GoalWorkspace } from '../../shared/api/profile-goals'
@@ -30,15 +30,17 @@ import { useArtifactProvenance, useTopicContent } from '../../shared/use-topic-c
 import { useNotebookReview } from '../../shared/use-notebook-review'
 import { useGoalEvidenceReport } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
+import { useInterview, usePracticeRun } from '../../shared/use-interview'
+import type { InterviewBundle, InterviewLevel, InterviewQuestion, InterviewRefresher } from '../../shared/api/interview'
 import type { ReviewAttempt, ReviewItem } from '../../shared/api/notebook-review'
 import { roadmapQueryOptions, type LearnerCorrection, type OverlayProposal, type OverlayProposalDecision } from '../../shared/api/roadmap'
-import type { InterviewMode } from '../app-model'
+import type { InterviewMode, InterviewSelection } from '../app-model'
 import './core.css'
 
 export type CorePage = 'home' | 'onboarding' | 'learn-roadmap' | 'topic-studio' | 'interview-hub' | 'practice' | 'mock' | 'reports'
 
-type Navigate = (page: CorePage | string, mode?: InterviewMode) => void
-type PageProps = { navigate: Navigate }
+type Navigate = (page: CorePage | string, mode?: InterviewMode, selection?: InterviewSelection) => void
+type PageProps = { navigate: Navigate; selection?: InterviewSelection }
 const DEPTHS: readonly Depth[] = ['Essential', 'Implementation', 'Production', 'Interview']
 
 const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'secondary' | 'quiet' }>(function Button({ children, tone = 'primary', className = '', ...props }, ref) {
@@ -700,12 +702,120 @@ export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown
   </Tabs.Root>
 }
 
-function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) {
+const INTERVIEW_ROLE_LEVELS: readonly { label: string; level: InterviewLevel }[] = [
+  { label: 'Mid-level backend engineer', level: 'Mid-level' },
+  { label: 'Senior backend engineer', level: 'Senior' },
+  { label: 'Staff-level backend engineer', level: 'Staff' },
+]
+
+function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
+  interview: ReturnType<typeof useInterview>
+  goalId: string | null
+  selectedBundleId: string | null
+  onSelect: (bundleId: string | null) => void
+}) {
+  const bundles = interview.bundles.data ?? []
+  const selected = bundles.find(bundle => bundle.id === selectedBundleId) ?? bundles.find(bundle => bundle.goal_id === goalId) ?? bundles[0] ?? null
+  const [name, setName] = useState('')
+  const [level, setLevel] = useState<InterviewLevel>('Senior')
+
+  useEffect(() => {
+    if (!selected) return
+    setName(selected.name)
+    setLevel(selected.target_level)
+    if (selectedBundleId !== selected.id) onSelect(selected.id)
+  }, [onSelect, selected, selectedBundleId])
+
+  const createBundle = () => interview.create.mutate({
+    ...(goalId ? { goal_id: goalId } : {}),
+    name: 'Senior backend interview',
+    generic_role: 'Backend Engineer',
+    target_level: 'Senior',
+    origin: 'recommended',
+    items: [
+      { subject: 'technical', question: 'Explain a production trade-off and its failure boundary.', position: 0, is_optional: false, included: true },
+      { subject: 'behavioral', question: 'Tell me about a difficult trade-off.', position: 1, is_optional: true, included: true },
+      { subject: 'leadership', question: 'How did you align a team?', position: 2, is_optional: true, included: true },
+    ],
+  }, { onSuccess: bundle => onSelect(bundle.id) })
+
+  const save = () => {
+    if (!selected || !name.trim()) return
+    interview.update.mutate({ bundle: selected, patch: { name: name.trim(), generic_role: 'Backend Engineer', target_level: level } })
+  }
+  const toggle = (item: InterviewBundle['items'][number]) => {
+    if (!selected || !item.is_optional) return
+    interview.update.mutate({ bundle: selected, patch: { items: [{ id: item.id, included: !item.included }] } })
+  }
+  const actionError = interview.create.error ?? interview.update.error ?? interview.copy.error ?? interview.remove.error
+
+  return <section className="sb-bundle-workspace" aria-labelledby="sb-bundle-title" data-interview-state={interview.bundles.isPending && !interview.bundles.data ? 'loading' : interview.bundles.isError && !interview.bundles.data ? 'unavailable' : bundles.length === 0 ? 'empty' : interview.bundles.isRefetchError ? 'unavailable' : 'ready'}>
+    <header><div><span className="sb-kicker">Editable preparation</span><h2 id="sb-bundle-title">Interview bundles</h2><p>Role and level stay generic. Optional subjects never change the technical scope.</p></div>{bundles.length > 0 && <span>{bundles.length} {bundles.length === 1 ? 'bundle' : 'bundles'}</span>}</header>
+    {interview.bundles.isPending && !interview.bundles.data ? <div className="sb-interview-status" aria-live="polite"><RefreshCcw /><strong>Loading interview bundles</strong><span>Your preparation choices remain independently reachable.</span></div>
+      : interview.bundles.isError && !interview.bundles.data ? <div className="sb-interview-status" role="alert"><AlertTriangle /><strong>Interview bundles are unavailable</strong><span>No replacement bundle was synthesized.</span><Button tone="secondary" onClick={() => void interview.bundles.refetch()}>Retry bundles</Button></div>
+        : bundles.length === 0 ? <div className="sb-interview-status"><HelpCircle /><strong>No interview bundle yet</strong><span>Create an editable recommended bundle. A Learn goal is not required.</span><Button disabled={interview.create.isPending} onClick={createBundle}>{interview.create.isPending ? 'Creating…' : 'Create recommended bundle'}</Button></div>
+          : selected && <div className="sb-bundle-editor">
+            <nav aria-label="Interview bundles">{bundles.map(bundle => <button key={bundle.id} className={bundle.id === selected.id ? 'is-selected' : ''} aria-pressed={bundle.id === selected.id} onClick={() => onSelect(bundle.id)}><strong>{bundle.name}</strong><small>{INTERVIEW_ROLE_LEVELS.find(option => option.level === bundle.target_level)?.label ?? `${bundle.target_level} backend engineer`}</small></button>)}</nav>
+            <form onSubmit={event => { event.preventDefault(); save() }}>
+              <label>Bundle name<input value={name} onChange={event => setName(event.target.value)} /></label>
+              <label>Role and level<select aria-label="Role and level" value={level} onChange={event => setLevel(event.target.value as InterviewLevel)}>{INTERVIEW_ROLE_LEVELS.map(option => <option key={option.level} value={option.level}>{option.label}</option>)}</select></label>
+              <fieldset><legend>Subjects</legend>{selected.items.slice().sort((a, b) => a.position - b.position).map(item => <label key={item.id} className={!item.is_optional ? 'is-required' : ''}><input type="checkbox" checked={item.included} disabled={!item.is_optional || interview.update.isPending} onChange={() => toggle(item)} /><span><strong>{item.subject}</strong><small>{item.is_optional ? 'Optional · independently included' : 'Technical · required'}</small></span></label>)}</fieldset>
+              <footer><Button type="submit" disabled={!name.trim() || interview.update.isPending}>{interview.update.isPending ? 'Saving…' : 'Save bundle'}</Button><Button type="button" tone="secondary" disabled={interview.copy.isPending} onClick={() => interview.copy.mutate({ bundleId: selected.id, body: { name: `${selected.name} copy` } }, { onSuccess: bundle => onSelect(bundle.id) })}>Copy bundle</Button><Button type="button" tone="quiet" disabled={interview.remove.isPending} onClick={() => { if (window.confirm(`Delete ${selected.name}?`)) interview.remove.mutate(selected, { onSuccess: () => onSelect(null) }) }}>Delete</Button></footer>
+            </form>
+          </div>}
+    {interview.bundles.isFetching && interview.bundles.data && <p className="sb-refreshing-note" role="status">Refreshing interview bundles…</p>}
+    {interview.bundles.isRefetchError && interview.bundles.data && <div className="sb-action-error" role="alert"><span>Interview bundles could not be refreshed. Previously loaded material is still available.</span><Button tone="secondary" onClick={() => void interview.bundles.refetch()}>Retry refresh</Button></div>}
+    {actionError && <div className="sb-action-error" role="alert"><span>The bundle change was not saved. Previously loaded material is still available.</span><Button tone="secondary" onClick={() => void interview.refreshBundles()}>Reload bundles</Button></div>}
+  </section>
+}
+
+function RefresherContent({ goalId, items, query }: { goalId: string | null; items: InterviewRefresher[]; query: ReturnType<typeof useInterview>['refreshers'] }) {
+  const state = !goalId ? 'empty' : query.isPending && !query.data ? 'loading' : query.isError && !query.data ? 'unavailable' : items.length === 0 ? 'empty' : query.isRefetchError ? 'unavailable' : items.some(item => item.state === 'stale') ? 'stale' : items.every(item => item.state === 'unavailable') ? 'unavailable' : 'ready'
+  return <section id="sb-interview-mode-content" className="sb-mode-content" tabIndex={-1} aria-labelledby="sb-refresher-content-title" data-interview-state={state}>
+    <header><span className="sb-kicker">Source-linked review</span><h3 id="sb-refresher-content-title">Refresher artifacts</h3></header>
+    {!goalId ? <div className="sb-interview-status"><BookOpen /><strong>No current goal selected</strong><span>Select any goal to see its refresher artifacts. Learn completion is never required.</span></div>
+      : query.isPending && !query.data ? <div className="sb-interview-status" aria-live="polite"><RefreshCcw /><strong>Loading refresher artifacts</strong></div>
+        : query.isError && !query.data ? <div className="sb-interview-status" role="alert"><AlertTriangle /><strong>Refresher artifacts are unavailable</strong><span>No source or evidence-gap link was fabricated.</span><Button tone="secondary" onClick={() => void query.refetch()}>Retry refreshers</Button></div>
+          : items.length === 0 ? <div className="sb-interview-status"><BookOpen /><strong>No refresher artifacts yet</strong><span>Your bundle remains available while generated content is absent.</span></div>
+            : <div className="sb-refresher-list">{items.map(item => <article key={item.artifact_id} data-artifact-state={item.state}>
+              <header><span>{item.state}</span><h4>{item.subject}</h4></header>
+              {item.content && <p className="sb-refresher-content">{item.content}</p>}
+              <dl><dt>Layer</dt><dd>{item.layer}</dd><dt>Source</dt><dd>{item.source_title ?? item.source_ref ?? 'Unavailable'}</dd><dt>Evidence gap</dt><dd>{item.evidence_gap ?? item.evidence_gap_ref ?? 'Unavailable'}</dd></dl>
+              {item.state === 'stale' && <p className="sb-stale-note" role="status">Stale · this artifact predates the current evidence snapshot.</p>}
+              {item.state === 'unavailable' && <p className="sb-tool-error" role="status">Unavailable · authored bundle material is retained.</p>}
+            </article>)}</div>}
+    {query.isFetching && query.data && <p className="sb-refreshing-note" role="status">Refreshing artifacts…</p>}
+    {query.isRefetchError && query.data && <div className="sb-action-error" role="alert"><span>Refresher artifacts could not be refreshed. Previously loaded material is still available.</span><Button tone="secondary" onClick={() => void query.refetch()}>Retry refresh</Button></div>}
+  </section>
+}
+
+function QuestionsContent({ goalId, bundleId, items, query, navigate }: { goalId: string | null; bundleId: string | null; items: InterviewQuestion[]; query: ReturnType<typeof useInterview>['questions']; navigate: Navigate }) {
+  const [selected, setSelected] = useState<string[]>([])
+  const visible = bundleId ? items.filter(item => item.bundle_id === bundleId) : []
+  const state = !goalId || !bundleId ? 'empty' : query.isPending && !query.data ? 'loading' : query.isError && !query.data ? 'unavailable' : visible.length === 0 ? 'empty' : query.isRefetchError ? 'unavailable' : 'ready'
+  const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  useEffect(() => setSelected([]), [bundleId])
+  return <section id="sb-interview-mode-content" className="sb-mode-content" tabIndex={-1} aria-labelledby="sb-questions-content-title" data-interview-state={state}>
+    <header><span className="sb-kicker">Bundle-scoped selection</span><h3 id="sb-questions-content-title">Questions</h3><p>Select prompts, then choose where to answer them. Evaluation appears only after entering the appropriate run.</p></header>
+    {!goalId ? <div className="sb-interview-status"><HelpCircle /><strong>No current goal selected</strong><span>Select any goal to load its questions. Learn completion is never required.</span></div>
+      : !bundleId ? <div className="sb-interview-status"><HelpCircle /><strong>No bundle selected</strong><span>Create or select an interview bundle to choose questions.</span></div>
+        : query.isPending && !query.data ? <div className="sb-interview-status" aria-live="polite"><RefreshCcw /><strong>Loading questions</strong></div>
+          : query.isError && !query.data ? <div className="sb-interview-status" role="alert"><AlertTriangle /><strong>Questions are unavailable</strong><span>No feedback or evaluation was produced.</span><Button tone="secondary" onClick={() => void query.refetch()}>Retry questions</Button></div>
+            : visible.length === 0 ? <div className="sb-interview-status"><HelpCircle /><strong>No questions in this bundle</strong><span>Edit the bundle or choose another one.</span></div>
+              : <fieldset className="sb-question-selection"><legend>Select questions</legend>{visible.slice().sort((a, b) => a.position - b.position).map(item => <label key={item.id}><input type="checkbox" checked={selected.includes(item.id)} onChange={() => toggle(item.id)} /><span><strong>{item.subject}</strong>{item.question}</span></label>)}</fieldset>}
+    {visible.length > 0 && <footer className="sb-question-handoff"><span>{selected.length} selected</span><Button disabled={selected.length === 0} onClick={() => { const item = visible.find(value => value.id === selected[0]); if (item) navigate('practice', undefined, { bundleId: item.bundle_id, bundleItemId: item.id }) }}>Open Guided practice <ArrowRight size={16} /></Button><Button tone="secondary" disabled={selected.length === 0} onClick={() => { const item = visible.find(value => value.id === selected[0]); if (item) navigate('mock', undefined, { bundleId: item.bundle_id, bundleItemId: item.id }) }}>Open Mock interview <ArrowRight size={16} /></Button></footer>}
+    {query.isRefetchError && query.data && <div className="sb-action-error" role="alert"><span>Questions could not be refreshed. Previously loaded selections remain available.</span><Button tone="secondary" onClick={() => void query.refetch()}>Retry refresh</Button></div>}
+  </section>
+}
+
+export function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) {
   const { state, dispatch } = useLearningState()
   const workspace = useProfileGoals()
+  const interview = useInterview(workspace.currentGoal?.id ?? null)
+  const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
   const choices = [
     { title: 'Refresher', text: 'Review the message delivery contract and evidence gaps.', meta: 'Focused reading', Icon: BookOpen, target: 'topic-studio', lessonId: 'delivery-contract', hubMode: 'refresher' as InterviewMode },
-    { title: 'Question bank', text: 'Choose a scenario without completing the Learn path.', meta: '2 fixture questions', Icon: HelpCircle, target: 'practice', hubMode: 'questions' as InterviewMode },
+    { title: 'Question bank', text: 'Choose a scenario without completing the Learn path.', meta: 'Select included questions', Icon: HelpCircle, target: 'practice', hubMode: 'questions' as InterviewMode },
     { title: 'Guided practice', text: 'Request a hint, submit, inspect feedback, and repair.', meta: 'Hints on request', Icon: Code2, target: 'practice' },
     { title: 'Mock interview', text: state.mock.status === 'paused' ? 'Resume the exact locally saved draft.' : 'Answer without hints, rubrics, or evaluation until completion.', meta: state.mock.status === 'paused' ? 'Paused' : 'Neutral while active', Icon: MessageSquareText, target: 'mock' },
   ]
@@ -719,26 +829,79 @@ function InterviewHub({ navigate, mode }: PageProps & { mode?: InterviewMode }) 
     }
     navigate(choice.target)
   }
-  return <main className="sb-page sb-interview"><PageIntro eyebrow="Interview prep · Senior backend" title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro>
+  const openModeContent = () => document.getElementById('sb-interview-mode-content')?.focus()
+  const bundleState = interview.bundles.isPending && !interview.bundles.data ? 'loading' : interview.bundles.isError && !interview.bundles.data ? 'unavailable' : interview.bundles.data?.length === 0 ? 'empty' : interview.bundles.isRefetchError ? 'unavailable' : 'ready'
+  const rootState = (() => {
+    if (!mode || bundleState !== 'ready') return bundleState
+    if (!workspace.currentGoal) return 'empty'
+    const query = mode === 'refresher' ? interview.refreshers : interview.questions
+    if (query.isPending && !query.data) return 'loading'
+    if (query.isError && !query.data || query.isRefetchError) return 'unavailable'
+    if (!query.data?.length) return 'empty'
+    if (mode === 'refresher' && interview.refreshers.data?.some(item => item.state === 'stale')) return 'stale'
+    if (mode === 'refresher' && interview.refreshers.data?.every(item => item.state === 'unavailable')) return 'unavailable'
+    return 'ready'
+  })()
+  return <main className="sb-page sb-interview" data-interview-state={rootState}><PageIntro eyebrow="Interview prep · Senior backend" title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro>
     {activeChoice && <section className="sb-mode-detail" data-testid="interview-mode-detail" data-mode={mode}>
       <span>{activeChoice.meta}</span>
       <activeChoice.Icon />
       <h2>{activeChoice.title}</h2>
       <p>{activeChoice.text}</p>
       <div>
-        <Button onClick={() => openChoice(activeChoice)}>Open {activeChoice.title} <ArrowRight size={16} /></Button>
+        <Button onClick={openModeContent}>Open {activeChoice.title} <ArrowRight size={16} /></Button>
         <Button tone="quiet" onClick={() => navigate('interview-hub')}><ArrowLeft size={16} /> Back to Interview prep</Button>
       </div>
     </section>}
-    <section className="sb-mode-list">{choices.map((choice, i) => <article key={choice.title} aria-current={choice.hubMode && choice.hubMode === mode ? 'true' : undefined}><span>0{i + 1}</span><choice.Icon /><div><h2>{choice.title}</h2><p>{choice.text}</p><small>{choice.meta}</small></div><button aria-label={`Open ${choice.title}`} onClick={() => openChoice(choice, choice.hubMode)}><ArrowRight /></button></article>)}</section><aside className="sb-neutral"><ShieldCheck /><div><strong>Mock stays evaluation-free while active</strong><p>Only one question and the response field are shown. Consolidated evidence appears after an explicit terminal completion.</p></div></aside></main>
+    <section className="sb-mode-list">{choices.map((choice, i) => <article key={choice.title} aria-current={choice.hubMode && choice.hubMode === mode ? 'true' : undefined}><span>0{i + 1}</span><choice.Icon /><div><h2>{choice.title}</h2><p>{choice.text}</p><small>{choice.meta}</small></div><button aria-label={`Open ${choice.title}`} onClick={() => openChoice(choice, choice.hubMode)}><ArrowRight /></button></article>)}</section><aside className="sb-neutral"><ShieldCheck /><div><strong>Mock stays evaluation-free while active</strong><p>Only one question and the response field are shown. Consolidated evidence appears after an explicit terminal completion.</p></div></aside>
+    {mode === 'refresher' && <RefresherContent goalId={workspace.currentGoal?.id ?? null} items={interview.refreshers.data ?? []} query={interview.refreshers} />}
+    {mode === 'questions' && <QuestionsContent goalId={workspace.currentGoal?.id ?? null} bundleId={selectedBundleId ?? interview.bundles.data?.find(bundle => bundle.goal_id === workspace.currentGoal?.id)?.id ?? interview.bundles.data?.[0]?.id ?? null} items={interview.questions.data ?? []} query={interview.questions} navigate={navigate} />}
+    <BundleEditor interview={interview} goalId={workspace.currentGoal?.id ?? null} selectedBundleId={selectedBundleId} onSelect={setSelectedBundleId} />
+  </main>
 }
 
-function Practice({ navigate }: PageProps) {
-  const { state, dispatch } = useLearningState()
-  const question = currentPracticeQuestion(state)
-  const latest = state.practice.attempts.at(-1)
-  const history = (state.practice.mode === 'feedback' ? state.practice.attempts.slice(0, -1) : [...state.practice.attempts]).reverse()
-  return <Classroom navigate={navigate}><article className="sb-practice"><PageIntro eyebrow={`Guided practice · ${state.practice.questionIndex + 1} of ${PRACTICE_QUESTIONS.length}`} title="Reason through the failure boundary"><span>Your draft and append-only attempts use shared browser state.</span></PageIntro><section className="sb-question"><span>Scenario</span><h2>{question.prompt}</h2></section>{state.practice.mode === 'answering' ? <section className="sb-answer"><label htmlFor="sb-answer">Your response</label><textarea id="sb-answer" value={state.practice.draft} onChange={e => dispatch({ type: 'SET_PRACTICE_DRAFT', value: e.target.value })} placeholder="Name the failure window, protection, and cost…" /><div><Button tone="quiet" onClick={() => dispatch({ type: 'REQUEST_HINT' })} disabled={state.practice.hintRequested}><Lightbulb size={16} /> {state.practice.hintRequested ? 'Hint requested' : 'Request hint'}</Button><Button disabled={!state.practice.draft.trim()} onClick={() => dispatch({ type: 'SUBMIT_PRACTICE' })}>Submit response</Button></div>{state.practice.hintRequested && <aside className="sb-hint"><Lightbulb /><div><strong>Requested hint</strong><p>{question.hint}</p></div></aside>}</section> : latest && <section className="sb-feedback"><span className="sb-kicker">Post-submission review</span><h2>Keep factual corrections separate from defensible choices.</h2><div className="sb-feedback-grid"><section><h3><Check size={17} /> Facts and corrections</h3>{latest.facts.map(x => <p key={x}>{x}</p>)}</section><section><h3><Settings2 size={17} /> Trade-offs to defend</h3>{latest.tradeoffs.map(x => <p key={x}>{x}</p>)}</section></div><details><summary>Your submitted response <ChevronDown /></summary><p>{latest.answer}</p></details><footer><Button tone="secondary" onClick={() => dispatch({ type: 'START_REPAIR' })}><RefreshCcw size={16} /> Repair answer</Button><Button onClick={() => dispatch({ type: 'CONTINUE_PRACTICE' })}>Continue <ArrowRight size={16} /></Button></footer></section>}{history.length > 0 && <details className="sb-history"><summary>Earlier attempts ({history.length}) <ChevronDown /></summary>{history.map(item => <article key={item.id}><strong>{item.id}</strong><p>{item.answer}</p></article>)}</details>}</article><ClassroomProgress navigate={navigate} previous="Topic studio" previousTarget="topic-studio" next="Interview prep" nextTarget="interview-hub" /></Classroom>
+function Practice({ navigate, selection }: PageProps) {
+  const workspace = useProfileGoals()
+  const goal = workspace.currentGoal
+  const interview = useInterview(goal?.id ?? null)
+  const question = interview.questions.data?.find(item => item.included && item.id === selection?.bundleItemId && item.bundle_id === selection.bundleId)
+  const testScenario = typeof window === 'undefined' ? undefined : (window as Window & {
+    __YUNO_E2E_PRACTICE__?: { rubric_id: string; rubric_version: string }
+  }).__YUNO_E2E_PRACTICE__
+  const [runId, setRunId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [repairing, setRepairing] = useState(false)
+  const started = useRef(false)
+  const practice = usePracticeRun(runId, setRunId)
+  useEffect(() => {
+    if (started.current || !goal || !question || !testScenario) return
+    started.current = true
+    practice.create.mutate({
+      goal_id: goal.id,
+      bundle_id: question.bundle_id,
+      bundle_item_id: question.id,
+      rubric_id: testScenario.rubric_id,
+      rubric_version: testScenario.rubric_version,
+      requested_capability: goal.target_capability,
+    })
+  }, [goal, question, practice.create, testScenario])
+  const run = practice.run.data
+  const latestAnswer = [...(run?.turns ?? [])].reverse().find(turn => turn.kind === 'answer')
+  const result = run?.results.at(-1)
+  const earlier = (run?.turns ?? []).filter(turn => turn.kind === 'answer' && turn.id !== latestAnswer?.id).reverse()
+  const hint = [...(run?.turns ?? [])].reverse().find(turn => turn.kind === 'hint')
+  const evaluating = run?.state === 'submitted' || run?.state === 'evaluating' || practice.submit.isPending
+  const submit = async () => {
+    await practice.submit.mutateAsync(draft)
+    setRepairing(false)
+  }
+  if (workspace.goals.isPending || interview.questions.isPending || practice.create.isPending || (runId && practice.run.isPending)) return <Classroom navigate={navigate}><article className="sb-practice" aria-live="polite"><PageIntro eyebrow="Guided practice" title="Loading a practice scenario"><span>Fetching your server-backed interview run.</span></PageIntro></article></Classroom>
+  if (!goal || !question) return <Classroom navigate={navigate}><article className="sb-practice"><PageIntro eyebrow="Guided practice" title="No practice question is selected"><span>Choose an included question from Interview prep before starting.</span></PageIntro><Button onClick={() => navigate('interview-hub', 'questions')}>Choose questions</Button></article></Classroom>
+  if (!testScenario) return <Classroom navigate={navigate}><article className="sb-practice"><PageIntro eyebrow="Guided practice unavailable" title="Approved practice content is not available yet"><span>Practice runs require an approved scenario and rubric configuration. No placeholder rubric or evaluative content is used.</span></PageIntro><Button onClick={() => navigate('interview-hub', 'questions')}>Review selected questions</Button></article></Classroom>
+  if (practice.create.isError || practice.run.isError) return <Classroom navigate={navigate}><article className="sb-practice" role="alert"><PageIntro eyebrow="Guided practice unavailable" title="The run could not be loaded"><span>No feedback is inferred while the server read is unavailable.</span></PageIntro><Button onClick={() => { started.current = false; setRunId(null); void interview.questions.refetch() }}>Retry</Button></article></Classroom>
+  return <Classroom navigate={navigate}><article className="sb-practice" aria-live="polite"><PageIntro eyebrow={`Guided practice · ${run?.state ?? 'ready'}`} title="Reason through the failure boundary"><span>Hints appear only when requested. Feedback appears only after submission and server evaluation.</span></PageIntro><section className="sb-question"><span>Scenario</span><h2>{run?.question ?? question.question}</h2></section>
+    {!result || repairing ? <section className="sb-answer"><label htmlFor="sb-answer">Your response</label><textarea id="sb-answer" value={draft} onChange={event => setDraft(event.target.value)} disabled={evaluating} placeholder="Name the failure window, protection, and cost…" /><div><Button tone="quiet" onClick={() => practice.hint.mutate()} disabled={!run || Boolean(hint) || practice.hint.isPending || evaluating}><Lightbulb size={16} /> {hint ? 'Hint requested' : 'Request hint'}</Button><Button disabled={!run || !draft.trim() || evaluating} onClick={() => void submit()}>{evaluating ? 'Evaluating…' : 'Submit response'}</Button></div>{hint && <aside className="sb-hint"><Lightbulb /><div><strong>Requested hint</strong><p>{hint.body}</p></div></aside>}{evaluating && <aside className="sb-neutral"><Clock3 /><div><strong>Evaluating submitted attempt</strong><p>The submitted answer is preserved. Feedback remains hidden until evaluation finishes.</p><Button tone="quiet" onClick={() => practice.cancel.mutate()} disabled={practice.cancel.isPending}>Cancel evaluation</Button></div></aside>}</section> : <section className="sb-feedback"><span className="sb-kicker">Post-submission review</span><h2>{result.feedback}</h2><div className="sb-feedback-grid"><section><h3><Check size={17} /> Facts and corrections</h3>{result.facts.map(item => <p key={item}>{item}</p>)}</section><section><h3><Settings2 size={17} /> Trade-offs to defend</h3>{result.trade_offs.map(item => <p key={item}>{item}</p>)}</section></div>{result.dimensions.length > 0 && <section className="sb-practice-dimensions"><h3>Rubric dimensions</h3>{result.dimensions.map(dimension => <article key={dimension.dimension_id}><strong>{dimension.name} · {dimension.outcome}</strong><p>{dimension.rationale}</p></article>)}</section>}{result.cross_question_candidate && <aside className="sb-neutral"><HelpCircle /><div><strong>Adaptive follow-up</strong><p>{result.cross_question_candidate}</p></div></aside>}<details><summary>Your submitted response <ChevronDown /></summary><p>{latestAnswer?.body}</p></details><footer><Button tone="secondary" onClick={() => { setDraft(latestAnswer?.body ?? ''); setRepairing(true) }}><RefreshCcw size={16} /> Repair answer</Button><Button onClick={() => navigate('interview-hub', 'questions')}>Choose another question <ArrowRight size={16} /></Button></footer></section>}
+    {run?.state === 'failed-recoverable' && <aside className="sb-neutral" role="alert"><AlertTriangle /><div><strong>Evaluation failed</strong><p>Your submitted attempt is preserved. Retry resumes evaluation without resubmitting it.</p><Button onClick={() => practice.retry.mutate()} disabled={!run.retryable || practice.retry.isPending}>Retry evaluation</Button></div></aside>}{earlier.length > 0 && <details className="sb-history"><summary>Earlier attempts ({earlier.length}) <ChevronDown /></summary>{earlier.map(item => <article key={item.id}><strong>Attempt {item.turn_number}</strong><p>{item.body}</p></article>)}</details>}</article><ClassroomProgress navigate={navigate} previous="Topic studio" previousTarget="topic-studio" next="Interview prep" nextTarget="interview-hub" /></Classroom>
 }
 
 function Mock({ navigate }: PageProps) {
@@ -776,9 +939,7 @@ export function Reports({ navigate }: PageProps) {
         ? { eyebrow: 'Learning evidence', title: 'Learning evidence is loading', detail: 'No learning conclusion is inferred before the server read completes. Interview report content remains usable.', label: 'Review interview prep', target: 'interview-hub' as CorePage }
       : evidence.length === 0
       ? { eyebrow: 'Next action', title: 'Review your current lab artifact', detail: 'This report contains no submitted lab evidence. Return to the implementation lab to inspect the draft; static browser checks do not submit evidence.', label: 'Open topic studio', target: 'topic-studio' as CorePage }
-      : state.practice.attempts.length === 0
-        ? { eyebrow: 'Next action', title: 'Test the decision in guided practice', detail: `You have ${evidence.length} submitted lab evidence ${evidence.length === 1 ? 'entry' : 'entries'} and no guided-practice attempts yet.`, label: 'Start guided practice', target: 'practice' as CorePage }
-        : { eyebrow: 'Next action', title: 'Continue from your saved practice state', detail: `${state.practice.attempts.length} append-only practice ${state.practice.attempts.length === 1 ? 'attempt is' : 'attempts are'} saved on scenario ${state.practice.questionIndex + 1} of ${PRACTICE_QUESTIONS.length}.`, label: 'Open guided practice', target: 'practice' as CorePage }
+      : { eyebrow: 'Next action', title: 'Test the decision in guided practice', detail: `You have ${evidence.length} submitted lab evidence ${evidence.length === 1 ? 'entry' : 'entries'}. Practice attempts are stored by the server and remain available from Guided practice.`, label: 'Start guided practice', target: 'practice' as CorePage }
   return <main className="sb-page sb-reports"><PageIntro eyebrow="Evidence report · mock interview" title={fixture ? FIXTURE_REPORT.conclusion : transcriptOnly ? 'Transcript preserved; evaluation withheld.' : 'No terminal mock report is available.'} action={<Button tone="quiet" onClick={() => navigate('interview-hub')}><ArrowLeft size={16} /> Interview prep</Button>}><span>{fixture ? 'Exact deterministic fixture match. This is not a provider evaluation or hiring prediction.' : transcriptOnly ? 'Your answer differs from the exact fixture, so this browser presentation makes no evaluative claim.' : 'Complete the active mock to create a transcript.'}</span></PageIntro>
     <section className="sb-report-next" aria-labelledby="sb-report-next-title"><div><span className="sb-eyebrow">{nextAction.eyebrow}</span><h2 id="sb-report-next-title">{nextAction.title}</h2><p>{nextAction.detail}</p></div>{learning.evidence.isError && state.mock.reportKind ? <Button onClick={() => void learning.evidence.refetch()}>{nextAction.label} <RefreshCcw size={16} /></Button> : <Button onClick={() => navigate(nextAction.target)}>{nextAction.label} <ArrowRight size={16} /></Button>}</section>
     <section className="sb-report-gate"><span>Report gate</span><strong>{fixture ? 'Exact-fixture evaluation' : transcriptOnly ? 'Transcript only' : 'Unavailable'}</strong><p>{fixture ? 'Eligible only because every response matches the bundled deterministic fixture.' : transcriptOnly ? 'No score, rubric outcome, factual judgment, or readiness result is produced.' : 'Prior turns are displayed for context, not as a completed interview.'}</p></section>
@@ -809,7 +970,7 @@ function ReportRegionFailure({ label, retry }: { label: string; retry: () => voi
   return <section className="sb-neutral" role="alert"><div><p>{label} could not be loaded. The rest of the report remains available.</p><Button tone="secondary" onClick={retry}>Retry {label.toLowerCase()}</Button></div></section>
 }
 
-export function CorePageView({ page, navigate, mode }: { page: CorePage; navigate: Navigate; mode?: InterviewMode }) {
+export function CorePageView({ page, navigate, mode, selection }: { page: CorePage; navigate: Navigate; mode?: InterviewMode; selection?: InterviewSelection }) {
   let content: ReactNode
   switch (page) {
     case 'home': content = <Home navigate={navigate} />; break
@@ -817,7 +978,7 @@ export function CorePageView({ page, navigate, mode }: { page: CorePage; navigat
     case 'learn-roadmap': content = <Roadmap navigate={navigate} />; break
     case 'topic-studio': content = <Topic navigate={navigate} />; break
     case 'interview-hub': content = <InterviewHub navigate={navigate} {...(mode ? { mode } : {})} />; break
-    case 'practice': content = <Practice navigate={navigate} />; break
+    case 'practice': content = <Practice navigate={navigate} {...(selection ? { selection } : {})} />; break
     case 'mock': content = <Mock navigate={navigate} />; break
     case 'reports': content = <Reports navigate={navigate} />; break
   }

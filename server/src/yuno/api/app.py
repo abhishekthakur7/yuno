@@ -16,6 +16,12 @@ from yuno.api.routes.evidence import router as evidence_router
 from yuno.api.routes.evidence import run_assessment_job, run_reevaluation_job
 from yuno.api.routes.imports import router as imports_router
 from yuno.api.routes.imports import run_import_parse_job
+from yuno.api.routes.interview import (
+    router as interview_router,
+)
+from yuno.api.routes.interview import (
+    run_practice_evaluation_job,
+)
 from yuno.api.routes.learning_content import router as learning_content_router
 from yuno.api.routes.notebook_review import router as notebook_review_router
 from yuno.api.routes.profiles_goals import router as profiles_goals_router
@@ -107,6 +113,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     request, uow_factory, app.state.evaluation_adapter
                 ),
             )
+            dispatcher.register(
+                "evaluate_practice_answer",
+                lambda request: run_practice_evaluation_job(
+                    request, uow_factory, app.state.evaluation_adapter
+                ),
+            )
 
             app.state.engine = engine
             app.state.session_factory = session_factory
@@ -136,6 +148,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(diagnostics_router)
     api_router.include_router(learning_content_router)
     api_router.include_router(imports_router)
+    api_router.include_router(interview_router)
     api_router.include_router(roadmap_router)
     api_router.include_router(evidence_router)
     api_router.include_router(notebook_review_router)

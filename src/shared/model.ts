@@ -18,19 +18,6 @@ export const REFERENCE_CODE = `public Reservation reserve(String requestId, Supp
   });
 }`
 
-export const PRACTICE_QUESTIONS = [
-  {
-    id: 'practice-commit-window',
-    prompt: 'A Spring Boot consumer commits a PostgreSQL write, then crashes before acknowledging its SQS message. Walk through the retry and choose a protection.',
-    hint: 'Name the failure window first. Which durable key can survive the retry and be checked atomically with the write?',
-  },
-  {
-    id: 'practice-retention',
-    prompt: 'Your idempotency ledger is growing quickly. Defend a retention policy without re-opening the duplicate window.',
-    hint: 'Relate retention to the maximum redelivery and replay horizon, then name the remaining operational risk.',
-  },
-] as const
-
 export const MOCK_PRIOR_TURNS = [
   {
     id: 'mock-turn-1',

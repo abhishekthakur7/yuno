@@ -1,0 +1,41 @@
+{
+  "fixture_marker": "fixture-v0-non-production",
+  "bundle": {
+    "name": "Practice fixture-v0 non-production bundle",
+    "generic_role": "Backend Engineer",
+    "target_level": "Senior",
+    "origin": "fixture-v0-non-production"
+  },
+  "question": "Fixture-v0 only: explain why token A precedes token B under the stated synthetic ordering rule.",
+  "hint": "Fixture-v0 hint: name the missing ordering assumption.",
+  "rubric": {
+    "task_context": "fixture-v0-non-production-practice",
+    "capability": "implement",
+    "role": "backend",
+    "level": "senior",
+    "version": "fixture-v0",
+    "provenance": "IDK-302 fixture-v0 non-production",
+    "dimensions": [
+      {
+        "stable_dimension_id": "fixture-reasoning",
+        "name": "Fixture reasoning",
+        "description": "Synthetic ordering reasoning only.",
+        "ordinal": 1,
+        "evaluation_guidance": "Apply only the fixture-v0 ordering rule."
+      },
+      {
+        "stable_dimension_id": "fixture-trade-offs",
+        "name": "Fixture trade-offs",
+        "description": "Synthetic trade-off articulation only.",
+        "ordinal": 2,
+        "evaluation_guidance": "Separate synthetic facts from trade-offs."
+      }
+    ]
+  },
+  "evaluation": {
+    "facts": ["Fixture fact: token A is ordered before token B."],
+    "trade_offs": ["Fixture trade-off: the synthetic rule exchanges flexibility for deterministic order."],
+    "feedback": "Fixture-v0 feedback keeps facts and trade-offs separate.",
+    "cross_question_candidate": "Which fixture-v0 ordering assumption would fail if token B arrived first?"
+  }
+}

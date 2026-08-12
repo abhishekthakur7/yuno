@@ -3,7 +3,6 @@ import {
   MOCK_CURRENT_QUESTION,
   MOCK_FIXTURE_DRAFT,
   MOCK_PRIOR_TURNS,
-  PRACTICE_QUESTIONS,
   STARTER_CODE,
 } from './model'
 
@@ -18,14 +17,6 @@ export interface RunResult {
   checks: readonly RunCheck[]
 }
 
-export interface PracticeAttempt {
-  id: string
-  questionId: string
-  answer: string
-  facts: readonly string[]
-  tradeoffs: readonly string[]
-}
-
 export interface MockTurn {
   id: string
   question: string
@@ -36,13 +27,6 @@ export interface LearningState {
   version: 1
   codeDraft: string
   runResult: RunResult | null
-  practice: {
-    questionIndex: number
-    draft: string
-    hintRequested: boolean
-    mode: 'answering' | 'feedback'
-    attempts: readonly PracticeAttempt[]
-  }
   mock: {
     status: 'active' | 'paused' | 'completed'
     draft: string
@@ -56,11 +40,6 @@ export type LearningAction =
   | { type: 'SET_CODE'; value: string }
   | { type: 'RUN_CHECKS' }
   | { type: 'RESET_CODE' }
-  | { type: 'SET_PRACTICE_DRAFT'; value: string }
-  | { type: 'REQUEST_HINT' }
-  | { type: 'SUBMIT_PRACTICE' }
-  | { type: 'START_REPAIR' }
-  | { type: 'CONTINUE_PRACTICE' }
   | { type: 'SET_MOCK_DRAFT'; value: string }
   | { type: 'SAFE_EXIT_MOCK' }
   | { type: 'RESUME_MOCK' }
@@ -72,13 +51,6 @@ export function createInitialState(): LearningState {
     version: 1,
     codeDraft: STARTER_CODE,
     runResult: null,
-    practice: {
-      questionIndex: 0,
-      draft: '',
-      hintRequested: false,
-      mode: 'answering',
-      attempts: [],
-    },
     mock: {
       status: 'active',
       draft: '',
@@ -110,19 +82,6 @@ export function evaluateCode(code: string): RunResult {
   return { status: checks.every((check) => check.passed) ? 'passed' : 'needs-work', checks }
 }
 
-function practiceFeedback(answer: string): Pick<PracticeAttempt, 'facts' | 'tradeoffs'> {
-  const namesDurableGuard = /idempoten|unique|dedup|atomic/i.test(answer)
-  return {
-    facts: namesDurableGuard
-      ? ['The answer names a durable duplicate guard for the commit-before-acknowledgement window.', 'SQS standard delivery can repeat, so acknowledgement alone is not the correctness boundary.']
-      : ['The failure window is identified, but the answer does not yet name a durable duplicate guard.', 'Acknowledgement can be lost after the business commit, allowing the same message to return.'],
-    tradeoffs: [
-      'A unique key plus atomic write is direct, but its retention horizon and contention behavior must be explicit.',
-      'An outbox helps publish downstream work atomically; by itself it does not deduplicate the incoming command.',
-    ],
-  }
-}
-
 export function learningReducer(state: LearningState, action: LearningAction): LearningState {
   switch (action.type) {
     case 'SET_CODE':
@@ -131,29 +90,6 @@ export function learningReducer(state: LearningState, action: LearningAction): L
       return { ...state, runResult: evaluateCode(state.codeDraft) }
     case 'RESET_CODE':
       return { ...state, codeDraft: STARTER_CODE, runResult: null }
-    case 'SET_PRACTICE_DRAFT':
-      return { ...state, practice: { ...state.practice, draft: action.value } }
-    case 'REQUEST_HINT':
-      return { ...state, practice: { ...state.practice, hintRequested: true } }
-    case 'SUBMIT_PRACTICE': {
-      const answer = state.practice.draft.trim()
-      const question = PRACTICE_QUESTIONS[state.practice.questionIndex]
-      if (!answer || !question) return state
-      const feedback = practiceFeedback(answer)
-      const attempt: PracticeAttempt = {
-        id: `attempt-${state.practice.attempts.length + 1}`,
-        questionId: question.id,
-        answer,
-        ...feedback,
-      }
-      return { ...state, practice: { ...state.practice, mode: 'feedback', attempts: [...state.practice.attempts, attempt] } }
-    }
-    case 'START_REPAIR': {
-      const latest = state.practice.attempts.at(-1)
-      return { ...state, practice: { ...state.practice, mode: 'answering', draft: latest?.answer ?? '', hintRequested: false } }
-    }
-    case 'CONTINUE_PRACTICE':
-      return { ...state, practice: { ...state.practice, questionIndex: Math.min(state.practice.questionIndex + 1, PRACTICE_QUESTIONS.length - 1), draft: '', hintRequested: false, mode: 'answering' } }
     case 'SET_MOCK_DRAFT':
       return state.mock.status === 'completed' ? state : { ...state, mock: { ...state.mock, draft: action.value } }
     case 'SAFE_EXIT_MOCK':
@@ -187,24 +123,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-}
-
 function hydratePersistedDrafts(value: unknown, initial = createInitialState()): LearningState | null {
   if (!isRecord(value) || value.version !== 1) return null
 
-  const practice = isRecord(value.practice) ? value.practice : {}
   const mock = isRecord(value.mock) ? value.mock : {}
-
-  const attempts = Array.isArray(practice.attempts)
-    ? practice.attempts.filter((item): item is PracticeAttempt => isRecord(item)
-      && typeof item.id === 'string'
-      && typeof item.questionId === 'string'
-      && typeof item.answer === 'string'
-      && isStringArray(item.facts)
-      && isStringArray(item.tradeoffs))
-    : initial.practice.attempts
   const isMockTurn = (item: unknown): item is MockTurn => isRecord(item)
     && typeof item.id === 'string'
     && typeof item.question === 'string'
@@ -229,13 +151,6 @@ function hydratePersistedDrafts(value: unknown, initial = createInitialState()):
     ...initial,
     codeDraft: typeof value.codeDraft === 'string' ? value.codeDraft : initial.codeDraft,
     runResult,
-    practice: {
-      questionIndex: typeof practice.questionIndex === 'number' && Number.isInteger(practice.questionIndex) && practice.questionIndex >= 0 && practice.questionIndex < PRACTICE_QUESTIONS.length ? practice.questionIndex : initial.practice.questionIndex,
-      draft: typeof practice.draft === 'string' ? practice.draft : initial.practice.draft,
-      hintRequested: typeof practice.hintRequested === 'boolean' ? practice.hintRequested : initial.practice.hintRequested,
-      mode: practice.mode === 'answering' || practice.mode === 'feedback' ? practice.mode : initial.practice.mode,
-      attempts,
-    },
     mock: {
       status: mock.status === 'active' || mock.status === 'paused' || mock.status === 'completed' ? mock.status : initial.mock.status,
       draft: typeof mock.draft === 'string' ? mock.draft : initial.mock.draft,
@@ -263,7 +178,6 @@ export function persistedLearningDrafts(state: LearningState) {
     version: state.version,
     codeDraft: state.codeDraft,
     runResult: state.runResult,
-    practice: state.practice,
     mock: state.mock,
   }
 }
@@ -286,8 +200,4 @@ export function useLearningState(): LearningContextValue {
   const value = useContext(LearningContext)
   if (!value) throw new Error('useLearningState must be used inside LearningStateProvider')
   return value
-}
-
-export function currentPracticeQuestion(state: LearningState) {
-  return PRACTICE_QUESTIONS[state.practice.questionIndex] ?? PRACTICE_QUESTIONS[0]
 }

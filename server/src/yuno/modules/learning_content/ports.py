@@ -105,6 +105,9 @@ class LearningContentRepository(Protocol):
     def get_latest_artifact(
         self, owner_id: str, goal_id: str, topic_id: str, layer: str
     ) -> GeneratedArtifact | None: ...
+    def list_artifacts(
+        self, owner_id: str, goal_id: str, layer: str
+    ) -> Sequence[GeneratedArtifact]: ...
     def add_artifact(self, artifact: GeneratedArtifact) -> GeneratedArtifact: ...
     def update_artifact(
         self, owner_id: str, artifact_id: str, changes: dict[str, object]

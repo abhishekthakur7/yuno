@@ -1,0 +1,264 @@
+"""SQLAlchemy models for interview preparation bundles."""
+
+from __future__ import annotations
+
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.ext.mutable import MutableList
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
+
+from yuno.shared.infrastructure.base import (
+    Base,
+    boolean_column,
+    id_column,
+    row_version_column,
+    utc_timestamp_column,
+)
+
+
+class InterviewBundleRow(Base):
+    __tablename__ = "interview_bundles"
+    __table_args__ = (
+        CheckConstraint("status IN ('active','archived')", name="status_valid"),
+        CheckConstraint("length(trim(name)) > 0", name="name_non_blank"),
+        CheckConstraint(
+            "length(trim(generic_role)) > 0", name="generic_role_non_blank"
+        ),
+        CheckConstraint(
+            "target_level IN ('Mid-level','Senior','Staff')", name="target_level_valid"
+        ),
+        CheckConstraint("length(trim(origin)) > 0", name="origin_non_blank"),
+        UniqueConstraint("id", "owner_id", name="uq_interview_bundles_id_owner"),
+        ForeignKeyConstraint(
+            ["goal_id", "owner_id"],
+            ["goal_workspaces.id", "goal_workspaces.owner_id"],
+            name="fk_interview_bundles_goal_owner",
+        ),
+        ForeignKeyConstraint(
+            ["copy_source_id", "owner_id"],
+            ["interview_bundles.id", "interview_bundles.owner_id"],
+            name="fk_interview_bundles_copy_source_owner",
+        ),
+    )
+
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    goal_id: Mapped[str | None] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    generic_role: Mapped[str] = mapped_column(Text, nullable=False)
+    target_level: Mapped[str] = mapped_column(Text, nullable=False)
+    origin: Mapped[str] = mapped_column(Text, nullable=False)
+    copy_source_id: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    row_version: Mapped[int] = row_version_column()
+    created_at: Mapped[str] = utc_timestamp_column()
+    updated_at: Mapped[str] = utc_timestamp_column()
+    items: Mapped[list[InterviewBundleItemRow]] = relationship(
+        cascade="all, delete-orphan", order_by="InterviewBundleItemRow.position"
+    )
+
+
+class InterviewBundleItemRow(Base):
+    __tablename__ = "interview_bundle_items"
+    __table_args__ = (
+        CheckConstraint(
+            "subject IN ('technical','behavioral','leadership')", name="subject_valid"
+        ),
+        CheckConstraint(
+            "question IS NULL OR length(trim(question)) > 0", name="question_non_blank"
+        ),
+        CheckConstraint("position >= 0", name="position_nonnegative"),
+        CheckConstraint("is_optional IN (0,1)", name="is_optional_valid"),
+        CheckConstraint("included IN (0,1)", name="included_valid"),
+        CheckConstraint(
+            "subject = 'technical' OR is_optional = 1", name="nontechnical_optional"
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_interview_bundle_items_id_owner"),
+        UniqueConstraint(
+            "bundle_id",
+            "owner_id",
+            "position",
+            name="uq_interview_bundle_items_bundle_owner_position",
+        ),
+        ForeignKeyConstraint(
+            ["bundle_id", "owner_id"],
+            ["interview_bundles.id", "interview_bundles.owner_id"],
+            ondelete="CASCADE",
+            name="fk_interview_bundle_items_bundle_owner",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    bundle_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    topic_stable_id: Mapped[str | None] = mapped_column(Text)
+    question: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_optional: Mapped[int] = boolean_column("is_optional", default=False)
+    included: Mapped[int] = boolean_column("included", default=True)
+
+
+class InterviewIdempotencyRow(Base):
+    __tablename__ = "interview_idempotency"
+    __table_args__ = (
+        CheckConstraint("length(trim(operation)) > 0", name="operation_non_blank"),
+        CheckConstraint("length(trim(idempotency_key)) > 0", name="key_non_blank"),
+        UniqueConstraint(
+            "owner_id",
+            "operation",
+            "idempotency_key",
+            name="uq_interview_idempotency_owner_operation_key",
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_interview_idempotency_id_owner"),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    operation: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    request_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = utc_timestamp_column()
+
+
+class InterviewRunRow(Base):
+    __tablename__ = "interview_runs"
+    __table_args__ = (
+        CheckConstraint("mode = 'Practice'", name="mode_valid"),
+        CheckConstraint(
+            "state IN ('ready','answering','follow-up','submitted','evaluating','feedback-ready','failed-recoverable')",
+            name="state_valid",
+        ),
+        CheckConstraint("length(trim(question)) > 0", name="question_non_blank"),
+        CheckConstraint(
+            "hint_text IS NULL OR length(trim(hint_text)) > 0", name="hint_non_blank"
+        ),
+        CheckConstraint("retryable IN (0,1)", name="retryable_valid"),
+        UniqueConstraint("id", "owner_id", name="uq_interview_runs_id_owner"),
+        UniqueConstraint(
+            "id", "owner_id", "goal_id", name="uq_interview_runs_id_owner_goal"
+        ),
+        ForeignKeyConstraint(
+            ["goal_id", "owner_id"],
+            ["goal_workspaces.id", "goal_workspaces.owner_id"],
+            name="fk_interview_runs_goal_owner",
+        ),
+        ForeignKeyConstraint(
+            ["bundle_id", "owner_id"],
+            ["interview_bundles.id", "interview_bundles.owner_id"],
+            name="fk_interview_runs_bundle_owner",
+        ),
+        ForeignKeyConstraint(
+            ["bundle_item_id", "owner_id"],
+            ["interview_bundle_items.id", "interview_bundle_items.owner_id"],
+            name="fk_interview_runs_item_owner",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    bundle_id: Mapped[str] = mapped_column(Text, nullable=False)
+    bundle_item_id: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(Text, nullable=False, default="Practice")
+    state: Mapped[str] = mapped_column(Text, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    hint_text: Mapped[str | None] = mapped_column(Text)
+    rubric_id: Mapped[str] = mapped_column(Text, nullable=False)
+    rubric_version: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_capability: Mapped[str] = mapped_column(Text, nullable=False)
+    active_job_id: Mapped[str | None] = mapped_column(Text)
+    active_answer_turn_id: Mapped[str | None] = mapped_column(Text)
+    failure_reference: Mapped[str | None] = mapped_column(Text)
+    retryable: Mapped[int] = boolean_column("retryable", default=False)
+    created_at: Mapped[str] = utc_timestamp_column()
+    updated_at: Mapped[str] = utc_timestamp_column()
+
+
+class InterviewTurnRow(Base):
+    __tablename__ = "interview_turns"
+    __table_args__ = (
+        CheckConstraint("turn_number >= 1", name="turn_number_positive"),
+        CheckConstraint(
+            "kind IN ('question','answer','hint','follow-up')", name="kind_valid"
+        ),
+        CheckConstraint("length(trim(body)) > 0", name="body_non_blank"),
+        UniqueConstraint("id", "owner_id", name="uq_interview_turns_id_owner"),
+        UniqueConstraint("run_id", "turn_number", name="uq_interview_turns_run_number"),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id"],
+            ["interview_runs.id", "interview_runs.owner_id"],
+            ondelete="CASCADE",
+            name="fk_interview_turns_run_owner",
+        ),
+        ForeignKeyConstraint(
+            ["answer_turn_id", "owner_id"],
+            ["interview_turns.id", "interview_turns.owner_id"],
+            name="fk_interview_turns_answer_owner",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_turn_id: Mapped[str | None] = mapped_column(Text)
+    evidence_id: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = utc_timestamp_column()
+
+
+class InterviewTurnResultRow(Base):
+    __tablename__ = "interview_turn_results"
+    __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_interview_turn_results_id_owner"),
+        UniqueConstraint("answer_turn_id", name="uq_interview_turn_results_answer"),
+        CheckConstraint("json_valid(facts)", name="facts_json_valid"),
+        CheckConstraint("json_valid(trade_offs)", name="trade_offs_json_valid"),
+        CheckConstraint("json_valid(dimensions)", name="dimensions_json_valid"),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id"],
+            ["interview_runs.id", "interview_runs.owner_id"],
+            ondelete="CASCADE",
+            name="fk_interview_turn_results_run_owner",
+        ),
+        ForeignKeyConstraint(
+            ["answer_turn_id", "owner_id"],
+            ["interview_turns.id", "interview_turns.owner_id"],
+            name="fk_interview_turn_results_answer_owner",
+        ),
+    )
+    id: Mapped[str] = id_column()
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False, index=True
+    )
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    answer_turn_id: Mapped[str] = mapped_column(Text, nullable=False)
+    assessment_id: Mapped[str] = mapped_column(Text, nullable=False)
+    visible_at: Mapped[str] = mapped_column(Text, nullable=False)
+    facts: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False
+    )
+    trade_offs: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False
+    )
+    dimensions: Mapped[list[dict]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False
+    )
+    feedback: Mapped[str] = mapped_column(Text, nullable=False)
+    cross_question_candidate: Mapped[str | None] = mapped_column(Text)

@@ -23,7 +23,7 @@ import RouteView from './shell/RouteView'
 import { useShellViewState } from './shell/useShellViewState'
 import CorePageView, { type CorePage } from './core/CorePages'
 import OperationalPageView, { type OperationalPage } from './operations/OperationalPages'
-import { APP_PAGE_LABELS, isAppPageId, type AppPage, type InterviewMode } from './app-model'
+import { APP_PAGE_LABELS, isAppPageId, type AppPage, type InterviewMode, type InterviewSelection } from './app-model'
 import './app-shell.css'
 
 const CORE_PAGES: readonly CorePage[] = ['home', 'onboarding', 'learn-roadmap', 'topic-studio', 'interview-hub', 'practice', 'mock', 'reports']
@@ -125,18 +125,18 @@ function CourseBand({ page }: { page: AppPage }) {
   )
 }
 
-function renderPage(page: AppPage, mode: InterviewMode | undefined, routerNavigate: ReturnType<typeof useNavigate>): ReactNode {
-  const navigate = (target: string, targetMode?: InterviewMode) => {
+function renderPage(page: AppPage, mode: InterviewMode | undefined, selection: InterviewSelection | undefined, routerNavigate: ReturnType<typeof useNavigate>): ReactNode {
+  const navigate = (target: string, targetMode?: InterviewMode, targetSelection?: InterviewSelection) => {
     if (target === 'home') { routerNavigate({ to: '/' }); return }
     if (!isAppPageId(target)) return
     if (targetMode && target === 'interview-hub') routerNavigate({ to: '/app/$pageId', params: { pageId: target }, search: { mode: targetMode } })
-    else routerNavigate({ to: '/app/$pageId', params: { pageId: target }, search: {} })
+    else routerNavigate({ to: '/app/$pageId', params: { pageId: target }, search: targetSelection ?? {} })
   }
-  if (isCorePage(page)) return <CorePageView page={page} navigate={navigate} {...(mode ? { mode } : {})} />
+  if (isCorePage(page)) return <CorePageView page={page} navigate={navigate} {...(mode ? { mode } : {})} {...(selection ? { selection } : {})} />
   return <OperationalPageView page={page as OperationalPage} navigate={navigate} />
 }
 
-export default function LearningApp({ page, mode }: { page: AppPage; mode?: InterviewMode }) {
+export default function LearningApp({ page, mode, selection }: { page: AppPage; mode?: InterviewMode; selection?: InterviewSelection }) {
   const focusedMock = page === 'mock'
   const showCourseBand = page === 'learn-roadmap' || page === 'topic-studio' || page === 'interview-hub' || page === 'practice' || page === 'reports'
   const routerNavigate = useNavigate()
@@ -147,7 +147,7 @@ export default function LearningApp({ page, mode }: { page: AppPage; mode?: Inte
       {!focusedMock && <GlobalHeader page={page} />}
       {!focusedMock && showCourseBand && <CourseBand page={page} />}
       <RouteView state={shell.state} label={label} onRetry={shell.retry}>
-        {renderPage(page, mode, routerNavigate)}
+        {renderPage(page, mode, selection, routerNavigate)}
       </RouteView>
     </div>
   )

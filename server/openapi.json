@@ -608,6 +608,15 @@
         "title": "AssessmentState",
         "type": "string"
       },
+      "BundleSubject": {
+        "enum": [
+          "technical",
+          "behavioral",
+          "leadership"
+        ],
+        "title": "BundleSubject",
+        "type": "string"
+      },
       "CanonicalTopicRelationResponse": {
         "description": "One `TopicRelation` row nested in\n`CanonicalVersionDetailResponse.relations`.",
         "properties": {
@@ -2630,6 +2639,413 @@
         "title": "ImportType",
         "type": "string"
       },
+      "InterviewBundleCopyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "InterviewBundleCopyRequest",
+        "type": "object"
+      },
+      "InterviewBundleCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "generic_role": {
+            "minLength": 1,
+            "title": "Generic Role",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InterviewBundleItemCreateRequest"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "minLength": 1,
+            "title": "Origin",
+            "type": "string"
+          },
+          "target_level": {
+            "enum": [
+              "Mid-level",
+              "Senior",
+              "Staff"
+            ],
+            "title": "Target Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "generic_role",
+          "target_level",
+          "origin",
+          "items"
+        ],
+        "title": "InterviewBundleCreateRequest",
+        "type": "object"
+      },
+      "InterviewBundleItemCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "included": {
+            "title": "Included",
+            "type": "boolean"
+          },
+          "is_optional": {
+            "title": "Is Optional",
+            "type": "boolean"
+          },
+          "position": {
+            "minimum": 0.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/BundleSubject"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "subject",
+          "position",
+          "is_optional",
+          "included"
+        ],
+        "title": "InterviewBundleItemCreateRequest",
+        "type": "object"
+      },
+      "InterviewBundleItemPatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "included": {
+            "title": "Included",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "included"
+        ],
+        "title": "InterviewBundleItemPatchRequest",
+        "type": "object"
+      },
+      "InterviewBundleItemResponse": {
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "included": {
+            "title": "Included",
+            "type": "boolean"
+          },
+          "is_optional": {
+            "title": "Is Optional",
+            "type": "boolean"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/BundleSubject"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "id",
+          "bundle_id",
+          "subject",
+          "topic_stable_id",
+          "question",
+          "position",
+          "is_optional",
+          "included"
+        ],
+        "title": "InterviewBundleItemResponse",
+        "type": "object"
+      },
+      "InterviewBundlePatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "generic_role": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generic Role"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/InterviewBundleItemPatchRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "target_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Mid-level",
+                  "Senior",
+                  "Staff"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Level"
+          }
+        },
+        "title": "InterviewBundlePatchRequest",
+        "type": "object"
+      },
+      "InterviewBundleResponse": {
+        "properties": {
+          "copy_source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copy Source Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "generic_role": {
+            "title": "Generic Role",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InterviewBundleItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_level": {
+            "title": "Target Level",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "name",
+          "generic_role",
+          "target_level",
+          "origin",
+          "copy_source_id",
+          "status",
+          "row_version",
+          "created_at",
+          "updated_at",
+          "items"
+        ],
+        "title": "InterviewBundleResponse",
+        "type": "object"
+      },
+      "InterviewQuestionResponse": {
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "included": {
+            "title": "Included",
+            "type": "boolean"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/BundleSubject"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "id",
+          "bundle_id",
+          "subject",
+          "topic_stable_id",
+          "question",
+          "position",
+          "included"
+        ],
+        "title": "InterviewQuestionResponse",
+        "type": "object"
+      },
+      "InterviewTurnKind": {
+        "enum": [
+          "question",
+          "answer",
+          "hint",
+          "follow-up"
+        ],
+        "title": "InterviewTurnKind",
+        "type": "string"
+      },
       "JobRefResponse": {
         "description": "The `202` response for an asynchronous operation.",
         "properties": {
@@ -3493,6 +3909,337 @@
         "title": "OwnerSettingsResponse",
         "type": "object"
       },
+      "PracticeAnswerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "PracticeAnswerRequest",
+        "type": "object"
+      },
+      "PracticeDimensionResultResponse": {
+        "properties": {
+          "dimension_id": {
+            "title": "Dimension Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension_id",
+          "name",
+          "outcome",
+          "rationale"
+        ],
+        "title": "PracticeDimensionResultResponse",
+        "type": "object"
+      },
+      "PracticeRunCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_item_id": {
+            "title": "Bundle Item Id",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "requested_capability": {
+            "default": "implement",
+            "title": "Requested Capability",
+            "type": "string"
+          },
+          "rubric_id": {
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id",
+          "bundle_id",
+          "bundle_item_id",
+          "rubric_id",
+          "rubric_version"
+        ],
+        "title": "PracticeRunCreateRequest",
+        "type": "object"
+      },
+      "PracticeRunResponse": {
+        "properties": {
+          "active_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Job Id"
+          },
+          "bundle_id": {
+            "title": "Bundle Id",
+            "type": "string"
+          },
+          "bundle_item_id": {
+            "title": "Bundle Item Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "const": "Practice",
+            "title": "Mode",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "requested_capability": {
+            "title": "Requested Capability",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeTurnResultResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "rubric_id": {
+            "title": "Rubric Id",
+            "type": "string"
+          },
+          "rubric_version": {
+            "title": "Rubric Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PracticeRunState"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeTurnResponse"
+            },
+            "title": "Turns",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "bundle_id",
+          "bundle_item_id",
+          "mode",
+          "state",
+          "question",
+          "rubric_id",
+          "rubric_version",
+          "requested_capability",
+          "active_job_id",
+          "failure_reference",
+          "retryable",
+          "created_at",
+          "updated_at",
+          "turns",
+          "results"
+        ],
+        "title": "PracticeRunResponse",
+        "type": "object"
+      },
+      "PracticeRunState": {
+        "enum": [
+          "ready",
+          "answering",
+          "follow-up",
+          "submitted",
+          "evaluating",
+          "feedback-ready",
+          "failed-recoverable"
+        ],
+        "title": "PracticeRunState",
+        "type": "string"
+      },
+      "PracticeTurnResponse": {
+        "properties": {
+          "answer_turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Turn Id"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/InterviewTurnKind"
+          },
+          "turn_number": {
+            "title": "Turn Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "turn_number",
+          "kind",
+          "body",
+          "answer_turn_id",
+          "created_at"
+        ],
+        "title": "PracticeTurnResponse",
+        "type": "object"
+      },
+      "PracticeTurnResultResponse": {
+        "properties": {
+          "answer_turn_id": {
+            "title": "Answer Turn Id",
+            "type": "string"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "cross_question_candidate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Question Candidate"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeDimensionResultResponse"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "trade_offs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trade Offs",
+            "type": "array"
+          },
+          "visible_at": {
+            "title": "Visible At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "answer_turn_id",
+          "assessment_id",
+          "visible_at",
+          "facts",
+          "trade_offs",
+          "dimensions",
+          "feedback",
+          "cross_question_candidate"
+        ],
+        "title": "PracticeTurnResultResponse",
+        "type": "object"
+      },
       "ProgressClassification": {
         "enum": [
           "likely-known",
@@ -3617,6 +4364,99 @@
         ],
         "title": "ReevaluationStatus",
         "type": "string"
+      },
+      "RefresherResponse": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "evidence_gap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Gap"
+          },
+          "evidence_gap_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Gap Ref"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "stale",
+              "unavailable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "state",
+          "subject",
+          "layer",
+          "content",
+          "source_ref",
+          "source_title",
+          "evidence_gap_ref",
+          "evidence_gap"
+        ],
+        "title": "RefresherResponse",
+        "type": "object"
       },
       "ResumeDestination": {
         "enum": [
@@ -6784,6 +7624,98 @@
         ]
       }
     },
+    "/api/v1/goals/{goal_id}/questions": {
+      "get": {
+        "operationId": "questions_api_v1_goals__goal_id__questions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewQuestionResponse"
+                  },
+                  "title": "Response Questions Api V1 Goals  Goal Id  Questions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Questions",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/goals/{goal_id}/refreshers": {
+      "get": {
+        "operationId": "refreshers_api_v1_goals__goal_id__refreshers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RefresherResponse"
+                  },
+                  "title": "Response Refreshers Api V1 Goals  Goal Id  Refreshers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Refreshers",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
     "/api/v1/goals/{goal_id}/review-preferences": {
       "get": {
         "operationId": "get_preferences_api_v1_goals__goal_id__review_preferences_get",
@@ -7888,6 +8820,618 @@
         "summary": "Get Import Statements",
         "tags": [
           "imports"
+        ]
+      }
+    },
+    "/api/v1/interview-bundles": {
+      "get": {
+        "operationId": "list_interview_bundles_api_v1_interview_bundles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "goal_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewBundleResponse"
+                  },
+                  "title": "Response List Interview Bundles Api V1 Interview Bundles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "List Interview Bundles",
+        "tags": [
+          "interview"
+        ]
+      },
+      "post": {
+        "operationId": "post_interview_bundle_api_v1_interview_bundles_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterviewBundleCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewBundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Bundle",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-bundles/{bundle_id}": {
+      "delete": {
+        "operationId": "delete_interview_bundle_api_v1_interview_bundles__bundle_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bundle_id",
+            "required": true,
+            "schema": {
+              "title": "Bundle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Delete Interview Bundle",
+        "tags": [
+          "interview"
+        ]
+      },
+      "get": {
+        "operationId": "read_interview_bundle_api_v1_interview_bundles__bundle_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bundle_id",
+            "required": true,
+            "schema": {
+              "title": "Bundle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewBundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read Interview Bundle",
+        "tags": [
+          "interview"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_interview_bundle_api_v1_interview_bundles__bundle_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bundle_id",
+            "required": true,
+            "schema": {
+              "title": "Bundle Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterviewBundlePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewBundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Patch Interview Bundle",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-bundles/{bundle_id}/copy": {
+      "post": {
+        "operationId": "copy_interview_bundle_api_v1_interview_bundles__bundle_id__copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bundle_id",
+            "required": true,
+            "schema": {
+              "title": "Bundle Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterviewBundleCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewBundleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Copy Interview Bundle",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs": {
+      "post": {
+        "operationId": "post_interview_run_api_v1_interview_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeRunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Run",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}": {
+      "get": {
+        "operationId": "read_interview_run_api_v1_interview_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Read Interview Run",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/answers": {
+      "post": {
+        "operationId": "post_interview_answer_api_v1_interview_runs__run_id__answers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Answer",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/cancel-evaluation": {
+      "post": {
+        "operationId": "post_interview_cancel_api_v1_interview_runs__run_id__cancel_evaluation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Cancel",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/hints": {
+      "post": {
+        "operationId": "post_interview_hint_api_v1_interview_runs__run_id__hints_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Hint",
+        "tags": [
+          "interview"
+        ]
+      }
+    },
+    "/api/v1/interview-runs/{run_id}/retry-evaluation": {
+      "post": {
+        "operationId": "post_interview_retry_api_v1_interview_runs__run_id__retry_evaluation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Post Interview Retry",
+        "tags": [
+          "interview"
         ]
       }
     },

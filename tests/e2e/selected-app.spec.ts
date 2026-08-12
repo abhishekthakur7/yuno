@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import type { DiagnosticPreviewEdit, DiagnosticSession, DiagnosticSetup } from '../../src/shared/api/diagnostics'
 import type { Assessment, EvidenceDetail, GoalProgress, Source } from '../../src/shared/api/evidence'
 import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
+import type { InterviewBundle, InterviewQuestion, InterviewRefresher, PracticeRun } from '../../src/shared/api/interview'
 import type { OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
 
 const routes = [
@@ -11,7 +12,7 @@ const routes = [
   ['/app/learn-roadmap', /Your editable roadmap/i],
   ['/app/topic-studio', /Implement an idempotency boundary/i],
   ['/app/interview-hub', /Choose the mode you need/i],
-  ['/app/practice', /Reason through the failure boundary/i],
+  ['/app/practice', /No practice question is selected/i],
   ['/app/mock', /idempotency store is unavailable/i],
   ['/app/reports', /No terminal mock report is available/i],
   ['/app/evidence', /What your work supports/i],
@@ -96,6 +97,10 @@ function isLocalRequest(request: Request) {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(window, '__YUNO_E2E_PRACTICE__', {
+      configurable: true,
+      value: { rubric_id: 'practice-rubric-e2e', rubric_version: 'fixture-v0' },
+    })
     if (sessionStorage.getItem('learning-app-test-initialized')) return
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith('yuno.')) localStorage.removeItem(key)
@@ -153,6 +158,18 @@ test.beforeEach(async ({ page }) => {
     scheduling_version: 'fixture-v0', failure_reference: null, row_version: 1,
     created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z',
   }]
+  let interviewBundles: InterviewBundle[] = [{
+    id: 'bundle-e2e-1', goal_id: 'goal-default', name: 'Senior backend interview', generic_role: 'Backend Engineer', target_level: 'Senior', origin: 'recommended', copy_source_id: null, status: 'active', row_version: 1,
+    created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z',
+    items: [
+      { id: 'bundle-item-technical', bundle_id: 'bundle-e2e-1', subject: 'technical', topic_stable_id: 'idempotency-retry', question: 'Where is the durable idempotency boundary?', position: 0, is_optional: false, included: true },
+      { id: 'bundle-item-behavioral', bundle_id: 'bundle-e2e-1', subject: 'behavioral', topic_stable_id: null, question: 'Tell me about a difficult trade-off.', position: 1, is_optional: true, included: true },
+      { id: 'bundle-item-leadership', bundle_id: 'bundle-e2e-1', subject: 'leadership', topic_stable_id: null, question: 'How did you align a team?', position: 2, is_optional: true, included: true },
+    ],
+  }]
+  const interviewRefreshers: InterviewRefresher[] = [{ artifact_id: 'artifact-e2e-1', state: 'stale', subject: 'Messaging', layer: 'Production', content: 'Revisit the durable decision before acknowledgement.', source_ref: 'source-e2e-1', source_title: 'Approved messaging guide', evidence_gap_ref: 'evidence-gap-e2e-1', evidence_gap: 'Recovery after commit was not yet supported.' }]
+  const interviewQuestions: InterviewQuestion[] = [{ id: 'question-e2e-1', bundle_id: 'bundle-e2e-1', subject: 'technical', topic_stable_id: 'idempotency-retry', question: 'Where is the durable idempotency boundary?', position: 0, included: true }]
+  let practiceRun: PracticeRun | null = null
   let projectedTopics = roadmapTopics.map(([stable_id, title]) => ({
     stable_id, title, subject: 'Java / Spring Boot · AWS', level_tag: 'Senior',
     target_capability: 'implement', scope_tags: ['java'], classification: 'unverified' as const,
@@ -270,6 +287,71 @@ test.beforeEach(async ({ page }) => {
     }
     await route.fulfill({ json: profile })
   })
+  await page.route('**/api/v1/interview-bundles**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.split('/')
+    const copy = path.at(-1) === 'copy'
+    const bundleId = path.at(copy ? -2 : -1)
+    if (request.method() === 'GET' && bundleId === 'interview-bundles') {
+      await route.fulfill({ json: interviewBundles })
+      return
+    }
+    if (request.method() === 'POST' && bundleId === 'interview-bundles') {
+      const body = request.postDataJSON() as Omit<InterviewBundle, 'id' | 'copy_source_id' | 'status' | 'row_version' | 'created_at' | 'updated_at'>
+      const created = { ...body, id: `bundle-e2e-${interviewBundles.length + 1}`, copy_source_id: null, status: 'active', row_version: 1, created_at: '2026-08-12T00:03:00Z', updated_at: '2026-08-12T00:03:00Z', items: body.items.map((item, index) => ({ ...item, id: `bundle-created-item-${index}`, bundle_id: `bundle-e2e-${interviewBundles.length + 1}` })) } as InterviewBundle
+      interviewBundles = [...interviewBundles, created]
+      await route.fulfill({ status: 201, json: created })
+      return
+    }
+    const index = interviewBundles.findIndex(bundle => bundle.id === bundleId)
+    if (index < 0) {
+      await route.fulfill({ status: 404, json: { message: 'Not found' } })
+      return
+    }
+    const current = interviewBundles[index]!
+    if (copy) {
+      const body = request.postDataJSON() as { name: string }
+      const copied: InterviewBundle = { ...current, id: `bundle-e2e-${interviewBundles.length + 1}`, name: body.name, copy_source_id: current.id, row_version: 1, items: current.items.map((item, itemIndex) => ({ ...item, id: `bundle-copy-item-${itemIndex}`, bundle_id: `bundle-e2e-${interviewBundles.length + 1}` })) }
+      interviewBundles = [...interviewBundles, copied]
+      await route.fulfill({ status: 201, json: copied })
+      return
+    }
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON() as { name?: string; generic_role?: string; target_level?: InterviewBundle['target_level']; items?: Array<{ id: string; included: boolean }> }
+      const included = new Map(body.items?.map(item => [item.id, item.included]) ?? [])
+      interviewBundles[index] = { ...current, ...body, items: current.items.map(item => included.has(item.id) ? { ...item, included: included.get(item.id)! } : item), row_version: current.row_version + 1, updated_at: '2026-08-12T00:04:00Z' }
+      await route.fulfill({ json: interviewBundles[index] })
+      return
+    }
+    if (request.method() === 'DELETE') {
+      interviewBundles.splice(index, 1)
+      await route.fulfill({ status: 204, body: '' })
+      return
+    }
+    await route.fulfill({ json: current })
+  })
+  await page.route('**/api/v1/interview-runs**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.split('/')
+    const action = path.at(-1)
+    if (request.method() === 'POST' && action === 'interview-runs') {
+      const body = request.postDataJSON() as { goal_id: string; bundle_id: string; bundle_item_id: string; rubric_id: string; rubric_version: string; requested_capability: string }
+      practiceRun = { ...body, id: 'practice-run-e2e-1', mode: 'Practice', state: 'ready', question: interviewQuestions[0]!.question, active_job_id: null, failure_reference: null, retryable: false, created_at: '2026-08-12T00:05:00Z', updated_at: '2026-08-12T00:05:00Z', turns: [{ id: 'practice-question-e2e-1', turn_number: 1, kind: 'question', body: interviewQuestions[0]!.question, answer_turn_id: null, created_at: '2026-08-12T00:05:00Z' }], results: [] }
+      await route.fulfill({ status: 201, json: practiceRun }); return
+    }
+    if (!practiceRun) { await route.fulfill({ status: 404, json: { message: 'Not found' } }); return }
+    if (action === 'hints') {
+      practiceRun = { ...practiceRun, state: 'answering', turns: [...practiceRun.turns, { id: 'practice-hint-e2e-1', turn_number: practiceRun.turns.length + 1, kind: 'hint', body: 'Name the failure window first. Which durable key survives the retry?', answer_turn_id: null, created_at: '2026-08-12T00:06:00Z' }] }
+      await route.fulfill({ json: practiceRun }); return
+    }
+    if (action === 'answers') {
+      const answer = (request.postDataJSON() as { answer: string }).answer
+      const answerTurn = { id: `practice-answer-e2e-${practiceRun.turns.filter(turn => turn.kind === 'answer').length + 1}`, turn_number: practiceRun.turns.length + 1, kind: 'answer' as const, body: answer, answer_turn_id: null, created_at: '2026-08-12T00:07:00Z' }
+      practiceRun = { ...practiceRun, state: 'feedback-ready', turns: [...practiceRun.turns, answerTurn], results: [...practiceRun.results, { id: `practice-result-e2e-${practiceRun.results.length + 1}`, answer_turn_id: answerTurn.id, assessment_id: 'assessment-e2e-1', visible_at: '2026-08-12T00:07:00Z', facts: ['The durable decision precedes acknowledgement.'], trade_offs: ['Retention must cover the replay horizon.'], dimensions: [{ dimension_id: 'boundary', name: 'Failure boundary', outcome: 'supported', rationale: 'The answer names an atomic durable key.' }], feedback: 'The answer identifies the failure boundary.', cross_question_candidate: 'How would key retention change under a longer replay horizon?' }] }
+      await route.fulfill({ status: 202, json: { job_id: `practice-job-${practiceRun.results.length}`, kind: 'evaluate_practice', status: 'queued', enqueued_at: '2026-08-12T00:07:00Z', deduplicated: false } }); return
+    }
+    await route.fulfill({ json: practiceRun })
+  })
   await page.route('**/api/v1/canonical/versions', route => route.fulfill({ json: [{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }] }))
   await page.route('**/api/v1/goals', async route => {
     if (route.request().method() === 'POST') {
@@ -290,6 +372,14 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'refreshers') {
+      await route.fulfill({ json: interviewRefreshers })
+      return
+    }
+    if (path.at(-1) === 'questions') {
+      await route.fulfill({ json: interviewQuestions })
+      return
+    }
     if (path.at(-1) === 'overlay-proposals') {
       await route.fulfill({ json: [] })
       return
@@ -749,7 +839,6 @@ test('malformed bounded draft storage falls back field by field without runtime 
   await page.evaluate(() => {
     localStorage.setItem('yuno.learning.state.v1.goal-default', JSON.stringify({
       version: 1,
-      practice: { questionIndex: -4, attempts: {}, hintRequested: 'yes' },
       mock: { priorTurns: [null], completedTurns: [null], reportKind: 'invented' },
       evidence: [null],
     }))
@@ -767,13 +856,13 @@ test('malformed bounded draft storage falls back field by field without runtime 
   await expect.poll(async () => {
     const learning = await learningState(page)
     return {
-      practice: learning?.practice,
+      hasPractice: Boolean(learning && Object.prototype.hasOwnProperty.call(learning, 'practice')),
       mockPriorTurns: learning?.mock.priorTurns.length,
       mockReport: learning?.mock.reportKind,
       hasEvidence: Boolean(learning && Object.prototype.hasOwnProperty.call(learning, 'evidence')),
     }
   }).toEqual({
-    practice: { questionIndex: 0, draft: '', hintRequested: false, mode: 'answering', attempts: [] },
+    hasPractice: false,
     mockPriorTurns: 2,
     mockReport: null,
     hasEvidence: false,
@@ -1049,7 +1138,7 @@ test('Topic Studio static checks do not create client-side evidence', async ({ p
 
 test('Practice reveals a requested hint, then feedback, repair, and append-only history', async ({ page, diagnostics }) => {
   void diagnostics
-  await open(page, '/app/practice')
+  await open(page, '/app/practice?bundleId=bundle-e2e-1&bundleItemId=question-e2e-1')
   await expect(page.getByText(/Name the failure window first/i)).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Repair answer/i })).toHaveCount(0)
   await page.getByRole('button', { name: /Request hint/i }).click()
@@ -1060,10 +1149,20 @@ test('Practice reveals a requested hint, then feedback, repair, and append-only 
   await expect(page.getByRole('heading', { name: /Trade-offs to defend/i })).toBeVisible()
   await page.getByRole('button', { name: /Repair answer/i }).click()
   await expect(page.getByRole('textbox', { name: /Your response/i })).toHaveValue(practiceDraft)
-  await page.getByRole('textbox', { name: /Your response/i }).fill(`${practiceDraft} Repaired.`)
+  const repairedDraft = `  ${practiceDraft} Repaired.  \n`
+  await page.getByRole('textbox', { name: /Your response/i }).fill(repairedDraft)
   await page.getByRole('button', { name: /Submit response/i }).click()
   await expect(page.getByText(/Earlier attempts \(1\)/i)).toBeVisible()
-  await expect.poll(async () => (await learningState(page))?.practice.attempts.length).toBe(2)
+  await expect.poll(async () => page.evaluate(async () => {
+    const response = await fetch('/api/v1/interview-runs/practice-run-e2e-1')
+    const run = await response.json()
+    return run.turns.filter((turn: { kind: string }) => turn.kind === 'answer').length
+  })).toBe(2)
+  await expect.poll(async () => page.evaluate(async () => {
+    const response = await fetch('/api/v1/interview-runs/practice-run-e2e-1')
+    const run = await response.json()
+    return run.turns.filter((turn: { kind: string }) => turn.kind === 'answer').at(-1)?.body
+  })).toBe(repairedDraft)
 })
 
 test('Mock pause/resume preserves the exact draft and evaluation appears only after terminal completion', async ({ page, diagnostics }) => {
@@ -1222,7 +1321,7 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   await page.keyboard.press('Enter')
   await expect(customize).toHaveAttribute('aria-expanded', 'true')
 
-  await open(page, '/app/practice')
+  await open(page, '/app/practice?bundleId=bundle-e2e-1&bundleItemId=question-e2e-1')
   const hint = page.getByRole('button', { name: /Request hint/i })
   await hint.focus()
   await page.keyboard.press('Enter')
@@ -1310,12 +1409,23 @@ test('interview-hub Refresher and Question bank are query-string modes of the on
   await expect(page.locator('[data-app="yuno-learning"]')).toHaveAttribute('data-mode', 'refresher')
   await expect(modeDetail).toBeVisible()
   await expect(modeDetail).toHaveAttribute('data-mode', 'refresher')
+  const refresherContent = page.locator('#sb-interview-mode-content')
+  await expect(refresherContent).toHaveAttribute('data-interview-state', 'stale')
+  await expect(refresherContent.getByText('Approved messaging guide')).toBeVisible()
+  await expect(refresherContent.getByText('Recovery after commit was not yet supported.')).toBeVisible()
 
   await open(page, '/app/interview-hub?mode=questions')
   expect(new URL(page.url()).pathname).toBe('/app/interview-hub')
   await expect(page.locator('[data-app="yuno-learning"]')).toHaveAttribute('data-mode', 'questions')
   await expect(modeDetail).toBeVisible()
   await expect(modeDetail).toHaveAttribute('data-mode', 'questions')
+  const questionsContent = page.locator('#sb-interview-mode-content')
+  const selectedQuestion = questionsContent.getByRole('checkbox', { name: /Where is the durable idempotency boundary/i })
+  await expect(selectedQuestion).toBeVisible()
+  await expect(questionsContent.getByRole('button', { name: /Open Guided practice/i })).toBeDisabled()
+  await selectedQuestion.check()
+  await expect(questionsContent.getByRole('button', { name: /Open Guided practice/i })).toBeEnabled()
+  await expect(questionsContent.getByText(/score|rubric outcome|post-submission review/i)).toHaveCount(0)
 
   await open(page, '/app/interview-hub?mode=bogus')
   await expect(page.getByRole('heading', { level: 1, name: /Choose the mode you need/i })).toBeVisible()
@@ -1324,6 +1434,7 @@ test('interview-hub Refresher and Question bank are query-string modes of the on
   await expect(notFound).toHaveCount(0)
 
   await open(page, '/app/interview-hub')
+  await expect(page.locator('.sb-bundle-workspace')).toHaveAttribute('data-interview-state', 'ready')
   await page.getByRole('button', { name: /Open Refresher/i }).click()
   await expect(page).toHaveURL(/\/app\/interview-hub\?mode=refresher$/)
   await expect(modeDetail).toBeVisible()

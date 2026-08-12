@@ -10,28 +10,6 @@ describe('shared learner behavior', () => {
     expect(state).not.toHaveProperty('evidence')
   })
 
-  it('reveals practice help only on request and feedback only after submit', () => {
-    let state = createInitialState()
-    expect(state.practice.hintRequested).toBe(false)
-    expect(state.practice.attempts).toHaveLength(0)
-
-    state = learningReducer(state, { type: 'REQUEST_HINT' })
-    expect(state.practice.hintRequested).toBe(true)
-    expect(state.practice.attempts).toHaveLength(0)
-
-    state = learningReducer(state, { type: 'SET_PRACTICE_DRAFT', value: 'Use a unique idempotency key in the same atomic write.' })
-    state = learningReducer(state, { type: 'SUBMIT_PRACTICE' })
-    expect(state.practice.mode).toBe('feedback')
-    expect(state.practice.attempts[0]?.facts).toHaveLength(2)
-    expect(state.practice.attempts[0]?.tradeoffs).toHaveLength(2)
-
-    state = learningReducer(state, { type: 'START_REPAIR' })
-    state = learningReducer(state, { type: 'SET_PRACTICE_DRAFT', value: `${state.practice.draft} Bound its retention.` })
-    state = learningReducer(state, { type: 'SUBMIT_PRACTICE' })
-    expect(state.practice.attempts).toHaveLength(2)
-    expect(state.practice.attempts[0]?.answer).not.toBe(state.practice.attempts[1]?.answer)
-  })
-
   it('preserves the exact mock draft on safe exit and gates fixture evaluation', () => {
     let state = createInitialState()
     const exactDraft = 'My exact unfinished response.\nKeep spacing intact.'
@@ -59,7 +37,7 @@ describe('shared learner behavior', () => {
   it('serializes only the bounded draft slices that remain browser-backed', () => {
     const persisted = persistedLearningDrafts(createInitialState())
     expect(Object.keys(persisted).sort()).toEqual([
-      'codeDraft', 'mock', 'practice', 'runResult', 'version',
+      'codeDraft', 'mock', 'runResult', 'version',
     ])
     expect(persisted).not.toHaveProperty('onboarding')
     expect(persisted).not.toHaveProperty('roadmap')

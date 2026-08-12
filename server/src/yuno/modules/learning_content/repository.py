@@ -70,6 +70,22 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
         ).first()
         return _artifact(row) if row else None
 
+    def list_artifacts(self, owner_id, goal_id, layer):
+        rows = self._session.scalars(
+            owner_scoped_select(GeneratedArtifactRow, owner_id)
+            .where(
+                GeneratedArtifactRow.goal_id == goal_id,
+                GeneratedArtifactRow.layer == layer,
+                GeneratedArtifactRow.body_ref.is_not(None),
+            )
+            .order_by(
+                GeneratedArtifactRow.topic_stable_id,
+                GeneratedArtifactRow.generated_at.desc(),
+                GeneratedArtifactRow.id.desc(),
+            )
+        ).all()
+        return tuple(_artifact(row) for row in rows)
+
     def add_artifact(self, artifact):
         values = artifact.__dict__.copy()
         body = values.pop("body")

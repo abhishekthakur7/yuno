@@ -31,6 +31,11 @@ from yuno.modules.imports.domain import (
     MappingState,
     TrustState,
 )
+from yuno.modules.interview.domain import (
+    BundleSubject,
+    InterviewTurnKind,
+    PracticeRunState,
+)
 from yuno.modules.learning_content.domain import (
     Capability,
     GenerationAttemptStatus,
@@ -83,6 +88,157 @@ class ErrorResponse(BaseModel):
     current_state: str | None = None
     job_id: str | None = None
     recovery_action: str | None = None
+
+
+class InterviewBundleItemCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subject: BundleSubject
+    topic_stable_id: str | None = None
+    question: str | None = None
+    position: int = Field(ge=0)
+    is_optional: bool
+    included: bool
+
+
+class InterviewBundleCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str | None = None
+    name: str = Field(min_length=1)
+    generic_role: str = Field(min_length=1)
+    target_level: Literal["Mid-level", "Senior", "Staff"]
+    origin: str = Field(min_length=1)
+    items: list[InterviewBundleItemCreateRequest]
+
+
+class InterviewBundleItemPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    included: bool
+
+
+class InterviewBundlePatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1)
+    generic_role: str | None = Field(default=None, min_length=1)
+    target_level: Literal["Mid-level", "Senior", "Staff"] | None = None
+    items: list[InterviewBundleItemPatchRequest] | None = None
+
+
+class InterviewBundleCopyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1)
+
+
+class InterviewBundleItemResponse(BaseModel):
+    id: str
+    bundle_id: str
+    subject: BundleSubject
+    topic_stable_id: str | None
+    question: str | None
+    position: int
+    is_optional: bool
+    included: bool
+
+
+class InterviewBundleResponse(BaseModel):
+    id: str
+    goal_id: str | None
+    name: str
+    generic_role: str
+    target_level: str
+    origin: str
+    copy_source_id: str | None
+    status: str
+    row_version: int
+    created_at: str
+    updated_at: str
+    items: list[InterviewBundleItemResponse]
+
+
+class InterviewQuestionResponse(BaseModel):
+    id: str
+    bundle_id: str
+    subject: BundleSubject
+    topic_stable_id: str | None
+    question: str
+    position: int
+    included: bool
+
+
+class RefresherResponse(BaseModel):
+    artifact_id: str
+    state: Literal["ready", "stale", "unavailable"]
+    subject: str
+    layer: str
+    content: str | None
+    source_ref: str | None
+    source_title: str | None
+    evidence_gap_ref: str | None
+    evidence_gap: str | None
+
+
+class PracticeRunCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str
+    bundle_id: str
+    bundle_item_id: str
+    rubric_id: str
+    rubric_version: str
+    requested_capability: str = "implement"
+    hint: str | None = None
+
+
+class PracticeAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: str
+
+
+class PracticeTurnResponse(BaseModel):
+    id: str
+    turn_number: int
+    kind: InterviewTurnKind
+    body: str
+    answer_turn_id: str | None
+    created_at: str
+
+
+class PracticeDimensionResultResponse(BaseModel):
+    dimension_id: str
+    name: str
+    outcome: str
+    rationale: str
+
+
+class PracticeTurnResultResponse(BaseModel):
+    id: str
+    answer_turn_id: str
+    assessment_id: str
+    visible_at: str
+    facts: list[str]
+    trade_offs: list[str]
+    dimensions: list[PracticeDimensionResultResponse]
+    feedback: str
+    cross_question_candidate: str | None
+
+
+class PracticeRunResponse(BaseModel):
+    id: str
+    goal_id: str
+    bundle_id: str
+    bundle_item_id: str
+    mode: Literal["Practice"]
+    state: PracticeRunState
+    question: str
+    rubric_id: str
+    rubric_version: str
+    requested_capability: str
+    active_job_id: str | None
+    failure_reference: str | None
+    retryable: bool
+    created_at: str
+    updated_at: str
+    turns: list[PracticeTurnResponse]
+    results: list[PracticeTurnResultResponse]
 
 
 class JobRefResponse(BaseModel):
