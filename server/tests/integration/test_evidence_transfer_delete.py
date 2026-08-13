@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
+from tests.job_assertions import wait_for_job
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -25,7 +26,6 @@ from yuno.modules.profiles_goals.service import create_goal
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
-from yuno.shared.domain.errors import ConflictError
 from yuno.shared.domain.ids import new_id
 
 
@@ -243,11 +243,12 @@ def test_delete_failure_rolls_back_tombstone_payload_and_downgrade(
 def test_delete_rejects_a_stale_impact_snapshot(
     client, uow_factory: UnitOfWorkFactory
 ) -> None:
-    del client
     owner_id, source_id, target_id, evidence_id = _seed(uow_factory)
-    with uow_factory() as uow:
-        impact = create_delete_preflight(uow, owner_id, source_id)
-        uow.commit()
+    preflight = client.post(
+        f"/api/v1/goals/{source_id}/delete-preflight",
+        headers={"Idempotency-Key": "stale-preflight"},
+    )
+    assert preflight.status_code == 200
 
     with uow_factory() as uow:
         transfer_evidence(
@@ -262,11 +263,17 @@ def test_delete_rejects_a_stale_impact_snapshot(
         )
         uow.commit()
 
-    with (
-        uow_factory() as uow,
-        pytest.raises(ConflictError, match="impact changed after preflight"),
-    ):
-        delete_goal(uow, owner_id, source_id, impact.snapshot_id)
+    jobs_before = len(client.get("/api/v1/jobs").json()["jobs"])
+    rejected = client.post(
+        f"/api/v1/goals/{source_id}/delete",
+        headers={"Idempotency-Key": "stale-delete"},
+        json={
+            "operation_id": preflight.json()["operation_id"],
+            "snapshot_id": preflight.json()["snapshot_id"],
+        },
+    )
+    assert rejected.status_code == 409
+    assert len(client.get("/api/v1/jobs").json()["jobs"]) == jobs_before
 
     with uow_factory() as uow:
         assert uow.evidence.get_payload(owner_id, source_id, evidence_id) is not None
@@ -303,16 +310,24 @@ def test_delete_api_replays_the_same_snapshot_and_effect(
     assert replay.json() == preflight.json()
 
     delete_headers = {"Idempotency-Key": "delete-confirm"}
-    body = {"snapshot_id": preflight.json()["snapshot_id"]}
+    body = {
+        "operation_id": preflight.json()["operation_id"],
+        "snapshot_id": preflight.json()["snapshot_id"],
+    }
     deleted = client.post(
         f"/api/v1/goals/{source_id}/delete", headers=delete_headers, json=body
     )
-    assert deleted.status_code == 200, deleted.text
+    assert deleted.status_code == 202, deleted.text
     delete_replay = client.post(
         f"/api/v1/goals/{source_id}/delete", headers=delete_headers, json=body
     )
-    assert delete_replay.status_code == 200
-    assert delete_replay.json() == deleted.json() == preflight.json()
+    assert delete_replay.status_code == 202
+    assert delete_replay.json()["job_id"] == deleted.json()["job_id"]
+    terminal = wait_for_job(client, deleted.json()["job_id"])
+    assert terminal["status"] == "succeeded"
+    operation = client.get(f"/api/v1/delete-operations/{body['operation_id']}")
+    assert operation.status_code == 200
+    assert operation.json()["status"] == "complete"
 
     with uow_factory() as uow:
         delete_audits = [

@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "AccessibilitySettings": {
+        "additionalProperties": false,
+        "properties": {
+          "reduced_motion": {
+            "title": "Reduced Motion",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reduced_motion"
+        ],
+        "title": "AccessibilitySettings",
+        "type": "object"
+      },
       "ArtifactProvenanceRefResponse": {
         "properties": {
           "kind": {
@@ -1362,6 +1376,120 @@
         "title": "CorrectionType",
         "type": "string"
       },
+      "DeleteOperationResponse": {
+        "properties": {
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "learning_state_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Learning State Ids",
+            "type": "array"
+          },
+          "result_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Ref"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "preflight",
+              "queued",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "snapshot_id",
+          "scope",
+          "evidence_ids",
+          "learning_state_ids",
+          "status",
+          "job_id",
+          "result_ref",
+          "confirmed_at",
+          "failure_reference",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeleteOperationResponse",
+        "type": "object"
+      },
       "DepthOverrideRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2353,6 +2481,124 @@
         "title": "EvidenceTransferResponse",
         "type": "object"
       },
+      "ExportCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          }
+        },
+        "title": "ExportCreateRequest",
+        "type": "object"
+      },
+      "ExportOperationResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "format_version": {
+            "title": "Format Version",
+            "type": "string"
+          },
+          "goal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "package": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package"
+          },
+          "result_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Ref"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "status",
+          "format_version",
+          "package",
+          "job_id",
+          "result_ref",
+          "failure_reference",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ExportOperationResponse",
+        "type": "object"
+      },
       "FieldError": {
         "description": "One field-level error in the API error envelope.",
         "properties": {
@@ -2438,6 +2684,10 @@
       },
       "GoalDeleteImpactResponse": {
         "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
           "evidence_ids": {
             "items": {
               "type": "string"
@@ -2456,16 +2706,28 @@
             "title": "Learning State Ids",
             "type": "array"
           },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
           "snapshot_id": {
             "title": "Snapshot Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "preflight",
+            "title": "Status",
             "type": "string"
           }
         },
         "required": [
+          "operation_id",
           "snapshot_id",
           "goal_id",
           "evidence_ids",
-          "learning_state_ids"
+          "learning_state_ids",
+          "status",
+          "created_at"
         ],
         "title": "GoalDeleteImpactResponse",
         "type": "object"
@@ -2473,13 +2735,18 @@
       "GoalDeleteRequest": {
         "additionalProperties": false,
         "properties": {
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
           "snapshot_id": {
             "title": "Snapshot Id",
             "type": "string"
           }
         },
         "required": [
-          "snapshot_id"
+          "snapshot_id",
+          "operation_id"
         ],
         "title": "GoalDeleteRequest",
         "type": "object"
@@ -5248,20 +5515,57 @@
       "OwnerSettingsPatchRequest": {
         "additionalProperties": false,
         "properties": {
+          "accessibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccessibilitySettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "progress_display": {
-            "$ref": "#/components/schemas/ProgressDisplay"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgressDisplay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "progress_display"
-        ],
         "title": "OwnerSettingsPatchRequest",
         "type": "object"
       },
       "OwnerSettingsResponse": {
         "properties": {
+          "accessibility": {
+            "$ref": "#/components/schemas/AccessibilitySettings"
+          },
           "progress_display": {
             "$ref": "#/components/schemas/ProgressDisplay"
+          },
+          "provider_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "row_version": {
             "title": "Row Version",
@@ -5270,6 +5574,8 @@
         },
         "required": [
           "progress_display",
+          "accessibility",
+          "provider_selection",
           "row_version"
         ],
         "title": "OwnerSettingsResponse",
@@ -6899,6 +7205,167 @@
         "title": "RunnerRunResponse",
         "type": "object"
       },
+      "SearchIndexStatus": {
+        "enum": [
+          "ready",
+          "stale",
+          "rebuilding",
+          "failed",
+          "unavailable"
+        ],
+        "title": "SearchIndexStatus",
+        "type": "string"
+      },
+      "SearchIndexStatusResponse": {
+        "properties": {
+          "active_generation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Generation"
+          },
+          "failure_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reference"
+          },
+          "rebuild_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild Job Id"
+          },
+          "source_watermark": {
+            "title": "Source Watermark",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SearchIndexStatus"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status",
+          "source_watermark",
+          "active_generation",
+          "rebuild_job_id",
+          "failure_reference",
+          "updated_at"
+        ],
+        "title": "SearchIndexStatusResponse",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "empty": {
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "index_status": {
+            "$ref": "#/components/schemas/SearchIndexStatus"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "empty",
+          "degraded",
+          "index_status"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultResponse": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "tags": {
+            "title": "Tags",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Stable Id"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "goal_id",
+          "topic_stable_id",
+          "title",
+          "body",
+          "tags",
+          "degraded"
+        ],
+        "title": "SearchResultResponse",
+        "type": "object"
+      },
       "SkipDecisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8107,6 +8574,48 @@
         ]
       }
     },
+    "/api/v1/delete-operations/{operation_id}": {
+      "get": {
+        "operationId": "get_delete_operation_api_v1_delete_operations__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteOperationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Delete Operation",
+        "tags": [
+          "data-lifecycle"
+        ]
+      }
+    },
     "/api/v1/diagnostics": {
       "post": {
         "operationId": "post_diagnostic_api_v1_diagnostics_post",
@@ -8820,6 +9329,107 @@
         ]
       }
     },
+    "/api/v1/exports": {
+      "post": {
+        "operationId": "create_export_api_v1_exports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Create Export",
+        "tags": [
+          "data-lifecycle"
+        ]
+      }
+    },
+    "/api/v1/exports/{operation_id}": {
+      "get": {
+        "operationId": "get_export_api_v1_exports__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOperationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Export",
+        "tags": [
+          "data-lifecycle"
+        ]
+      }
+    },
     "/api/v1/goals": {
       "get": {
         "operationId": "list_goals_api_v1_goals_get",
@@ -9245,11 +9855,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GoalDeleteImpactResponse"
+                  "$ref": "#/components/schemas/JobRefResponse"
                 }
               }
             },
@@ -13191,6 +13801,155 @@
         "summary": "Confirm Runner",
         "tags": [
           "runner"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "operationId": "search_api_v1_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "pattern": ".*\\S.*",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "types",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Types"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search-index/rebuild": {
+      "post": {
+        "operationId": "rebuild_search_index_api_v1_search_index_rebuild_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Rebuild Search Index",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/search-index/status": {
+      "get": {
+        "operationId": "search_index_status_api_v1_search_index_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchIndexStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Search Index Status",
+        "tags": [
+          "search"
         ]
       }
     },

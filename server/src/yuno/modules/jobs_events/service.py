@@ -41,6 +41,7 @@ from yuno.shared.domain.errors import (
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 from yuno.shared.infrastructure.processes import process_identity
+from yuno.shared.infrastructure.structured_logging import log_event
 
 _INTERACTIVE_KINDS = {
     "assess_evidence",
@@ -56,6 +57,8 @@ _RETRY_POLICIES = {
     "parse_import": "idempotent",
     "reprocess_import": "idempotent",
     "rebuild_index": "idempotent",
+    "export_data": "idempotent",
+    "delete_goal": "idempotent",
     "generate_topic_content": "generation",
     "assess_evidence": "idempotent",
     "reevaluate_assessment": "idempotent",
@@ -199,6 +202,7 @@ class DurableJobDispatcher:
                 row = repo.enqueue(request, lane)
                 self._audit(session, row, "enqueued", None, row.state)
                 session.commit()
+                self._log_transition(row, "enqueued")
             except IntegrityError:
                 session.rollback()
                 if request.dedupe_key and (
@@ -242,6 +246,7 @@ class DurableJobDispatcher:
             repo.cancel(row)
             self._audit(session, row, "cancelled-or-requested", None, row.state)
             session.commit()
+            self._log_transition(row, row.state)
             ref = as_ref(row)
         if ref.status is JobStatus.CANCEL_REQUESTED:
             self._signal_running_attempt(job_id)
@@ -400,6 +405,7 @@ class DurableJobDispatcher:
                             session, current, "cancelled", "running", current.state
                         )
                         session.commit()
+                        self._log_transition(current, "cancelled")
             except Exception as exc:  # noqa: BLE001 -- handler failures are isolated
                 with self._transition_lock, self._sessions() as session:
                     repo = JobRepository(session, self._clock)
@@ -410,6 +416,11 @@ class DurableJobDispatcher:
                             session, current, "failed", "running", current.state
                         )
                         session.commit()
+                        self._log_transition(
+                            current,
+                            "failed",
+                            diagnostic_classification="job-handler-failure",
+                        )
             else:
                 try:
                     with self._transition_lock, self._sessions() as session:
@@ -434,6 +445,7 @@ class DurableJobDispatcher:
                                     current.state,
                                 )
                                 session.commit()
+                                self._log_transition(current, "cancelled")
                                 continue
                             savepoint = session.begin_nested()
                             try:
@@ -450,6 +462,11 @@ class DurableJobDispatcher:
                                     current.state,
                                 )
                                 session.commit()
+                                self._log_transition(
+                                    current,
+                                    "failed",
+                                    diagnostic_classification="job-prepared-failure",
+                                )
                                 continue
                             except Exception:
                                 savepoint.rollback()
@@ -475,6 +492,7 @@ class DurableJobDispatcher:
                                 current.state,
                             )
                             session.commit()
+                            self._log_transition(current, "succeeded")
                 except Exception as exc:  # noqa: BLE001 -- rollback quarantines prepared output
                     with self._transition_lock, self._sessions() as session:
                         repo = JobRepository(session, self._clock)
@@ -488,6 +506,11 @@ class DurableJobDispatcher:
                                 session, current, "failed", "running", current.state
                             )
                             session.commit()
+                            self._log_transition(
+                                current,
+                                "failed",
+                                diagnostic_classification="job-publication-failure",
+                            )
             try:
                 self._run_janitor()
             except Exception as exc:  # noqa: BLE001 -- janitor failure must not stop dispatch
@@ -511,6 +534,7 @@ class DurableJobDispatcher:
                 row, process_identity=process_identity(pid), pid=pid, pgid=pgid
             )
             session.commit()
+            self._log_transition(row, "started")
             session.expunge(row)
             return row
 
@@ -580,6 +604,25 @@ class DurableJobDispatcher:
                 correlation_id=row.correlation_id,
                 occurred_at=utc_text(self._clock.now()),
             )
+        )
+
+    @staticmethod
+    def _log_transition(
+        row,
+        lifecycle: str,
+        *,
+        diagnostic_classification: str | None = None,
+    ) -> None:
+        log_event(
+            f"job.{lifecycle}",
+            request_id=row.request_id,
+            correlation_id=row.correlation_id,
+            owner_id=row.owner_id,
+            goal_id=row.goal_id,
+            job_id=row.id,
+            run_id=row.run_id,
+            lifecycle=lifecycle,
+            diagnostic_classification=diagnostic_classification,
         )
 
     def _reconcile_attempt(self, repo: JobRepository, job_id: str) -> str | None:

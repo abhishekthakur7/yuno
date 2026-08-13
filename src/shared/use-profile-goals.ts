@@ -8,9 +8,11 @@ import {
   profileQueryOptions,
   recordGoalNavigation,
   setCurrentGoal,
+  updateGoal,
   updateProfile,
   type GoalWorkspace,
   type GoalCreate,
+  type GoalPatch,
   type ProfileUpdate,
   type ResumeDestination,
 } from './api/profile-goals'
@@ -29,6 +31,14 @@ export function useProfileGoals() {
     ])
   }
   const switchGoal = useMutation({ mutationFn: setCurrentGoal, onSuccess: invalidate })
+  const saveGoal = useMutation({
+    mutationFn: ({ goal, patch }: { goal: GoalWorkspace; patch: GoalPatch }) => updateGoal(goal, patch),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<GoalWorkspace[]>(['goals'], current => current?.map(goal => goal.id === updated.id ? updated : goal))
+      void queryClient.invalidateQueries({ queryKey: ['goals'] })
+    },
+    onError: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
+  })
   const archive = useMutation({ mutationFn: archiveGoal, onSuccess: invalidate })
   const recordNavigation = useMutation({
     mutationFn: ({ goal, position, destination }: { goal: GoalWorkspace; position: string; destination: ResumeDestination }) => recordGoalNavigation(goal, position, destination),
@@ -58,6 +68,7 @@ export function useProfileGoals() {
     currentGoal,
     refresh,
     switchGoal,
+    saveGoal,
     archive,
     recordNavigation,
     dismissRecommendation,

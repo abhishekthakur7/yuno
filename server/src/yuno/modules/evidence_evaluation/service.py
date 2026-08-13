@@ -569,6 +569,25 @@ def delete_goal(
     return impact
 
 
+def validate_delete_snapshot(
+    uow: EvidenceUnitOfWork, owner_id: str, goal_id: str, snapshot_id: str
+) -> DeleteImpact:
+    snapshot = uow.evidence.get_delete_snapshot(owner_id, goal_id, snapshot_id)
+    if snapshot is None:
+        raise NotFoundError("The delete impact snapshot was not found.")
+    data = json.loads(snapshot.impact_json)
+    if hash_payload(_current_impact(uow, owner_id, goal_id)) != snapshot.impact_hash:
+        raise ConflictError(
+            "The delete impact changed after preflight; request a new preflight."
+        )
+    return DeleteImpact(
+        snapshot_id,
+        goal_id,
+        tuple(data["evidence_ids"]),
+        tuple(data["learning_state_ids"]),
+    )
+
+
 def _current_impact(
     uow: EvidenceUnitOfWork, owner_id: str, goal_id: str
 ) -> dict[str, object]:

@@ -9,9 +9,10 @@ from yuno.api.contracts import (
     JobListResponse,
     JobRefResponse,
     JobRetryRequest,
+    safe_job_diagnostic,
 )
 from yuno.api.dependencies import get_job_dispatcher, get_owner_id
-from yuno.shared.application.jobs import JobDispatcher, JobRef
+from yuno.shared.application.jobs import JobAttempt, JobDispatcher, JobRef
 
 router = APIRouter(tags=["jobs"])
 
@@ -28,12 +29,28 @@ def _response(ref: JobRef) -> JobRefResponse:
         goal_id=ref.goal_id,
         schema_version=ref.schema_version,
         attempt=ref.attempt,
-        diagnostic=ref.diagnostic,
+        diagnostic=safe_job_diagnostic(ref),
         started_at=ref.started_at,
         terminal_at=ref.terminal_at,
         substitution_ref=ref.substitution_ref,
         result_ref=ref.result_ref,
         result_hash=ref.result_hash,
+    )
+
+
+def _attempt_response(attempt: JobAttempt) -> JobAttemptResponse:
+    return JobAttemptResponse(
+        attempt_number=attempt.attempt_number,
+        process_identity=attempt.process_identity,
+        pid=attempt.pid,
+        pgid=attempt.pgid,
+        temp_path=None,
+        started_at=attempt.started_at,
+        ended_at=attempt.ended_at,
+        outcome=attempt.outcome,
+        diagnostic="job-attempt-failure" if attempt.diagnostic else None,
+        substitution_ref=attempt.substitution_ref,
+        confirmation_ref=attempt.confirmation_ref,
     )
 
 
@@ -77,8 +94,7 @@ def get_job_attempts(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
 ):
     return [
-        JobAttemptResponse(**attempt.__dict__)
-        for attempt in dispatcher.attempts(owner_id, job_id)
+        _attempt_response(attempt) for attempt in dispatcher.attempts(owner_id, job_id)
     ]
 
 

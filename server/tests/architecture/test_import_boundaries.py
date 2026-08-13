@@ -67,6 +67,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.provider",
     "yuno.modules.hands_on",
     "yuno.modules.runner",
+    "yuno.modules.search",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {
@@ -125,6 +126,8 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.hands_on.service",
     "yuno.modules.runner.domain",
     "yuno.modules.runner.ports",
+    "yuno.modules.search.domain",
+    "yuno.modules.search.ports",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -144,6 +147,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.provider",
     "yuno.modules.hands_on",
     "yuno.modules.runner",
+    "yuno.modules.search",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`

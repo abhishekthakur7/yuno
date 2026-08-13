@@ -23,13 +23,16 @@ import {
   X,
 } from 'lucide-react'
 import type { ImportStatement, JobRef } from '../../shared/api/imports'
-import { evidenceQueryOptions } from '../../shared/api/evidence'
 import { useImports } from '../../shared/use-imports'
 import { useProfileGoals } from '../../shared/use-profile-goals'
 import { useRoadmap } from '../../shared/use-roadmap'
 import { useReviewPreferences } from '../../shared/use-notebook-review'
 import { useEvidence } from '../../shared/use-evidence'
 import { useOwnerSettings } from '../../shared/use-settings'
+import { useSearch } from '../../shared/use-search'
+import { useProviderSettings } from '../../shared/use-provider-settings'
+import { useDataOperations } from '../../shared/use-data-operations'
+import type { GoalWorkspace } from '../../shared/api/profile-goals'
 import type { ReviewPreferencesPatch } from '../../shared/api/notebook-review'
 import { cancelJob, jobsQueryOptions, retryJob } from '../../shared/api/jobs'
 import { acceptCanonicalUpdate, canonicalUpdateQueryOptions, decideCanonicalUpdate, type CanonicalUpdateItem, type CanonicalUpdateResolution } from '../../shared/api/canonical-updates'
@@ -40,62 +43,8 @@ import './operations.css'
 export type OperationalPage = 'evidence' | 'imports' | 'canonical-updates' | 'search' | 'jobs' | 'settings'
 
 type Navigate = (page: string) => void
-interface OperationsState {
-  version: 1
-  owner: { name: string; role: string }
-  reducedMotion: boolean
-}
 
-const STORAGE_KEY = 'yuno.operations.state.v1'
-
-const DEFAULT_STATE: OperationsState = {
-  version: 1,
-  owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
-  reducedMotion: false,
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function hydrateOperationsState(value: unknown): OperationsState | null {
-  if (!isRecord(value) || value.version !== 1) return null
-  const owner = isRecord(value.owner) ? value.owner : {}
-  return {
-    version: 1,
-    owner: {
-      name: typeof owner.name === 'string' ? owner.name : DEFAULT_STATE.owner.name,
-      role: typeof owner.role === 'string' ? owner.role : DEFAULT_STATE.owner.role,
-    },
-    reducedMotion: typeof value.reducedMotion === 'boolean' ? value.reducedMotion : DEFAULT_STATE.reducedMotion,
-  }
-}
-
-const SEARCH_ITEMS = [
-  { kind: 'Lesson', title: 'Implement an idempotency boundary under concurrent retries', path: 'Section 2 · Control duplicates and ordering', text: 'atomic write unique constraint duplicate retry Spring Boot', lessonId: 'idempotency-retry' },
-  { kind: 'Reading', title: 'Trace the commit-and-acknowledgement failure window', path: 'Section 1 · Frame the failure boundary', text: 'SQS acknowledgement redelivery commit failure', lessonId: 'commit-window' },
-  { kind: 'Review', title: 'Diagnose poison messages and dead-letter recovery', path: 'Section 2 · Production layer', text: 'DLQ dead letter replay quarantine', lessonId: 'dead-letter' },
-] as const
-
-function loadState(): OperationsState {
-  const parse = (raw: string | null): unknown => {
-    if (!raw) return null
-    try { return JSON.parse(raw) as unknown } catch { return null }
-  }
-  const current = hydrateOperationsState(parse(window.localStorage.getItem(STORAGE_KEY)))
-  if (current) return current
-  return DEFAULT_STATE
-}
-
-function useOperationsState() {
-  const [state, setState] = useState<OperationsState>(loadState)
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
-  return [state, setState] as const
-}
-
-function Button({ children, tone = 'primary', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'secondary' | 'quiet' | 'danger' }) {
+function Button({ children, tone = 'primary', ...props }: React.ComponentPropsWithRef<'button'> & { tone?: 'primary' | 'secondary' | 'quiet' | 'danger' }) {
   return <button className={`so-button so-button--${tone}`} {...props}>{children}</button>
 }
 
@@ -308,29 +257,39 @@ function CanonicalUpdateRow({ item, base, target, selected, resolution, disabled
   return <article><label className="so-select-change"><input type="checkbox" disabled={disabled} checked={selected} onChange={event => onSelect(event.target.checked)} /><span className="so-sr-only">Select {item.title}</span></label><div><span className="so-kicker">{item.title}</span><div className="so-diff"><div><span>{base}</span><p>{item.summary}</p></div><div><span>{target}</span><p>{item.change_type === 'deleted' ? 'Removed from the published canonical graph.' : item.resolution_explanation}</p></div></div><p className="so-impact"><Info size={15} /> {item.impact}</p>{archived && <p className="so-archived-topic"><strong>Archived local topic</strong> — acceptance keeps this topic and its evidence/overlay history explicitly archived instead of silently hiding it.</p>}{item.conflict_type && selected && <fieldset className="so-conflict" disabled={disabled}><legend>{archived ? 'Resolve removed topic conflict' : 'Resolve wording conflict'}</legend><label><input type="radio" name={`resolution-${item.id}`} checked={resolution === 'overlay-wins'} onChange={() => onResolve('overlay-wins')} /><span><strong>{archived ? 'Keep as an archived local topic' : 'Keep my overlay wording'}</strong><small>{archived ? 'The published topic remains removed while its learner evidence and personal state stay available in an explicit local archive.' : 'The goal retains your wording for this topic against the target version.'}</small></span></label>{!archived && <label><input type="radio" name={`resolution-${item.id}`} checked={resolution === 'accept-canonical'} onChange={() => onResolve('accept-canonical')} /><span><strong>Adopt the new canonical wording</strong><small>Your overlay wording is replaced for this goal by the target canonical wording.</small></span></label>}</fieldset>}</div></article>
 }
 
-function SearchPage({ navigate }: { navigate: Navigate }) {
+const SEARCH_KIND_LABELS: Record<string, string> = {
+  'canonical-topic': 'Topic',
+  'canonical-content': 'Content',
+  'generated-artifact': 'Generated',
+  'notebook-entry': 'Notebook',
+  evidence: 'Evidence',
+}
+
+export function SearchPage({ navigate }: { navigate: Navigate }) {
   const { currentGoal } = useProfileGoals()
-  const evidence = useQuery(evidenceQueryOptions(currentGoal?.id ?? null))
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
-  const [stale, setStale] = useState(true)
-  const items = useMemo(() => [
-    ...SEARCH_ITEMS,
-    ...(evidence.data ?? []).map(item => ({
-      kind: 'Evidence',
-      title: item.summary,
-      path: `Evidence · ${item.id}`,
-      text: `${item.evidence_type} ${item.capability} ${item.origin} ${item.payload_hash}`,
-      lessonId: null,
-    })),
-  ], [evidence.data])
-  const results = useMemo(() => items.filter((item) => `${item.title} ${item.text}`.toLowerCase().includes(submitted.toLowerCase())), [items, submitted])
+  const search = useSearch(currentGoal?.id ?? null, submitted)
+  const status = search.status.data
+  const results = search.results.data?.results ?? []
+  const degraded = search.results.data?.degraded ?? false
+  const statusUnavailable = search.status.isError
+  const needsAttention = status && status.status !== 'ready'
+  const servingActiveIndex = Boolean(status?.active_generation) && (status?.status === 'rebuilding' || status?.status === 'failed')
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitted(query.trim())
+  }
+  const openResult = (entityType: string) => navigate(entityType === 'evidence' ? 'evidence' : 'topic-studio')
   return <>
-    <PageHead eyebrow="Course and content search" title="Find a lesson, reading, review, or evidence record" description="Search combines the bundled course index with the current goal’s server-backed evidence metadata. It makes no vector, semantic, or external source-retrieval claim." />
-    <form className="so-search" onSubmit={(event) => { event.preventDefault(); setSubmitted(query.trim()) }}><Search size={20} /><label className="so-sr-only" htmlFor="so-search-input">Search course content</label><input id="so-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try “idempotency” or “dead letter”" /><Button type="submit">Search</Button></form>
-    {stale && <div className="so-warning"><AlertTriangle size={19} /><div><strong>Bundled index may be stale</strong><p>Bundled course entries represent graph 2026.07. Evidence results come from the current goal’s server records.</p></div><Button tone="secondary" onClick={() => setStale(false)}><X size={16} /> Dismiss notice</Button></div>}
-    {evidence.isError && <RegionFailure label="Evidence search results" retry={() => void evidence.refetch()} />}
-    {!submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current local course</h2><p>Results include bundled titles and current evidence metadata. No remote sources are queried.</p></div> : results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try a topic term such as retry, acknowledgement, idempotency, or DLQ.</p></div> : <section><div className="so-section-head"><div><span className="so-kicker">Local results</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>Bundled entries + server evidence</span></div><div className="so-results">{results.map((item) => <button key={`${item.kind}-${item.path}`} onClick={() => navigate(item.kind === 'Evidence' ? 'evidence' : 'topic-studio')}><span className="so-chip">{item.kind}</span><strong>{item.title}</strong><small>{item.path}</small><ChevronRight size={19} /></button>)}</div></section>}
+    <PageHead eyebrow="Course and content search" title="Find a lesson, reading, review, or evidence record" description="Search approved and owned content in the current goal. Search stays local and does not retrieve external sources." />
+    <form className="so-search" role="search" onSubmit={submit}><Search size={20} /><label className="so-sr-only" htmlFor="so-search-input">Search current goal content</label><input id="so-search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Try “idempotency” or “dead letter”" /><Button type="submit" disabled={!query.trim() || !currentGoal}>Search</Button></form>
+    <p className="so-sr-only" aria-live="polite">{search.results.isFetching ? `Searching for ${submitted}` : submitted && search.results.data ? `${results.length} search result${results.length === 1 ? '' : 's'}${degraded ? ' from the degraded fallback' : ''}` : ''}</p>
+    {needsAttention && <div className="so-warning" role="status"><AlertTriangle size={19} /><div><strong>{status.status === 'rebuilding' ? 'Search index is rebuilding' : status.status === 'stale' ? 'Search index is stale' : status.status === 'failed' ? 'Search index rebuild failed' : 'Search index is unavailable'}</strong><p>{servingActiveIndex ? 'Search continues using the prior active index while this state is resolved.' : `Search uses the deterministic owned-content fallback while the index is ${status.status}.`} Source watermark: {status.source_watermark || 'not yet built'}{status.rebuild_job_id ? ` · Rebuild job: ${status.rebuild_job_id}` : ''}{status.failure_reference ? ` · Failure: ${status.failure_reference}` : ''}.</p></div>{status.status !== 'rebuilding' && <Button tone="secondary" disabled={search.rebuild.isPending} onClick={() => search.rebuild.mutate()}><RefreshCcw className={search.rebuild.isPending ? 'so-spin' : ''} size={16} /> {search.rebuild.isPending ? 'Starting…' : 'Rebuild index'}</Button>}</div>}
+    {statusUnavailable && <div className="so-warning" role="alert"><AlertTriangle size={19} /><div><strong>Search index status unavailable</strong><p>The index state could not be verified. Retry the status check before relying on indexed results.</p></div><Button tone="secondary" onClick={() => void search.status.refetch()}>Retry status</Button></div>}
+    {search.rebuild.isError && <div className="so-warning" role="alert"><AlertTriangle size={19} /><div><strong>Rebuild did not start</strong><p>The current index state is unchanged. Try again.</p></div></div>}
+    {search.results.isError && <RegionFailure label="Search results" retry={() => void search.results.refetch()} />}
+    {!currentGoal ? <div className="so-empty"><Search size={29} /><h2>No current goal selected</h2><p>Select a goal before searching owned course content.</p></div> : !submitted ? <div className="so-empty"><Search size={29} /><h2>Search your current goal</h2><p>Results include approved topics and content, generated artifacts, notebook entries, and eligible evidence metadata.</p></div> : search.results.isPending ? <div className="so-empty"><Clock3 size={29} /><h2>Searching…</h2><p>Checking content owned by this goal.</p></div> : !search.results.isError && results.length === 0 ? <div className="so-empty"><Search size={29} /><h2>No results for “{submitted}”</h2><p>Try another title, body, or tag term.</p></div> : results.length > 0 && <section><div className="so-section-head"><div><span className="so-kicker">{degraded ? 'Degraded fallback results' : 'Indexed results'}</span><h2>{results.length} match{results.length === 1 ? '' : 'es'} for “{submitted}”</h2></div><span>{degraded ? `Fallback · ${search.results.data?.index_status}` : 'Current goal only'}</span></div><div className="so-results">{results.map((item) => <button key={`${item.entity_type}-${item.entity_id}`} onClick={() => openResult(item.entity_type)}><span className="so-chip">{SEARCH_KIND_LABELS[item.entity_type] ?? item.entity_type}</span><strong>{item.title}</strong><small>{item.topic_stable_id ? `Topic ${item.topic_stable_id}` : item.tags || item.entity_id}{item.degraded ? ' · degraded' : ''}</small><ChevronRight size={19} /></button>)}</div></section>}
   </>
 }
 
@@ -355,11 +314,6 @@ export function JobsPage({ navigate = () => undefined }: { navigate?: Navigate }
   </>
 }
 
-function ConfirmDialog({ trigger, title, description, confirm, onConfirm, reducedMotion }: { trigger: React.ReactNode; title: string; description: string; confirm: string; onConfirm: () => void; reducedMotion: boolean }) {
-  const motionClass = reducedMotion ? ' so-no-motion' : ''
-  return <AlertDialog.Root><AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger><AlertDialog.Portal><AlertDialog.Overlay className={`so-dialog-overlay${motionClass}`} /><AlertDialog.Content className={`so-dialog${motionClass}`}><AlertDialog.Title>{title}</AlertDialog.Title><AlertDialog.Description>{description}</AlertDialog.Description><div><AlertDialog.Cancel asChild><Button tone="secondary">Cancel</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button tone="danger" onClick={onConfirm}>{confirm}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
-}
-
 function GlobalProfileSettings() {
   const workspace = useProfileGoals()
   const profile = workspace.profile.data
@@ -381,6 +335,42 @@ function GlobalProfileSettings() {
   return <section className="so-panel" aria-labelledby="so-global-profile-title"><div className="so-panel-head"><div><UserRound size={20} /><h2 id="so-global-profile-title">Global learner profile</h2></div><span className="so-chip so-chip--gray">All goals</span></div><label>Experience<textarea value={experience} onChange={(event) => setExperience(event.target.value)} /></label><label>Strengths<textarea value={strengths} onChange={(event) => setStrengths(event.target.value)} /></label><label>Weaknesses or gaps<textarea value={weaknesses} onChange={(event) => setWeaknesses(event.target.value)} /></label><p className="so-help">This profile is global. Progress, evidence, and roadmap decisions remain isolated inside each goal.</p>{workspace.saveProfile.isError && <p className="so-error" role="alert">The profile changed or could not be saved. Reload the latest revision and try again.</p>}<Button disabled={unchanged || workspace.saveProfile.isPending} onClick={() => workspace.saveProfile.mutate({ update: { experience: experience || null, strengths: strengths || null, weaknesses: weaknesses || null }, revision: profile.profile_revision })}>{workspace.saveProfile.isPending ? 'Saving…' : workspace.saveProfile.isSuccess && unchanged ? 'Saved' : 'Save profile'}</Button></section>
 }
 
+function CurrentGoalSettings({ workspace }: { workspace: ReturnType<typeof useProfileGoals> }) {
+  const goal = workspace.currentGoal
+  const [name, setName] = useState('')
+  const [context, setContext] = useState('')
+  const [targetLevel, setTargetLevel] = useState<'Mid-level' | 'Senior' | 'Staff'>('Senior')
+  const [targetCapability, setTargetCapability] = useState<'know' | 'understand' | 'choose' | 'implement' | 'diagnose' | 'defend'>('implement')
+  useEffect(() => {
+    if (!goal) return
+    setName(goal.name)
+    setContext(goal.path === 'learn' ? goal.subject ?? '' : goal.role ?? '')
+    setTargetLevel(goal.target_level)
+    setTargetCapability(goal.target_capability)
+  }, [goal])
+  if (workspace.goals.isPending || workspace.profile.isPending) return <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Current goal</h2></div></div><p>Loading current goal settings…</p></section>
+  if (!goal) return <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Current goal</h2></div></div><p>Select an active goal to edit its settings.</p></section>
+  const originalContext = goal.path === 'learn' ? goal.subject ?? '' : goal.role ?? ''
+  const unchanged = name === goal.name && context === originalContext && targetLevel === goal.target_level && targetCapability === goal.target_capability
+  const save = () => workspace.saveGoal.mutate({ goal, patch: {
+    name: name.trim(),
+    ...(goal.path === 'learn' ? { subject: context.trim() || null } : { role: context.trim() || null }),
+    target_level: targetLevel,
+    target_capability: targetCapability,
+  } })
+  const stale = workspace.saveGoal.error instanceof ApiError && [409, 412].includes(workspace.saveGoal.error.status)
+  return <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Current goal</h2></div><span className="so-chip so-chip--gray">{goal.path === 'learn' ? 'Learning' : 'Interview'}</span></div>
+    <label>Goal name<input type="text" value={name} onChange={(event) => setName(event.target.value)} /></label>
+    <label>{goal.path === 'learn' ? 'Subject' : 'Role'}<input type="text" value={context} onChange={(event) => setContext(event.target.value)} /></label>
+    <label>Target level<select value={targetLevel} onChange={(event) => setTargetLevel(event.target.value as typeof targetLevel)}><option>Mid-level</option><option>Senior</option><option>Staff</option></select></label>
+    <label>Target capability<select value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as typeof targetCapability)}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
+    <p className="so-help">This edit applies only to the current goal. Its server revision protects concurrent changes.</p>
+    {workspace.saveGoal.isError && <p className="so-error" role="alert">{stale ? 'The goal changed before this save. The latest revision was reloaded; review it before saving again.' : 'The current goal was not saved. Review the values and try again.'}</p>}
+    {workspace.saveGoal.isSuccess && unchanged && <p className="so-help" role="status">Current goal settings saved.</p>}
+    <Button disabled={!name.trim() || unchanged || workspace.saveGoal.isPending} onClick={save}>{workspace.saveGoal.isPending ? 'Saving…' : 'Save current goal'}</Button>
+  </section>
+}
+
 export function ReviewPreferencesPanel({ goalId }: { goalId: string | null }) {
   const review = useReviewPreferences(goalId)
   const preferences = review.preferences.data
@@ -393,39 +383,84 @@ export function ReviewPreferencesPanel({ goalId }: { goalId: string | null }) {
   return <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Clock3 size={20} /><h2>Optional review</h2></div><label className="so-switch"><input type="checkbox" checked={preferences.enabled} disabled={review.save.isPending} onChange={(event) => save({ enabled: event.target.checked })} /><span>{preferences.enabled ? 'Enabled' : 'Disabled'}</span></label></div><div className="so-review-controls" aria-disabled={!preferences.enabled}><label>Session length<select disabled={!preferences.enabled || review.save.isPending} value={preferences.duration_minutes} onChange={(event) => save({ duration_minutes: Number(event.target.value) })}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={25}>25 minutes</option></select></label><label>Cadence<select disabled={!preferences.enabled || review.save.isPending} value={preferences.cadence} onChange={(event) => save({ cadence: event.target.value as NonNullable<ReviewPreferencesPatch['cadence']> })}><option value="once-weekly">Once a week</option><option value="twice-weekly">Twice a week</option><option value="three-times-weekly">Three times a week</option></select></label><label className="so-check"><input type="checkbox" disabled={!preferences.enabled || review.save.isPending} checked={preferences.retrieval_enabled} onChange={(event) => save({ retrieval_enabled: event.target.checked })} /> Retrieval prompts</label><label className="so-check"><input type="checkbox" disabled={!preferences.enabled || review.save.isPending} checked={preferences.varied_context_enabled} onChange={(event) => save({ varied_context_enabled: event.target.checked })} /> Varied contexts</label></div><p className="so-help">Disabling or dismissing review never blocks the roadmap and carries no readiness penalty. Scheduling rules: {preferences.scheduling_version}.</p>{review.save.isPending && <p className="so-help" role="status">Saving review preferences…</p>}{review.save.isSuccess && <p className="so-help" role="status">Review preferences saved.</p>}{review.save.isError && <p className="so-error" role="alert">Preferences were not saved. Reload the latest revision and try again.</p>}</section>
 }
 
-function SettingsPage({ state, setState, navigate }: { state: OperationsState; setState: React.Dispatch<React.SetStateAction<OperationsState>>; navigate: Navigate }) {
-  const { currentGoal } = useProfileGoals()
+function ProviderNetworkPanel({ ownerSettings }: { ownerSettings: ReturnType<typeof useOwnerSettings> }) {
+  const provider = useProviderSettings()
+  const disclosures = provider.disclosures.data ?? []
+  const capabilities = provider.capabilities.data ?? []
+  const busy = provider.accept.isPending || provider.revoke.isPending
+  return <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Disclosure gated</span></div>
+    {(provider.disclosures.isError || provider.capabilities.isError) && <RegionFailure label="Provider and network settings" retry={() => void Promise.all([provider.disclosures.refetch(), provider.capabilities.refetch()])} />}
+    <div className="so-network-grid">
+      <article><strong>Model providers</strong><p>{capabilities.length ? capabilities.map(item => `${item.provider}: ${item.state}`).join(' · ') : provider.capabilities.isPending ? 'Checking configured provider capabilities…' : 'No provider capabilities reported.'}</p>{ownerSettings.settings.data && <label>Preferred provider<select value={ownerSettings.settings.data.provider_selection ?? ''} disabled={ownerSettings.save.isPending} onChange={(event) => ownerSettings.save.mutate({ provider_selection: event.target.value ? event.target.value as 'codex' | 'claude' : null })}><option value="">No provider selected</option>{capabilities.map(item => <option key={item.provider} value={item.provider} disabled={item.state !== 'configured'}>{item.provider} · {item.state}</option>)}</select></label>}</article>
+      <article><strong>Source retrieval</strong><p>External authoritative sources may be retrieved only after the current source-network disclosure is accepted.</p></article>
+      <article><strong>Local runner</strong><p>Controlled local subprocess execution does not use a provider disclosure and is not a hostile-code sandbox.</p></article>
+    </div>
+    {disclosures.map(disclosure => { const accepted = Boolean(disclosure.accepted_at && !disclosure.revoked_at); return <div className="so-data-actions" key={`${disclosure.category}-${disclosure.disclosure_version}`}><div><strong>{disclosure.operation}</strong><p>{disclosure.destination} · Sends: {disclosure.data_categories.join(', ')} · Version {disclosure.disclosure_version}. {accepted ? `Accepted ${disclosure.accepted_at}.` : 'Not accepted; future network enqueues in this category are blocked.'}</p></div><Button tone={accepted ? 'danger' : 'secondary'} disabled={busy} onClick={() => accepted ? provider.revoke.mutate(disclosure) : provider.accept.mutate(disclosure)}>{accepted ? 'Revoke' : 'Accept disclosure'}</Button></div> })}
+    {(provider.accept.isError || provider.revoke.isError) && <p className="so-error" role="alert">The disclosure state was not changed. Reload its current version and try again.</p>}
+    <p className="so-help">Acceptance is recorded before a gated network job may be enqueued. Revocation blocks future enqueues without changing completed requests or results.</p>
+  </section>
+}
+
+function DataOperationsPanel({ goal }: { goal: GoalWorkspace | null }) {
+  const operations = useDataOperations(goal?.id ?? null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null)
+  const impact = operations.preflight.data
+  const exportOperation = operations.exportStatus.data
+  const deleteOperation = operations.deleteStatus.data
+  useEffect(() => {
+    if (operations.confirmDelete.isSuccess) setDeleteOpen(false)
+  }, [operations.confirmDelete.isSuccess])
+  const preflight = () => {
+    operations.preflight.reset()
+    operations.confirmDelete.reset()
+    operations.preflight.mutate()
+    setDeleteOpen(true)
+  }
+  return <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div>
+    <div className="so-data-actions"><div><strong>Versioned Yuno export</strong><p>Create a durable export job for {goal ? goal.name : 'all goals'}. Unavailable or tombstoned content is represented as unavailable, never fabricated.</p>{operations.startExport.isError && <span className="so-error" role="alert">Export is unavailable or did not start. The export format policy may not be configured.</span>}{exportOperation && <p role="status">Export {exportOperation.status} · format {exportOperation.format_version}{exportOperation.failure_reference ? ` · ${exportOperation.failure_reference}` : ''}{exportOperation.status === 'complete' ? ' · package ready' : ''}</p>}{exportOperation?.status === 'complete' && exportOperation.package && <details className="so-details"><summary>Inspect export package</summary><pre>{JSON.stringify(exportOperation.package, null, 2)}</pre></details>}{operations.exportStatus.isError && <span className="so-error" role="alert">Export status could not be loaded.</span>}</div><Button tone="secondary" disabled={operations.startExport.isPending || ['queued', 'running'].includes(exportOperation?.status ?? '')} onClick={() => operations.startExport.mutate()}><Download size={16} /> {operations.startExport.isPending ? 'Starting…' : exportOperation?.status === 'failed' ? 'Retry export' : 'Create export'}</Button></div>
+    <div className="so-data-actions"><div><strong>Delete current goal</strong><p>{goal ? `Preview every cross-goal evidence tombstone and dependent LearningState downgrade before deleting ${goal.name}.` : 'Select a current goal before requesting destructive deletion.'}</p>{deleteOperation && <p role="status">Delete {deleteOperation.status}{deleteOperation.failure_reference ? ` · ${deleteOperation.failure_reference}` : ''}</p>}</div><Button ref={deleteTriggerRef} tone="danger" disabled={!goal || operations.preflight.isPending || ['queued', 'running'].includes(deleteOperation?.status ?? '')} onClick={preflight}><ShieldAlert size={16} /> {operations.preflight.isPending ? 'Calculating…' : deleteOperation?.status === 'failed' ? 'Retry delete' : 'Preview deletion'}</Button></div>
+    {operations.preflight.isError && !deleteOpen && <p className="so-error" role="alert">The deletion impact could not be calculated. Nothing was deleted.</p>}
+    <AlertDialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}><AlertDialog.Portal><AlertDialog.Overlay className="so-dialog-overlay" /><AlertDialog.Content className="so-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); deleteTriggerRef.current?.focus() }}><AlertDialog.Title>Delete {goal?.name ?? 'this goal'}?</AlertDialog.Title><AlertDialog.Description>The impact snapshot must still match at confirmation. A changed snapshot is rejected and must be refreshed.</AlertDialog.Description>
+      {operations.preflight.isPending ? <p>Calculating immutable impact snapshot…</p> : impact ? <><dl className="so-facts"><dt>Snapshot</dt><dd>{impact.snapshot_id}</dd><dt>Cross-goal evidence tombstones</dt><dd>{impact.evidence_ids.length ? impact.evidence_ids.join(', ') : 'None'}</dd><dt>Dependent LearningState downgrades</dt><dd>{impact.learning_state_ids.length ? impact.learning_state_ids.join(', ') : 'None'}</dd></dl><p>This operation is durable and runs as a background job. Failure cannot leave a partial downgrade.</p></> : <p role="alert">The impact preview is unavailable. Close and retry.</p>}
+      {operations.staleDeleteImpact && <div className="so-warning" role="alert"><AlertTriangle size={18} /><div><strong>Deletion impact changed</strong><p>Nothing was queued. Refresh and review the new snapshot before confirming.</p></div></div>}
+      {operations.confirmDelete.isError && !operations.staleDeleteImpact && <p className="so-error" role="alert">Delete did not start. Nothing was deleted.</p>}
+      <div><AlertDialog.Cancel asChild><Button tone="secondary" disabled={operations.confirmDelete.isPending}>Cancel</Button></AlertDialog.Cancel>{operations.staleDeleteImpact ? <Button tone="secondary" onClick={operations.refreshPreflight}>Refresh impact</Button> : <Button tone="danger" disabled={!impact || operations.confirmDelete.isPending} onClick={() => impact && operations.confirmDelete.mutate(impact)}>{operations.confirmDelete.isPending ? 'Starting…' : 'Confirm deletion'}</Button>}</div>
+    </AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
+  </section>
+}
+
+export function SettingsPage({ navigate }: { navigate: Navigate }) {
+  const workspace = useProfileGoals()
+  const { currentGoal } = workspace
   const imports = useImports(currentGoal?.id ?? null, null).imports
   const ownerSettings = useOwnerSettings()
-  const exportData = () => {
-    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), scope: 'application prototype local operations state', ...state }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'yuno-local-export.json'; anchor.click(); URL.revokeObjectURL(url)
-  }
   return <>
-    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile and progress display apply across every goal. Review preferences are saved per goal; accessibility choices on this page remain local to this browser." />
+    <PageHead eyebrow="Profile, preferences, and data" title="Settings" description="Your learner profile, accessibility, provider selection, and progress display apply across every goal. Review preferences remain goal-specific." />
     <div className="so-settings-grid">
       <GlobalProfileSettings />
+      <CurrentGoalSettings workspace={workspace} />
       <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Progress display</h2></div></div>{ownerSettings.settings.isError ? <RegionFailure label="Progress display preference" retry={() => void ownerSettings.settings.refetch()} /> : ownerSettings.settings.data ? <fieldset className="so-choice-list"><legend>Choose the default view</legend><label><input type="radio" name="progress" disabled={ownerSettings.saveProgressDisplay.isPending} checked={ownerSettings.settings.data.progress_display === 'detailed'} onChange={() => ownerSettings.saveProgressDisplay.mutate('detailed')} /><span><strong>Detailed</strong><small>Coverage, proficiency, retention, readiness, definitions, uncertainty, and evidence links.</small></span></label><label><input type="radio" name="progress" disabled={ownerSettings.saveProgressDisplay.isPending} checked={ownerSettings.settings.data.progress_display === 'simple'} onChange={() => ownerSettings.saveProgressDisplay.mutate('simple')} /><span><strong>Simple</strong><small>Condensed presentation only; underlying server evidence, assessments, and progress data remain unchanged.</small></span></label></fieldset> : <p>Loading progress display preference…</p>}{ownerSettings.saveProgressDisplay.isError && <p className="so-error" role="alert">The progress display preference was not saved. Your prior setting and all learning data remain unchanged; try again.</p>}</section>
       <ReviewPreferencesPanel goalId={currentGoal?.id ?? null} />
-      <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div><label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions in these pages.</small></span><input type="checkbox" checked={state.reducedMotion} onChange={(event) => setState((s) => ({ ...s, reducedMotion: event.target.checked }))} /></label><p className="so-help">Your operating-system reduced-motion preference is also respected.</p></section>
+      <section className="so-panel"><div className="so-panel-head"><div><Settings2 size={20} /><h2>Accessibility</h2></div></div>{ownerSettings.settings.data ? <label className="so-toggle-row"><span><strong>Reduce motion</strong><small>Suppress non-essential transitions across operational pages.</small></span><input type="checkbox" disabled={ownerSettings.save.isPending} checked={ownerSettings.settings.data.accessibility.reduced_motion} onChange={(event) => ownerSettings.save.mutate({ accessibility: { reduced_motion: event.target.checked } })} /></label> : ownerSettings.settings.isError ? <RegionFailure label="Accessibility settings" retry={() => void ownerSettings.settings.refetch()} /> : <p>Loading accessibility settings…</p>}<p className="so-help">Your operating-system reduced-motion preference is also respected, even when this setting is off.</p>{ownerSettings.save.isError && <p className="so-error" role="alert">{ownerSettings.save.error instanceof ApiError && ownerSettings.save.error.status === 422 ? 'Invalid accessibility setting. The prior server value remains active.' : 'The setting was not saved. Reload the latest revision and try again.'}</p>}</section>
       <section className="so-panel"><div className="so-panel-head"><div><Import size={20} /><h2>Imports</h2></div></div>{!currentGoal ? <p>Select a current goal to review its imports.</p> : imports.isPending ? <p>Loading the current goal’s server imports…</p> : imports.isError ? <><p role="alert">The imports summary is unavailable. No browser count was substituted.</p><Button tone="secondary" onClick={() => void imports.refetch()}>Retry summary</Button></> : <p>{imports.data?.length ?? 0} preserved import{imports.data?.length === 1 ? '' : 's'} for {currentGoal.name}; {(imports.data ?? []).filter(item => item.status === 'failed' || item.status === 'cancelled').length} need attention.</p>}<Button tone="secondary" onClick={() => navigate('imports')}>Review imports <ArrowRight size={16} /></Button></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Database size={20} /><h2>Providers and network</h2></div><span className="so-chip so-chip--gray">Not connected</span></div><div className="so-network-grid"><article><strong>Model providers</strong><p>No Codex, Claude, or other provider adapter is configured or invoked by these pages.</p></article><article><strong>Source retrieval</strong><p>No external documentation or citation source is fetched.</p></article><article><strong>Local runner</strong><p>No Java process, subprocess sandbox, or execution service is present.</p></article></div><p className="so-help">This prototype makes no strict-offline guarantee for the wider application; these operational pages themselves use bundled data and localStorage.</p></section>
-      <section className="so-panel so-settings-wide"><div className="so-panel-head"><div><Download size={20} /><h2>Local data</h2></div></div><div className="so-data-actions"><div><strong>Export local JSON</strong><p>Downloads the local accessibility state. Server settings, evidence, imports, canonical-update decisions, and goal review preferences are not included.</p></div><Button tone="secondary" onClick={exportData}><Download size={16} /> Export JSON</Button></div><div className="so-data-actions"><div><strong>Reset operational pages</strong><p>Returns only local accessibility state to its initial default. Server settings, evidence, imports, canonical-update decisions, and goal review preferences remain intact.</p></div><ConfirmDialog reducedMotion={state.reducedMotion} trigger={<Button tone="danger"><RefreshCcw size={16} /> Reset local pages</Button>} title="Reset operational pages?" description="Local accessibility state will return to its initial default. Server settings, evidence, imports, canonical-update decisions, and goal review preferences remain intact." confirm="Reset pages" onConfirm={() => { window.localStorage.removeItem(STORAGE_KEY); setState(DEFAULT_STATE) }} /></div></section>
+      <ProviderNetworkPanel ownerSettings={ownerSettings} />
+      <DataOperationsPanel goal={currentGoal} />
     </div>
   </>
 }
 
 export function OperationalPageView({ page, navigate }: { page: OperationalPage; navigate: Navigate }) {
-  const [state, setState] = useOperationsState()
+  const ownerSettings = useOwnerSettings()
   const pages: Record<OperationalPage, React.ReactNode> = {
     evidence: <EvidencePage navigate={navigate} />,
     imports: <ImportsPage />,
     'canonical-updates': <CanonicalUpdatesPage />,
     search: <SearchPage navigate={navigate} />,
     jobs: <JobsPage navigate={navigate} />,
-    settings: <SettingsPage state={state} setState={setState} navigate={navigate} />,
+    settings: <SettingsPage navigate={navigate} />,
   }
-  return <main className={`so-page ${state.reducedMotion ? 'so-reduced-motion' : ''}`}>{pages[page]}</main>
+  return <main className={`so-page ${ownerSettings.settings.data?.accessibility?.reduced_motion ? 'so-reduced-motion' : ''}`}>{pages[page]}</main>
 }
 
 export default OperationalPageView

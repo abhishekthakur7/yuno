@@ -44,6 +44,8 @@ from yuno.modules.provider.ports import ProviderRepository
 from yuno.modules.provider.repository import SqlAlchemyProviderRepository
 from yuno.modules.roadmap.ports import RoadmapRepository
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
+from yuno.modules.search.ports import SearchRepositoryPort
+from yuno.modules.search.repository import SearchRepository
 from yuno.modules.settings_data.ports import SettingsRepository
 from yuno.modules.settings_data.repository import SqlAlchemySettingsRepository
 from yuno.shared.application.unit_of_work import UnitOfWork, UnitOfWorkFactory
@@ -77,6 +79,7 @@ class SqlAlchemyUnitOfWork:
     provider: ProviderRepository
     roadmap: RoadmapRepository
     settings_data: SettingsRepository
+    search: SearchRepositoryPort
 
     def __init__(
         self,
@@ -120,6 +123,7 @@ class SqlAlchemyUnitOfWork:
         self.provider = SqlAlchemyProviderRepository(self._session)
         self.roadmap = SqlAlchemyRoadmapRepository(self._session)
         self.settings_data = SqlAlchemySettingsRepository(self._session)
+        self.search = SearchRepository(self._session)
         return self
 
     def __exit__(

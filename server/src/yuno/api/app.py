@@ -19,6 +19,7 @@ from yuno.api.provider_runtime import (
 )
 from yuno.api.routes.canonical import router as canonical_router
 from yuno.api.routes.canonical_updates import router as canonical_updates_router
+from yuno.api.routes.data_lifecycle import router as data_lifecycle_router
 from yuno.api.routes.diagnostics import router as diagnostics_router
 from yuno.api.routes.events import router as events_router
 from yuno.api.routes.evidence import router as evidence_router
@@ -43,9 +44,11 @@ from yuno.api.routes.provenance import router as provenance_router
 from yuno.api.routes.provider import router as provider_router
 from yuno.api.routes.roadmap import router as roadmap_router
 from yuno.api.routes.runner import router as runner_router
+from yuno.api.routes.search import router as search_router
 from yuno.api.routes.settings_data import router as settings_data_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
+from yuno.modules.evidence_evaluation.service import delete_goal
 from yuno.modules.identity.service import ensure_local_owner
 from yuno.modules.jobs_events.service import DurableJobDispatcher
 from yuno.modules.learning_content.service import run_generation, run_tutor_turn_job
@@ -57,7 +60,8 @@ from yuno.modules.provider.service import require_disclosure
 from yuno.modules.runner.adapters import LocalRunnerProcessPort, LocalTempWorkspace
 from yuno.modules.runner.repository import RunnerRepository
 from yuno.modules.runner.service import execute_runner_job
-from yuno.modules.settings_data.service import ensure_owner_settings
+from yuno.modules.search.service import rebuild_search_projection
+from yuno.modules.settings_data.service import complete_export, ensure_owner_settings
 from yuno.shared.application.jobs import (
     JobCompletion,
     JobExecution,
@@ -66,13 +70,14 @@ from yuno.shared.application.jobs import (
     JobRequest,
     JobResult,
 )
-from yuno.shared.domain.clock import SystemClock
+from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.alembic_guard import require_single_head
 from yuno.shared.infrastructure.database import (
     create_engine_for,
     create_session_factory,
 )
+from yuno.shared.infrastructure.structured_logging import configure_structured_logging
 from yuno.unit_of_work import (
     create_probe_unit_of_work_factory,
     create_transaction_unit_of_work_factory,
@@ -82,8 +87,39 @@ from yuno.unit_of_work import (
 API_PREFIX = "/api/v1"
 
 
+def _rebuild_search(request: JobRequest, uow_factory):
+    return rebuild_search_projection(
+        uow_factory, request.owner_id, request.requested_job_id or "unknown"
+    )
+
+
+def _complete_export(request: JobRequest, uow_factory):
+    with uow_factory() as uow:
+        operation = complete_export(
+            uow, request.owner_id, str(request.payload["operation_id"])
+        )
+        uow.commit()
+        return operation
+
+
+def _complete_delete(request: JobRequest, uow_factory):
+    with uow_factory() as uow:
+        operation_id = str(request.payload["operation_id"])
+        delete_goal(
+            uow,
+            request.owner_id,
+            str(request.goal_id),
+            str(request.payload["snapshot_id"]),
+        )
+        uow.settings_data.complete_delete(
+            request.owner_id, operation_id, now_text(SystemClock())
+        )
+        uow.commit()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application; tests may inject scratch-database settings."""
+    configure_structured_logging()
     resolved_settings = settings if settings is not None else get_settings()
 
     @asynccontextmanager
@@ -413,12 +449,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     app.state.runner_workspace_port,
                 ),
             )
+            dispatcher.register(
+                "rebuild_index",
+                job_handler(
+                    "rebuild_index",
+                    lambda request, completion_uow_factory: _rebuild_search(
+                        request, completion_uow_factory
+                    ),
+                ),
+            )
+            dispatcher.register(
+                "export_data", job_handler("export_data", _complete_export)
+            )
+            dispatcher.register(
+                "delete_goal", job_handler("delete_goal", _complete_delete)
+            )
 
             with uow_factory() as reservation_uow:
-                pending_hands_on = (
-                    reservation_uow.evidence.list_pending_idempotency(
-                        "submit_hands_on:"
-                    )
+                pending_hands_on = reservation_uow.evidence.list_pending_idempotency(
+                    "submit_hands_on:"
                 )
             for reservation in pending_hands_on:
                 try:
@@ -559,6 +608,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     api_router.include_router(system_router)
     api_router.include_router(canonical_router)
+    api_router.include_router(data_lifecycle_router)
     api_router.include_router(canonical_updates_router)
     api_router.include_router(profiles_goals_router)
     api_router.include_router(diagnostics_router)
@@ -572,6 +622,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_router.include_router(provenance_router)
     api_router.include_router(provider_router)
     api_router.include_router(settings_data_router)
+    api_router.include_router(search_router)
     api_router.include_router(jobs_router)
     api_router.include_router(runner_router)
     api_router.include_router(events_router)

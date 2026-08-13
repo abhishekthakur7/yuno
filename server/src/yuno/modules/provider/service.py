@@ -30,6 +30,7 @@ from yuno.shared.domain.errors import (
 )
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
+from yuno.shared.infrastructure.structured_logging import log_event
 
 
 def accept_disclosure(
@@ -182,6 +183,17 @@ def execute_provider(
             created_at=now_text(active_clock),
         )
         uow.commit()
+    log_event(
+        "provider.request.started",
+        owner_id=request.owner_id,
+        goal_id=request.goal_id,
+        job_id=request.job_id,
+        request_id=request.request_id,
+        correlation_id=request.correlation_id,
+        provider_request_id=provider_request_id,
+        provider=adapter.provider,
+        lifecycle="preparing",
+    )
 
     def record_spawn(pid: int, pgid: int, identity: str) -> None:
         with uow_factory() as uow:
@@ -249,4 +261,20 @@ def execute_provider(
             else None,
         )
         uow.commit()
+    log_event(
+        "provider.request.completed",
+        owner_id=request.owner_id,
+        goal_id=request.goal_id,
+        job_id=request.job_id,
+        request_id=request.request_id,
+        correlation_id=request.correlation_id,
+        provider_request_id=provider_request_id,
+        provider=adapter.provider,
+        lifecycle=result.state.value,
+        diagnostic_classification=(
+            result.failure_classification.value
+            if result.failure_classification
+            else None
+        ),
+    )
     return result

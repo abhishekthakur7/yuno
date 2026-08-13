@@ -27,6 +27,7 @@ from yuno.modules.provenance import models as provenance_models
 from yuno.modules.provider import models as provider_models
 from yuno.modules.roadmap import models as roadmap_models
 from yuno.modules.runner import models as runner_models
+from yuno.modules.search import models as search_models
 from yuno.modules.settings_data import models as settings_data_models
 
 __all__ = [
@@ -46,5 +47,6 @@ __all__ = [
     "provider_models",
     "roadmap_models",
     "runner_models",
+    "search_models",
     "settings_data_models",
 ]

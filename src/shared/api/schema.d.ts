@@ -199,6 +199,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/delete-operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Delete Operation */
+        get: operations["get_delete_operation_api_v1_delete_operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics": {
         parameters: {
             query?: never;
@@ -409,6 +426,40 @@ export interface paths {
         put?: never;
         /** Post Assess */
         post: operations["post_assess_api_v1_evidence__evidence_id__assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Export */
+        post: operations["create_export_api_v1_exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Export */
+        get: operations["get_export_api_v1_exports__operation_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1572,6 +1623,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search */
+        get: operations["search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search-index/rebuild": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuild Search Index */
+        post: operations["rebuild_search_index_api_v1_search_index_rebuild_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search-index/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Index Status */
+        get: operations["search_index_status_api_v1_search_index_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1679,6 +1781,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccessibilitySettings */
+        AccessibilitySettings: {
+            /** Reduced Motion */
+            reduced_motion: boolean;
+        };
         /** ArtifactProvenanceRefResponse */
         ArtifactProvenanceRefResponse: {
             /** Kind */
@@ -2141,6 +2248,38 @@ export interface components {
          * @enum {string}
          */
         CorrectionType: "correction" | "confirmation" | "gap" | "transfer-confirmation";
+        /** DeleteOperationResponse */
+        DeleteOperationResponse: {
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Created At */
+            created_at: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Goal Id */
+            goal_id: string;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Learning State Ids */
+            learning_state_ids: string[];
+            /** Result Ref */
+            result_ref: string | null;
+            /** Scope */
+            scope: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "preflight" | "queued" | "running" | "complete" | "failed";
+            /** Updated At */
+            updated_at: string;
+        };
         /** DepthOverrideRequest */
         DepthOverrideRequest: {
             /** Depth */
@@ -2462,6 +2601,39 @@ export interface components {
             /** Target Goal Id */
             target_goal_id: string;
         };
+        /** ExportCreateRequest */
+        ExportCreateRequest: {
+            /** Goal Id */
+            goal_id?: string | null;
+        };
+        /** ExportOperationResponse */
+        ExportOperationResponse: {
+            /** Created At */
+            created_at: string;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Format Version */
+            format_version: string;
+            /** Goal Id */
+            goal_id: string | null;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Package */
+            package: {
+                [key: string]: unknown;
+            } | null;
+            /** Result Ref */
+            result_ref: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "complete" | "failed";
+            /** Updated At */
+            updated_at: string;
+        };
         /**
          * FieldError
          * @description One field-level error in the API error envelope.
@@ -2493,17 +2665,28 @@ export interface components {
         };
         /** GoalDeleteImpactResponse */
         GoalDeleteImpactResponse: {
+            /** Created At */
+            created_at: string;
             /** Evidence Ids */
             evidence_ids: string[];
             /** Goal Id */
             goal_id: string;
             /** Learning State Ids */
             learning_state_ids: string[];
+            /** Operation Id */
+            operation_id: string;
             /** Snapshot Id */
             snapshot_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "preflight";
         };
         /** GoalDeleteRequest */
         GoalDeleteRequest: {
+            /** Operation Id */
+            operation_id: string;
             /** Snapshot Id */
             snapshot_id: string;
         };
@@ -3360,11 +3543,15 @@ export interface components {
         OverlayProposalType: "recommendation" | "emphasis" | "example" | "exercise" | "ordering" | "bridge";
         /** OwnerSettingsPatchRequest */
         OwnerSettingsPatchRequest: {
-            progress_display: components["schemas"]["ProgressDisplay"];
+            accessibility?: components["schemas"]["AccessibilitySettings"] | null;
+            progress_display?: components["schemas"]["ProgressDisplay"] | null;
+            provider_selection?: components["schemas"]["ProviderName"] | null;
         };
         /** OwnerSettingsResponse */
         OwnerSettingsResponse: {
+            accessibility: components["schemas"]["AccessibilitySettings"];
             progress_display: components["schemas"]["ProgressDisplay"];
+            provider_selection: components["schemas"]["ProviderName"] | null;
             /** Row Version */
             row_version: number;
         };
@@ -3903,6 +4090,54 @@ export interface components {
             test_phase: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * SearchIndexStatus
+         * @enum {string}
+         */
+        SearchIndexStatus: "ready" | "stale" | "rebuilding" | "failed" | "unavailable";
+        /** SearchIndexStatusResponse */
+        SearchIndexStatusResponse: {
+            /** Active Generation */
+            active_generation: string | null;
+            /** Failure Reference */
+            failure_reference: string | null;
+            /** Rebuild Job Id */
+            rebuild_job_id: string | null;
+            /** Source Watermark */
+            source_watermark: string;
+            status: components["schemas"]["SearchIndexStatus"];
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** SearchResponse */
+        SearchResponse: {
+            /** Degraded */
+            degraded: boolean;
+            /** Empty */
+            empty: boolean;
+            index_status: components["schemas"]["SearchIndexStatus"];
+            /** Results */
+            results: components["schemas"]["SearchResultResponse"][];
+        };
+        /** SearchResultResponse */
+        SearchResultResponse: {
+            /** Body */
+            body: string;
+            /** Degraded */
+            degraded: boolean;
+            /** Entity Id */
+            entity_id: string;
+            /** Entity Type */
+            entity_type: string;
+            /** Goal Id */
+            goal_id: string;
+            /** Tags */
+            tags: string;
+            /** Title */
+            title: string;
+            /** Topic Stable Id */
+            topic_stable_id: string | null;
         };
         /** SkipDecisionRequest */
         SkipDecisionRequest: {
@@ -4477,6 +4712,37 @@ export interface operations {
             };
         };
     };
+    get_delete_operation_api_v1_delete_operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteOperationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_diagnostic_api_v1_diagnostics_post: {
         parameters: {
             query?: never;
@@ -4940,6 +5206,72 @@ export interface operations {
             };
         };
     };
+    create_export_api_v1_exports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_export_api_v1_exports__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportOperationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_goals_api_v1_goals_get: {
         parameters: {
             query?: never;
@@ -5192,12 +5524,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GoalDeleteImpactResponse"];
+                    "application/json": components["schemas"]["JobRefResponse"];
                 };
             };
             /** @description Default Response */
@@ -7605,6 +7937,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunnerConfirmationResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_api_v1_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                goal_id: string;
+                types?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rebuild_search_index_api_v1_search_index_rebuild_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRefResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_index_status_api_v1_search_index_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchIndexStatusResponse"];
                 };
             };
             /** @description Default Response */

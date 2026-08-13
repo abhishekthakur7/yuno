@@ -68,6 +68,7 @@ from yuno.modules.roadmap.domain import (
     OverlayProposalType,
 )
 from yuno.modules.runner.domain import RunnerLanguage, RunnerOperation
+from yuno.modules.search.domain import SearchIndexStatus
 from yuno.modules.settings_data.domain import ProgressDisplay
 from yuno.shared.application.jobs import JobLane, JobRef, JobStatus
 
@@ -321,6 +322,33 @@ class JobRefResponse(BaseModel):
     result_hash: str | None = None
 
 
+class SearchResultResponse(BaseModel):
+    entity_type: str
+    entity_id: str
+    goal_id: str
+    topic_stable_id: str | None
+    title: str
+    body: str
+    tags: str
+    degraded: bool
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResultResponse]
+    empty: bool
+    degraded: bool
+    index_status: SearchIndexStatus
+
+
+class SearchIndexStatusResponse(BaseModel):
+    status: SearchIndexStatus
+    source_watermark: str
+    active_generation: str | None
+    rebuild_job_id: str | None
+    failure_reference: str | None
+    updated_at: str | None
+
+
 class RunnerInputRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     logical_path: str = Field(min_length=1)
@@ -534,13 +562,29 @@ class LearningStateExplanationsResponse(BaseModel):
     authoritative: bool = False
 
 
+class AccessibilitySettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reduced_motion: bool
+
+
 class OwnerSettingsPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    progress_display: ProgressDisplay
+    progress_display: ProgressDisplay | None = None
+    accessibility: AccessibilitySettings | None = None
+    provider_selection: ProviderName | None = None
+
+    @field_validator("progress_display", "accessibility")
+    @classmethod
+    def required_when_present(cls, value, info):
+        if value is None:
+            raise ValueError(f"{info.field_name} cannot be null")
+        return value
 
 
 class OwnerSettingsResponse(BaseModel):
     progress_display: ProgressDisplay
+    accessibility: AccessibilitySettings
+    provider_selection: ProviderName | None
     row_version: int
 
 
@@ -804,13 +848,51 @@ class GoalResponse(BaseModel):
 class GoalDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     snapshot_id: str
+    operation_id: str
 
 
 class GoalDeleteImpactResponse(BaseModel):
+    operation_id: str
     snapshot_id: str
     goal_id: str
     evidence_ids: list[str]
     learning_state_ids: list[str]
+    status: Literal["preflight"]
+    created_at: str
+
+
+class ExportCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    goal_id: str | None = None
+
+
+class ExportOperationResponse(BaseModel):
+    id: str
+    goal_id: str | None
+    status: Literal["queued", "running", "complete", "failed"]
+    format_version: str
+    package: dict | None
+    job_id: str | None
+    result_ref: str | None
+    failure_reference: str | None
+    created_at: str
+    updated_at: str
+
+
+class DeleteOperationResponse(BaseModel):
+    id: str
+    goal_id: str
+    snapshot_id: str
+    scope: str
+    evidence_ids: list[str]
+    learning_state_ids: list[str]
+    status: Literal["preflight", "queued", "running", "complete", "failed"]
+    job_id: str | None
+    result_ref: str | None
+    confirmed_at: str | None
+    failure_reference: str | None
+    created_at: str
+    updated_at: str
 
 
 class EvidenceCreateRequest(BaseModel):
@@ -1430,7 +1512,7 @@ def accepted_job(job_ref: JobRef) -> JSONResponse:
         goal_id=job_ref.goal_id,
         schema_version=job_ref.schema_version,
         attempt=job_ref.attempt,
-        diagnostic=job_ref.diagnostic,
+        diagnostic=safe_job_diagnostic(job_ref),
         started_at=job_ref.started_at,
         terminal_at=job_ref.terminal_at,
         substitution_ref=job_ref.substitution_ref,
@@ -1438,3 +1520,11 @@ def accepted_job(job_ref: JobRef) -> JSONResponse:
         result_hash=job_ref.result_hash,
     )
     return JSONResponse(status_code=202, content=body.model_dump(mode="json"))
+
+
+def safe_job_diagnostic(job_ref: JobRef) -> str | None:
+    if job_ref.diagnostic is None:
+        return None
+    if job_ref.status is JobStatus.CANCELLED:
+        return "job-cancelled"
+    return "job-execution-failure"

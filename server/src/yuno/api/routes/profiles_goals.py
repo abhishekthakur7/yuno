@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, status
 
@@ -12,10 +12,13 @@ from yuno.api.contracts import (
     GoalDeleteRequest,
     GoalPatchRequest,
     GoalResponse,
+    JobRefResponse,
     LearnerProfilePatchRequest,
     LearnerProfileResponse,
+    accepted_job,
 )
 from yuno.api.dependencies import (
+    get_job_dispatcher,
     get_owner_id,
     get_unit_of_work,
     idempotency_key,
@@ -26,7 +29,7 @@ from yuno.modules.evidence_evaluation.domain import DeleteImpact
 from yuno.modules.evidence_evaluation.ports import EvidenceUnitOfWork
 from yuno.modules.evidence_evaluation.service import (
     create_delete_preflight,
-    delete_goal,
+    validate_delete_snapshot,
 )
 from yuno.modules.profiles_goals.domain import (
     GoalWorkspace,
@@ -40,6 +43,9 @@ from yuno.modules.profiles_goals.service import (
     patch_goal,
     patch_profile,
 )
+from yuno.modules.settings_data.ports import SettingsUnitOfWork
+from yuno.modules.settings_data.service import reserve_delete
+from yuno.shared.application.jobs import JobDispatcher, JobLane, JobRequest
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import (
     IdempotencyConflictError,
@@ -50,6 +56,12 @@ from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 
 router = APIRouter(tags=["profiles-goals"])
+
+
+class DeleteLifecycleUnitOfWork(
+    EvidenceUnitOfWork, ProfilesGoalsUnitOfWork, SettingsUnitOfWork, Protocol
+):
+    pass
 
 
 @router.get("/profile", response_model=LearnerProfileResponse)
@@ -224,7 +236,7 @@ def post_archive_goal(
 def post_goal_delete_preflight(
     goal_id: str,
     owner_id: Annotated[str, Depends(get_owner_id)],
-    uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
+    uow: Annotated[DeleteLifecycleUnitOfWork, Depends(get_unit_of_work)],
     key: Annotated[str, Depends(idempotency_key)],
 ) -> GoalDeleteImpactResponse:
     uow.profiles_goals.lock_idempotency_commands(owner_id)
@@ -238,7 +250,17 @@ def post_goal_delete_preflight(
             )
         return GoalDeleteImpactResponse.model_validate_json(prior.response_json)
     impact = create_delete_preflight(uow, owner_id, goal_id)
-    response = _delete_impact_response(impact)
+    operation_id = new_id()
+    operation_row = reserve_delete(
+        uow,
+        owner_id,
+        operation_id,
+        goal_id,
+        impact.snapshot_id,
+        impact.evidence_ids,
+        impact.learning_state_ids,
+    )
+    response = _delete_impact_response(impact, operation_id, operation_row.created_at)
     uow.profiles_goals.add_idempotency(
         IdempotencyRecord(
             id=new_id(),
@@ -255,48 +277,62 @@ def post_goal_delete_preflight(
     return response
 
 
-@router.post("/goals/{goal_id}/delete", response_model=GoalDeleteImpactResponse)
+@router.post("/goals/{goal_id}/delete", response_model=JobRefResponse, status_code=202)
 def post_goal_delete(
     goal_id: str,
     body: GoalDeleteRequest,
     owner_id: Annotated[str, Depends(get_owner_id)],
-    uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
+    uow: Annotated[DeleteLifecycleUnitOfWork, Depends(get_unit_of_work)],
+    dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
-) -> GoalDeleteImpactResponse:
-    uow.profiles_goals.lock_idempotency_commands(owner_id)
-    operation = f"delete_goal:{goal_id}"
-    request_hash = hash_payload({"goal_id": goal_id, "snapshot_id": body.snapshot_id})
-    prior = uow.profiles_goals.get_idempotency(owner_id, operation, key)
-    if prior is not None:
-        if prior.request_hash != request_hash:
-            raise IdempotencyConflictError(
-                "The Idempotency-Key was reused with a different delete request."
+) -> JobRefResponse:
+    operation = uow.settings_data.get_delete(owner_id, body.operation_id)
+    if (
+        operation is None
+        or operation.goal_id != goal_id
+        or operation.snapshot_id != body.snapshot_id
+    ):
+        raise NotFoundError("The delete operation was not found.")
+    validate_delete_snapshot(uow, owner_id, goal_id, body.snapshot_id)
+    try:
+        ref = dispatcher.enqueue(
+            JobRequest(
+                "delete_goal",
+                owner_id,
+                {"operation_id": body.operation_id, "snapshot_id": body.snapshot_id},
+                body.operation_id,
+                key,
+                requested_job_id=body.operation_id,
+                goal_id=goal_id,
+                lane=JobLane.BACKGROUND,
+                schema_version="delete-v1",
+                request_ref=f"DeleteOperation:{body.operation_id}",
             )
-        return GoalDeleteImpactResponse.model_validate_json(prior.response_json)
-    impact = delete_goal(uow, owner_id, goal_id, body.snapshot_id)
-    response = _delete_impact_response(impact)
-    uow.profiles_goals.add_idempotency(
-        IdempotencyRecord(
-            id=new_id(),
-            owner_id=owner_id,
-            operation=operation,
-            idempotency_key=key,
-            request_hash=request_hash,
-            goal_id=goal_id,
-            response_json=response.model_dump_json(),
-            created_at=now_text(SystemClock()),
         )
+    except Exception as exc:
+        uow.settings_data.fail_delete(
+            owner_id, body.operation_id, type(exc).__name__, now_text(SystemClock())
+        )
+        uow.commit()
+        raise
+    uow.settings_data.queue_delete(
+        owner_id, body.operation_id, ref.job_id, now_text(SystemClock())
     )
     uow.commit()
-    return response
+    return accepted_job(ref)
 
 
-def _delete_impact_response(impact: DeleteImpact) -> GoalDeleteImpactResponse:
+def _delete_impact_response(
+    impact: DeleteImpact, operation_id: str, created_at: str
+) -> GoalDeleteImpactResponse:
     return GoalDeleteImpactResponse(
+        operation_id=operation_id,
         snapshot_id=impact.snapshot_id,
         goal_id=impact.goal_id,
         evidence_ids=list(impact.evidence_ids),
         learning_state_ids=list(impact.learning_state_ids),
+        status="preflight",
+        created_at=created_at,
     )
 
 

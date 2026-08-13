@@ -143,6 +143,8 @@ test.beforeEach(async ({ page }) => {
   ]
   let ownerSettings: OwnerSettings = {
     progress_display: 'detailed',
+    accessibility: { reduced_motion: false },
+    provider_selection: null,
     row_version: 1,
   }
   await page.route('**/api/v1/runner/capabilities', route => route.fulfill({ json: {
@@ -492,6 +494,11 @@ test.beforeEach(async ({ page }) => {
   })
   await page.route('**/api/v1/goals/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/')
+    if (path.at(-1) === 'delete-preflight') {
+      const goalId = path.at(-2)!
+      await route.fulfill({ json: { operation_id: 'delete-operation-e2e', snapshot_id: 'delete-snapshot-e2e', goal_id: goalId, evidence_ids: ['cross-goal-evidence-e2e'], learning_state_ids: ['dependent-state-e2e'], status: 'preflight', created_at: '2026-08-13T00:00:00Z' } })
+      return
+    }
     if (path.at(-1) === 'canonical-update') {
       await route.fulfill({ json: canonicalAccepted ? { state: 'empty', goal_id: 'goal-default', base_version: { id: 'graph-2', version_label: '2026.08' }, target_version: null, proposal: null } : { state: canonicalDecision ?? 'conflict-needs-resolution', goal_id: 'goal-default', base_version: { id: 'graph-1', version_label: '2026.07' }, target_version: { id: 'graph-2', version_label: '2026.08' }, proposal: { id: 'canonical-proposal-e2e', status: canonicalDecision ?? 'awaiting', diff_hash: 'direct-graph-1-graph-2', items: canonicalItems } } })
       return
@@ -903,12 +910,22 @@ test.beforeEach(async ({ page }) => {
       const body = request.postDataJSON() as OwnerSettingsPatch
       ownerSettings = {
         ...ownerSettings,
-        ...body,
+        ...(body.progress_display ? { progress_display: body.progress_display } : {}),
+        ...(body.accessibility ? { accessibility: body.accessibility } : {}),
+        ...('provider_selection' in body ? { provider_selection: body.provider_selection ?? null } : {}),
         row_version: ownerSettings.row_version + 1,
       }
     }
     await route.fulfill({ json: ownerSettings })
   })
+  await page.route('**/api/v1/provider-capabilities', route => route.fulfill({ json: [
+    { provider: 'codex', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null },
+    { provider: 'claude', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null },
+  ] }))
+  await page.route('**/api/v1/disclosures', route => route.fulfill({ json: [
+    { id: null, category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: null, revoked_at: null },
+    { id: null, category: 'source-retrieval', operation: 'Explicit authoritative source retrieval', destination: 'Approved canonical URL', data_categories: ['source URL', 'operation metadata'], disclosure_version: 'source-network-v1', accepted_at: null, revoked_at: null },
+  ] }))
 })
 
 function evidenceSummary({ content: _content, content_version: _contentVersion, tombstoned: _tombstoned, transfers: _transfers, ...summary }: EvidenceDetail) {
@@ -1002,10 +1019,6 @@ async function learningApiSnapshot(page: Page, evidenceId: string, assessmentId:
   ]), { evidenceId, assessmentId })
 }
 
-async function operationsState(page: Page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem('yuno.operations.state.v1') || 'null'))
-}
-
 async function fillGoalBasics(page: Page, name = 'Resilient order fulfillment') {
   await page.getByRole('textbox', { name: 'Goal name' }).fill(name)
   await page.getByRole('textbox', { name: 'Subject' }).fill('Java / Spring Boot · AWS')
@@ -1015,30 +1028,6 @@ async function skipOptionalSetup(page: Page) {
   await page.getByRole('button', { name: /Skip to roadmap preview/i }).click()
   await expect(page.getByRole('heading', { level: 1, name: /Create a goal from this roadmap/i })).toBeVisible()
 }
-
-test('malformed operations storage falls back field by field without runtime errors', async ({ page, diagnostics }) => {
-  void diagnostics
-  await open(page, '/app/settings')
-  await page.evaluate(() => {
-    localStorage.setItem('yuno.operations.state.v1', JSON.stringify({
-      version: 1,
-      owner: null,
-      review: { duration: 'forever', retrieval: 'yes' },
-      importStatements: [null, { id: 4, decision: 'trusted' }],
-    }))
-  })
-  await page.reload()
-
-  await expect(page.getByRole('heading', { level: 1, name: /^Settings$/i })).toBeVisible()
-  await expect.poll(async () => {
-    const operations = await operationsState(page)
-    return { owner: operations?.owner, hasReviewState: 'review' in operations, hasImportState: 'importSource' in operations || 'importStatements' in operations }
-  }).toEqual({
-    owner: { name: 'Aditi Rao', role: 'Senior backend engineer' },
-    hasReviewState: false,
-    hasImportState: false,
-  })
-})
 
 async function expectNoHorizontalOverflow(page: Page, label: string) {
   const dimensions = await page.evaluate(() => ({
@@ -1495,10 +1484,6 @@ test('server-parsed imports stay exact and untrusted while learner decisions rem
   await page.getByText(/“A lookup before a write/i).locator('xpath=ancestor::article').getByRole('button', { name: /Dismiss/i }).click()
   await expect(page.getByText(/Mapping and verification are personal decisions/i)).toBeVisible()
   await expect.poll(async () => (await apiEvidence(page)).length).toBe(0)
-  await expect.poll(async () => {
-    const state = await operationsState(page)
-    return 'importSource' in state || 'importStatements' in state
-  }).toBe(false)
 })
 
 test('canonical curriculum updates mutate the server pin only after explicit acceptance', async ({ page, diagnostics }) => {
@@ -1613,12 +1598,12 @@ test('navigation drawer and destructive dialog restore focus to their triggers',
   await expect(tools).toBeFocused()
 
   await open(page, '/app/settings')
-  const resetPages = page.getByRole('button', { name: /Reset local pages/i }).first()
-  await resetPages.click()
-  const dialog = page.getByRole('alertdialog', { name: /Reset operational pages/i })
+  const previewDeletion = page.getByRole('button', { name: /Preview deletion/i }).first()
+  await previewDeletion.click()
+  const dialog = page.getByRole('alertdialog', { name: /Delete Resilient order fulfillment/i })
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: /Cancel/i }).click()
-  await expect(resetPages).toBeFocused()
+  await expect(previewDeletion).toBeFocused()
 })
 
 test('reduced-motion preference suppresses non-essential motion', async ({ page, diagnostics }) => {

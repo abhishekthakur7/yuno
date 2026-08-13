@@ -452,6 +452,8 @@ def _execute(
             context_ref_hash=hash_payload(context),
             disclosure_id=request.disclosure_ref,
             output_schema_version=schema_version,
+            request_id=request.request_id,
+            correlation_id=request.correlation_id,
         ),
         MappingValidator(purpose, expected_dimension_ids=expected_dimension_ids),
         cancelled=execution.cancel_requested,

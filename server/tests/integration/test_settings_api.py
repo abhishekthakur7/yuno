@@ -40,27 +40,31 @@ def test_progress_display_setting_persists_without_mutating_learning_data(
         )
         uow.commit()
 
-    evidence_before = client.get(
-        f"/api/v1/goals/{evidence.goal_id}/evidence"
-    ).json()
+    evidence_before = client.get(f"/api/v1/goals/{evidence.goal_id}/evidence").json()
     assessment_before = client.get(f"/api/v1/assessments/{assessment.id}").json()
-    progress_before = client.get(
-        f"/api/v1/goals/{evidence.goal_id}/progress"
-    ).json()
+    progress_before = client.get(f"/api/v1/goals/{evidence.goal_id}/progress").json()
     rows_before = _stored_learning_rows(engine)
 
     initial = client.get("/api/v1/settings")
     assert initial.status_code == 200
     assert initial.json()["progress_display"] == "detailed"
     assert initial.json()["row_version"] == 1
+    assert initial.json()["provider_selection"] is None
+    assert initial.json()["accessibility"] == {"reduced_motion": False}
 
     changed = client.patch(
         "/api/v1/settings",
         headers={"If-Match": "1"},
-        json={"progress_display": "simple"},
+        json={
+            "progress_display": "simple",
+            "accessibility": {"reduced_motion": True},
+            "provider_selection": "claude",
+        },
     )
     assert changed.status_code == 200, changed.text
     assert changed.json()["progress_display"] == "simple"
+    assert changed.json()["accessibility"] == {"reduced_motion": True}
+    assert changed.json()["provider_selection"] == "claude"
     assert changed.json()["row_version"] == 2
     assert client.get("/api/v1/settings").json() == changed.json()
 
@@ -69,8 +73,7 @@ def test_progress_display_setting_persists_without_mutating_learning_data(
         == evidence_before
     )
     assert (
-        client.get(f"/api/v1/assessments/{assessment.id}").json()
-        == assessment_before
+        client.get(f"/api/v1/assessments/{assessment.id}").json() == assessment_before
     )
     assert (
         client.get(f"/api/v1/goals/{evidence.goal_id}/progress").json()
@@ -87,3 +90,26 @@ def test_progress_display_setting_persists_without_mutating_learning_data(
     assert stale.json()["code"] == "precondition_failed"
     assert client.get("/api/v1/settings").json() == changed.json()
     assert _stored_learning_rows(engine) == rows_before
+
+
+def test_invalid_settings_are_rejected_without_changing_stored_version(
+    client: TestClient,
+) -> None:
+    initial = client.get("/api/v1/settings").json()
+    invalid_bodies = (
+        {"progress_display": "verbose"},
+        {"progress_display": None},
+        {"accessibility": None},
+        {"accessibility": {"reduced_motion": "sometimes"}},
+        {"provider_selection": "unknown"},
+    )
+
+    for body in invalid_bodies:
+        response = client.patch(
+            "/api/v1/settings",
+            headers={"If-Match": str(initial["row_version"])},
+            json=body,
+        )
+        assert response.status_code == 422, (body, response.text)
+
+    assert client.get("/api/v1/settings").json() == initial

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     provider_inactivity_seconds: float | None = None
     provider_absolute_seconds: float | None = None
     source_snapshot_root: Path = Path("./yuno-source-snapshots")
+    export_format_version: str | None = None
     # Execution is fail-closed until every policy value and approved command
     # name is supplied.
     runner_enabled: bool = False

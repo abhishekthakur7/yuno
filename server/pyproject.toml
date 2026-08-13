@@ -86,6 +86,7 @@ containers = [
     "yuno.modules.provider",
     "yuno.modules.hands_on",
     "yuno.modules.runner",
+    "yuno.modules.search",
 ]
 layers = [
     "(service)",
@@ -146,6 +147,8 @@ source_modules = [
     "yuno.modules.hands_on.service",
     "yuno.modules.runner.domain",
     "yuno.modules.runner.ports",
+    "yuno.modules.search.domain",
+    "yuno.modules.search.ports",
 ]
 forbidden_modules = [
     "fastapi",
@@ -190,6 +193,7 @@ modules = [
     "yuno.modules.provider",
     "yuno.modules.hands_on",
     "yuno.modules.runner",
+    "yuno.modules.search",
 ]
 ignore_imports = [
     "yuno.modules.jobs_events.service -> yuno.modules.audit.**",

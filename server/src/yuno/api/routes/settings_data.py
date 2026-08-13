@@ -49,6 +49,9 @@ def update_settings(
         owner_id,
         parse_if_match(match),
         body.progress_display,
+        body.accessibility.model_dump() if body.accessibility else None,
+        body.provider_selection.value if body.provider_selection else None,
+        "provider_selection" in body.model_fields_set,
         clock=clock,
     )
     uow.commit()
@@ -58,5 +61,7 @@ def update_settings(
 def _response(settings: OwnerSettings) -> OwnerSettingsResponse:
     return OwnerSettingsResponse(
         progress_display=settings.progress_display,
+        accessibility=settings.accessibility,
+        provider_selection=settings.provider_selection,
         row_version=settings.row_version,
     )

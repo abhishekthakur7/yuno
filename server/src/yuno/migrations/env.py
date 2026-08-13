@@ -37,6 +37,18 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _include_object(
+    obj, name: str | None, type_: str, reflected: bool, compare_to
+) -> bool:
+    # SQLite exposes an FTS5 virtual table and its implementation shadow
+    # tables through reflection. They are created by the search migration's
+    # explicit CREATE VIRTUAL TABLE and are intentionally absent from ORM
+    # metadata.
+    return not (
+        type_ == "table" and reflected and (name or "").startswith("search_fts")
+    )
+
+
 def _resolve_database_url() -> str:
     """Resolve the target database URL: an explicitly configured `Config` wins over `get_settings()`."""
     configured_url = config.get_main_option("sqlalchemy.url")
@@ -54,6 +66,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
+        include_object=_include_object,
     )
 
     with context.begin_transaction():
@@ -75,6 +88,7 @@ def run_migrations_online() -> None:
                 connection=connection,
                 target_metadata=target_metadata,
                 render_as_batch=True,
+                include_object=_include_object,
             )
 
             with context.begin_transaction():

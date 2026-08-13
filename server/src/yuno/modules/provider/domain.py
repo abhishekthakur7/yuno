@@ -71,6 +71,8 @@ class ProviderInput:
     disclosure_id: str
     output_schema_version: str
     provider_request_id: str | None = None
+    request_id: str | None = None
+    correlation_id: str | None = None
 
 
 @dataclass(frozen=True)

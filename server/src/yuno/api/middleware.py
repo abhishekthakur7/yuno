@@ -1,13 +1,13 @@
-"""Per-request `request_id`/`correlation_id` assignment.
+"""Per-request correlation assignment and structured completion logging.
 
 Spec §8.5's structured-log fields carry request, correlation, owner, goal,
-job, provider-request and runner IDs. This middleware is only responsible
-for establishing and propagating the first two — it is not a logging
-framework, and does not emit any log lines itself.
+job, provider-request and runner IDs. This middleware establishes and
+propagates the first two and emits body-free request completion/failure events.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -15,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from yuno.shared.domain.ids import new_id
+from yuno.shared.infrastructure.structured_logging import log_event
 
 REQUEST_ID_HEADER = "X-Request-Id"
 CORRELATION_ID_HEADER = "X-Correlation-Id"
@@ -56,16 +57,40 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     both on `request.state`, and echoes both back as response headers.
     """
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         request_id = new_id()
         correlation_id = (
-            _clean_correlation_id(request.headers.get(CORRELATION_ID_HEADER)) or new_id()
+            _clean_correlation_id(request.headers.get(CORRELATION_ID_HEADER))
+            or new_id()
         )
 
         request.state.request_id = request_id
         request.state.correlation_id = correlation_id
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            log_event(
+                "http.request.failed",
+                level=logging.ERROR,
+                request_id=request_id,
+                correlation_id=correlation_id,
+                method=request.method,
+                route=request.url.path,
+                diagnostic_classification="unhandled-request-failure",
+            )
+            raise
+
+        log_event(
+            "http.request.completed",
+            request_id=request_id,
+            correlation_id=correlation_id,
+            method=request.method,
+            route=request.url.path,
+            status_code=response.status_code,
+        )
 
         response.headers[REQUEST_ID_HEADER] = request_id
         response.headers[CORRELATION_ID_HEADER] = correlation_id
