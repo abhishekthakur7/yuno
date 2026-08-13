@@ -9,6 +9,16 @@ from typing import Any, Protocol
 
 from yuno.shared.domain.ids import new_id
 
+JOB_PAYLOAD_SCHEMA_VERSION = "1"
+"""Default version of the job payload/result envelope (spec §4.8).
+
+Per-kind, not global: a job kind whose envelope diverges stamps its own value
+(the runner uses `runner-v1`), and this is the version every other kind
+records. It was previously a bare `"1"` repeated across the request, ref,
+and both ORM column defaults, which made "are these the same version?"
+unanswerable without grepping.
+"""
+
 
 class JobStatus(StrEnum):
     QUEUED = "queued"
@@ -34,7 +44,7 @@ class JobRequest:
     requested_job_id: str | None = None
     goal_id: str | None = None
     lane: JobLane | None = None
-    schema_version: str = "1"
+    schema_version: str = JOB_PAYLOAD_SCHEMA_VERSION
     request_ref: str | None = None
     disclosure_ref: str | None = None
     provider_name: str | None = None
@@ -56,7 +66,7 @@ class JobRef:
     lane: JobLane | None = None
     retryable: bool = False
     goal_id: str | None = None
-    schema_version: str = "1"
+    schema_version: str = JOB_PAYLOAD_SCHEMA_VERSION
     attempt: int = 0
     diagnostic: str | None = None
     started_at: str | None = None

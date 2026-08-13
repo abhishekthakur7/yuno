@@ -5,7 +5,8 @@ non-head Alembic database").
 `require_single_head` is the one check the HTTP server's startup path and
 offline CLI tooling both call before touching the database further. It
 never runs migrations itself, only diagnoses. Every failure raises
-`UnavailableError` (503, retryable) with a `recovery_action`: the command
+`MigrationUnavailableError` (503, not retryable -- no schema mismatch
+resolves itself by restarting) with a `recovery_action`: the command
 that fixes it, or -- where no command can safely fix it, e.g. a corrupt
 file or a schema Alembic doesn't recognise -- a statement that the
 database needs manual inspection rather than a command that would itself
@@ -25,7 +26,7 @@ from sqlalchemy.exc import DatabaseError, OperationalError
 
 import yuno
 from yuno.config import get_settings
-from yuno.shared.domain.errors import UnavailableError
+from yuno.shared.domain.errors import MigrationUnavailableError
 
 
 def build_alembic_config() -> Config:
@@ -75,13 +76,22 @@ def require_single_head(engine: Engine) -> str:
     separately from "behind head" because "run `alembic upgrade head`"
     would fail here with "Can't locate revision" instead.
 
+    A database that is merely behind head is reported with the revisions
+    that remain unapplied, first one named: when a previous `alembic upgrade`
+    aborted, that first unapplied revision is precisely the one that failed,
+    and the database is still at its last committed revision, so the operator
+    can fix that revision and re-run rather than guess. A revision that
+    resolves but is not an ancestor of head -- a diverged or newer database --
+    is reported separately again, because `alembic upgrade head` cannot reach
+    head from there at all.
+
     Returns the head revision string on success.
     """
     script = ScriptDirectory.from_config(build_alembic_config())
     script_heads = script.get_heads()
 
     if not script_heads:
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "No Alembic migrations were found in the installed `yuno` package.",
             recovery_action=(
                 "Reinstall or rebuild the `yuno` package -- its "
@@ -89,7 +99,7 @@ def require_single_head(engine: Engine) -> str:
             ),
         )
     if len(script_heads) > 1:
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "Multiple Alembic heads are present in the migration scripts: "
             f"{', '.join(sorted(script_heads))}.",
             recovery_action=(
@@ -108,7 +118,7 @@ def require_single_head(engine: Engine) -> str:
                     "alembic_version"
                 }
     except OperationalError as exc:
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "Could not open the database to check its Alembic version: "
             f"{exc.orig}",
             recovery_action=(
@@ -118,7 +128,7 @@ def require_single_head(engine: Engine) -> str:
             ),
         ) from exc
     except DatabaseError as exc:
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "The database at the configured URL is not a valid SQLite "
             f"database: {exc.orig}",
             recovery_action=(
@@ -131,7 +141,7 @@ def require_single_head(engine: Engine) -> str:
 
     if not current_heads:
         if existing_tables:
-            raise UnavailableError(
+            raise MigrationUnavailableError(
                 "Database has an existing schema "
                 f"({', '.join(sorted(existing_tables))}) but no Alembic "
                 "version is recorded: a migration may have been "
@@ -145,7 +155,7 @@ def require_single_head(engine: Engine) -> str:
                     "will fail with \"table ... already exists\"."
                 ),
             )
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "Database is not initialised: no Alembic version is recorded.",
             recovery_action="Run `uv run alembic upgrade head` against this database.",
         )
@@ -154,7 +164,7 @@ def require_single_head(engine: Engine) -> str:
         revision for revision in current_heads if not _revision_known(script, revision)
     )
     if unknown_revisions:
-        raise UnavailableError(
+        raise MigrationUnavailableError(
             "Database is stamped at Alembic revision(s) "
             f"{', '.join(unknown_revisions)}, which do not exist in the "
             "installed migration scripts: deleted, or from a different "
@@ -170,13 +180,57 @@ def require_single_head(engine: Engine) -> str:
         )
 
     if set(current_heads) != {expected_head}:
-        raise UnavailableError(
-            "Database is behind the current Alembic head (database at "
-            f"{sorted(current_heads)}, expected {expected_head!r}).",
+        stamped = ", ".join(sorted(current_heads))
+        pending = _pending_revisions(script, expected_head, current_heads)
+        if pending is None:
+            raise MigrationUnavailableError(
+                f"Database is stamped at Alembic revision(s) {stamped}, which "
+                "exist in the installed migration scripts but are not an "
+                f"ancestor of the current head {expected_head!r}: the database "
+                "is on a diverged or newer branch, not simply behind.",
+                recovery_action=(
+                    "This database needs manual inspection before any Alembic "
+                    "command is run against it -- `alembic upgrade head` "
+                    "cannot reach the head from here. Confirm "
+                    "`YUNO_DATABASE_URL` points at the intended database file "
+                    "and that this build is not older than the one that "
+                    "created it."
+                ),
+            )
+        raise MigrationUnavailableError(
+            f"Database is behind the current Alembic head (database at "
+            f"{stamped}, expected {expected_head!r}); {len(pending)} "
+            f"revision(s) are unapplied, starting at {pending[0]!r}.",
             recovery_action=(
-                "Run `uv run alembic upgrade head` to bring the database to "
-                "the current head."
+                f"Run `uv run alembic upgrade head` to apply the {len(pending)} "
+                f"unapplied revision(s). If an upgrade already stopped here, "
+                f"{pending[0]!r} is the revision that failed: the database is "
+                "still at its last committed revision, so fixing that revision "
+                "and re-running resumes rather than duplicates work."
             ),
         )
 
     return expected_head
+
+
+def _pending_revisions(
+    script: ScriptDirectory, expected_head: str, current_heads: tuple[str, ...]
+) -> list[str] | None:
+    """The unapplied revisions between the database and head, in apply order.
+
+    `None` when the stamped revision is known but is not an ancestor of head
+    -- a diverged or newer database, which needs a different diagnosis from
+    "behind head" because `alembic upgrade head` cannot reach head from there.
+
+    `iterate_revisions(upper, lower)` walks down from head and excludes
+    `lower`, so the reversed list starts with the next revision that would be
+    applied -- which is exactly the revision that aborted when a previous
+    upgrade left the database short of head.
+    """
+    try:
+        unapplied = list(script.iterate_revisions(expected_head, tuple(current_heads)))
+    except CommandError:
+        return None
+    if not unapplied:
+        return None
+    return [revision.revision for revision in reversed(unapplied)]

@@ -26,6 +26,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+CONTENT_REVISION_FORMAT_VERSION = "content-revision-v1"
+"""Version of the content revision record format (spec §4.8's "content revision").
+
+Independent of both the Alembic schema version and of any individual row's
+`manifest_version`/`version_label`: this names the shape of a revision record
+(its layer/kind vocabulary, its markdown reference and hash discipline, and
+its `supersedes_revision_id` chaining), which is fixed by this build rather
+than supplied per manifest.
+"""
+
 
 class CanonicalVersionStatus(StrEnum):
     """spec §9.1's `Canonical draft`/`Canonical published` state row.

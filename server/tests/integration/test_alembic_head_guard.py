@@ -22,7 +22,7 @@ from sqlalchemy import Engine, inspect, text
 
 from yuno.api.app import create_app
 from yuno.config import Settings, get_settings
-from yuno.shared.domain.errors import UnavailableError
+from yuno.shared.domain.errors import MigrationUnavailableError
 from yuno.shared.infrastructure import alembic_guard
 from yuno.shared.infrastructure.database import create_engine_for
 
@@ -35,9 +35,10 @@ _ALEMBIC_VERSION_TABLE_SQL = (
 
 def _stamp_revision(engine: Engine, revision: str = "deadbeefcafe") -> None:
     """Hand-craft an `alembic_version` table stamped at `revision`. The
-    package has only one migration (`442e2f56adb9`, `down_revision=None`),
-    so any other value is unknown to `ScriptDirectory`, exercising the
-    "stamped, but unresolvable" branch a deleted or foreign migration would.
+    package has 27 migrations, none of which is `"deadbeefcafe"` (the
+    default), so any caller of this helper that doesn't pass a real
+    revision id is unknown to `ScriptDirectory`, exercising the "stamped,
+    but unresolvable" branch a deleted or foreign migration would.
     """
     with engine.begin() as connection:
         connection.execute(text(_ALEMBIC_VERSION_TABLE_SQL))
@@ -86,9 +87,8 @@ def test_command_upgrade_honors_explicit_config_url_over_cached_settings(
         # The downstream symptom the ticket reports: B is now genuinely
         # usable, A genuinely is not -- not corrupt, just never migrated.
         assert alembic_guard.require_single_head(engine_b)
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine_a)
-        # A was never migrated -- not corrupt, just uninitialised.
         assert "not initialised" in excinfo.value.message.lower()
     finally:
         engine_a.dispose()
@@ -107,7 +107,7 @@ def test_fresh_head_matches_declarative_metadata(tmp_path: Path) -> None:
 
 def test_require_single_head_raises_on_corrupt_database_file(tmp_path: Path) -> None:
     """A corrupt / non-SQLite file at the configured path must surface as a
-    clean `UnavailableError`, not a raw
+    clean `MigrationUnavailableError`, not a raw
     `sqlalchemy.exc.DatabaseError: file is not a database`.
     """
     db_path = tmp_path / "corrupt.db"
@@ -115,11 +115,12 @@ def test_require_single_head_raises_on_corrupt_database_file(tmp_path: Path) -> 
 
     engine = create_engine_for(f"sqlite+pysqlite:///{db_path}")
     try:
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine)
 
         assert excinfo.value.http_status == 503
-        assert excinfo.value.retryable is True
+        assert excinfo.value.code == "migration_unavailable"
+        assert excinfo.value.retryable is False
         assert "not a valid sqlite database" in excinfo.value.message.lower()
         assert "corrupt" in excinfo.value.recovery_action.lower()
         assert "restore it from backup" in excinfo.value.recovery_action.lower()
@@ -129,18 +130,19 @@ def test_require_single_head_raises_on_corrupt_database_file(tmp_path: Path) -> 
 
 def test_require_single_head_raises_on_missing_parent_directory(tmp_path: Path) -> None:
     """A path whose parent directory does not exist must surface as a clean
-    `UnavailableError`, not a raw
+    `MigrationUnavailableError`, not a raw
     `sqlalchemy.exc.OperationalError: unable to open database file`.
     """
     missing_path = tmp_path / "no-such-directory" / "nested" / "yuno.db"
 
     engine = create_engine_for(f"sqlite+pysqlite:///{missing_path}")
     try:
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine)
 
         assert excinfo.value.http_status == 503
-        assert excinfo.value.retryable is True
+        assert excinfo.value.code == "migration_unavailable"
+        assert excinfo.value.retryable is False
         assert "could not open the database" in excinfo.value.message.lower()
         assert "parent directory" in excinfo.value.recovery_action.lower()
 
@@ -165,10 +167,11 @@ def test_require_single_head_raises_on_unmigrated_database(database_url: str) ->
     """
     engine = create_engine_for(database_url)
     try:
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine)
         assert excinfo.value.http_status == 503
-        assert excinfo.value.retryable is True
+        assert excinfo.value.code == "migration_unavailable"
+        assert excinfo.value.retryable is False
         assert excinfo.value.recovery_action
     finally:
         engine.dispose()
@@ -189,11 +192,12 @@ def test_require_single_head_raises_on_partially_applied_database(
         with engine.begin() as connection:
             connection.execute(text("DELETE FROM alembic_version"))
 
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine)
 
         assert excinfo.value.http_status == 503
-        assert excinfo.value.retryable is True
+        assert excinfo.value.code == "migration_unavailable"
+        assert excinfo.value.retryable is False
         assert "owners" in excinfo.value.message
         assert "not initialised" not in excinfo.value.message.lower()
         assert "manual inspection" in excinfo.value.recovery_action.lower()
@@ -216,11 +220,12 @@ def test_require_single_head_raises_on_unknown_revision_database(database_url: s
     try:
         _stamp_revision(engine, "deadbeefcafe")
 
-        with pytest.raises(UnavailableError) as excinfo:
+        with pytest.raises(MigrationUnavailableError) as excinfo:
             alembic_guard.require_single_head(engine)
 
         assert excinfo.value.http_status == 503
-        assert excinfo.value.retryable is True
+        assert excinfo.value.code == "migration_unavailable"
+        assert excinfo.value.retryable is False
         assert "deadbeefcafe" in excinfo.value.message
         assert "do not exist in the installed migration scripts" in excinfo.value.message
         assert "manual inspection" in excinfo.value.recovery_action.lower()
@@ -236,19 +241,19 @@ def test_require_single_head_raises_on_unknown_revision_database(database_url: s
 def test_unmigrated_and_unknown_revision_recovery_actions_are_distinguishable(
     database_url: str,
 ) -> None:
-    """Both failure modes raise the same `UnavailableError` type, but an
+    """Both failure modes raise the same `MigrationUnavailableError` type, but an
     operator (or a log line) must be able to tell "never migrated" apart
     from "stamped at a revision unknown to the installed migration scripts"
     from the `recovery_action` alone.
     """
     engine = create_engine_for(database_url)
     try:
-        with pytest.raises(UnavailableError) as unmigrated_excinfo:
+        with pytest.raises(MigrationUnavailableError) as unmigrated_excinfo:
             alembic_guard.require_single_head(engine)
 
         _stamp_revision(engine)
 
-        with pytest.raises(UnavailableError) as unknown_excinfo:
+        with pytest.raises(MigrationUnavailableError) as unknown_excinfo:
             alembic_guard.require_single_head(engine)
 
         assert (
@@ -268,7 +273,7 @@ def test_create_app_lifespan_refuses_to_start_against_unmigrated_database(
     settings = Settings(database_url=database_url)  # never migrated
     app = create_app(settings)
 
-    with pytest.raises(UnavailableError), TestClient(app):
+    with pytest.raises(MigrationUnavailableError), TestClient(app):
         pass
 
 
@@ -284,7 +289,7 @@ def test_create_app_lifespan_refuses_to_start_against_unknown_revision_database(
     settings = Settings(database_url=database_url)
     app = create_app(settings)
 
-    with pytest.raises(UnavailableError), TestClient(app):
+    with pytest.raises(MigrationUnavailableError), TestClient(app):
         pass
 
 

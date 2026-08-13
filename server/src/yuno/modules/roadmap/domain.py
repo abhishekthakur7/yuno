@@ -10,6 +10,16 @@ from enum import StrEnum
 from yuno.shared.domain.errors import ConflictError, DomainValidationError
 from yuno.shared.domain.hashing import hash_payload
 
+OVERLAY_FORMAT_VERSION = "overlay-entry-v1"
+"""Version of the overlay entry record format (spec §4.8's "overlay format").
+
+Independent of the Alembic schema version: the set of `OverlayEntryType`
+values and the shape of an entry's stored payload can change without a
+schema migration, and a schema migration can happen without changing either.
+`projection_version` on a roadmap projection is a *content* hash of one
+goal's overlay state, not this format version.
+"""
+
 
 class OverlayEntryType(StrEnum):
     ORDER_CONSTRAINT = "order_constraint"

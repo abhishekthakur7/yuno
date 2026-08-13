@@ -164,11 +164,26 @@ class PendingJobCapError(YunoError):
 
 
 class UnavailableError(YunoError):
-    """503 — service, migration, provider or runner temporarily unavailable."""
+    """503 — service, provider or runner temporarily unavailable."""
 
     code = "unavailable"
     http_status = 503
     retryable = True
+
+
+class MigrationUnavailableError(UnavailableError):
+    """503 — the database is not at the single expected Alembic schema head.
+
+    `retryable = False`, unlike every other 503: a provider or runner outage
+    may clear on its own, but a database that is behind head, ahead of head,
+    or stamped at an unknown revision never does. Retrying the same startup
+    against the same file produces the same failure until an operator acts on
+    `recovery_action`, so reporting it as retryable would invite exactly the
+    restart loop spec §4.8 forbids.
+    """
+
+    code = "migration_unavailable"
+    retryable = False
 
 
 class RoleNotGrantedError(YunoError):

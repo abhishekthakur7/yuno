@@ -2,6 +2,14 @@
 
 Revision ID: e10d1a0c0100
 Revises: a9d4e6f1b208
+
+This revision is forward-only. It expands (one `*_bodies` table per
+large-content parent, plus nullable hash columns), backfills (copies the
+content across and computes every row's digest), then contracts (drops the
+original columns) in a single unit, and it purges body rows belonging to
+already-tombstoned goals. None of that is invertible once the source columns
+are gone, so `downgrade()` refuses rather than pretending to restore data it
+cannot reconstruct.
 """
 
 import hashlib

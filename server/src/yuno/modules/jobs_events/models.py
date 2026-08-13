@@ -17,6 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from yuno.shared.application.jobs import JOB_PAYLOAD_SCHEMA_VERSION
 from yuno.shared.infrastructure.base import (
     Base,
     boolean_column,
@@ -73,7 +74,9 @@ class JobRow(Base):
     )
     goal_id: Mapped[str | None] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    schema_version: Mapped[str] = mapped_column(Text, nullable=False, default="1")
+    schema_version: Mapped[str] = mapped_column(
+        Text, nullable=False, default=JOB_PAYLOAD_SCHEMA_VERSION
+    )
     lane: Mapped[str] = mapped_column(Text, nullable=False)
     state: Mapped[str] = mapped_column(Text, nullable=False)
     retryable: Mapped[int] = boolean_column("retryable", default=False)
@@ -259,7 +262,9 @@ class JobResultRow(Base):
     )
     job_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    schema_version: Mapped[str] = mapped_column(Text, nullable=False, default="1")
+    schema_version: Mapped[str] = mapped_column(
+        Text, nullable=False, default=JOB_PAYLOAD_SCHEMA_VERSION
+    )
     result_ref: Mapped[str] = mapped_column(Text, nullable=False)
     result_hash: Mapped[str] = mapped_column(Text, nullable=False)
     committed_at: Mapped[str] = utc_timestamp_column()
