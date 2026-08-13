@@ -102,8 +102,6 @@ class Settings(BaseSettings):
     runner_javac_command: str | None = None
     runner_java_command: str | None = None
     runner_java_version_prefix: str | None = None
-    runner_python_command: str | None = None
-    runner_relational_connector: Literal["configured"] | None = None
 
     @field_validator("provider_codex_executable", "provider_claude_executable")
     @classmethod

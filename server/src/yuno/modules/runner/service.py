@@ -121,21 +121,6 @@ def capabilities(
                 "enforceable on this platform; other configured limits remain active."
             ),
         }
-    if settings.runner_python_command:
-        items.append(
-            detect_command(
-                "python", "compile-and-test", settings.runner_python_command, None
-            )
-        )
-    if settings.runner_relational_connector == "configured":
-        items.append(
-            {
-                "language": "relational",
-                "capability": "connector",
-                "state": "supported",
-                "detail": "Explicitly configured connector; no database is provisioned.",
-            }
-        )
     return {
         "enabled": True,
         "disabled_reason": None,

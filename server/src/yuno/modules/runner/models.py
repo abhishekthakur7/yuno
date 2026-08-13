@@ -16,9 +16,7 @@ from yuno.shared.infrastructure.base import Base, id_column, utc_timestamp_colum
 class RunnerConfirmationRow(Base):
     __tablename__ = "runner_confirmations"
     __table_args__ = (
-        CheckConstraint(
-            "language IN ('java','python','relational')", name="language_valid"
-        ),
+        CheckConstraint("language IN ('java')", name="language_valid"),
         CheckConstraint("operation IN ('compile','test')", name="operation_valid"),
         UniqueConstraint("id", "owner_id", name="uq_runner_confirmations_id_owner"),
         UniqueConstraint(
@@ -49,9 +47,7 @@ class RunnerConfirmationRow(Base):
 class RunnerRecordRow(Base):
     __tablename__ = "runner_records"
     __table_args__ = (
-        CheckConstraint(
-            "language IN ('java','python','relational')", name="language_valid"
-        ),
+        CheckConstraint("language IN ('java')", name="language_valid"),
         CheckConstraint("operation IN ('compile','test')", name="operation_valid"),
         CheckConstraint(
             "state IN ('queued','preparing','running','completed','failed','timed-out-or-limited','cancel-requested','cancelled')",

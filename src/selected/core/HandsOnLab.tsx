@@ -30,7 +30,6 @@ export function HandsOnLab({ goalId, topicId }: { goalId: string | null; topicId
   const runnerCapabilities = runner.capabilities.data
   const javaCapability = runnerCapabilities?.capabilities?.find(item => item.language === 'java')
   const runnerEnabled = Boolean(runnerCapabilities?.enabled && javaCapability?.state === 'supported')
-  const optionalCapabilities = runnerCapabilities?.capabilities?.filter(item => (item.language === 'python' || item.language === 'relational') && item.state === 'supported') ?? []
   const run = runner.run.data
 
   const requestRun = async () => {
@@ -101,7 +100,6 @@ export function HandsOnLab({ goalId, topicId }: { goalId: string | null; topicId
     <section className="sb-result-region sb-runtime-region" data-result-region="runtime" aria-labelledby="sb-runtime-title">
       <header><div><span className="sb-kicker">Execution results</span><h3 id="sb-runtime-title">Runtime</h3></div><span>{run?.state ?? (confirmationOpen ? 'pending-confirmation' : 'Not run')}</span></header>
       <p className="sb-result-definition"><strong>Controlled subprocess execution only.</strong> This is not a sandbox or hostile-code isolation, and it is not proof of production or AWS behavior. Runtime execution is separate and cannot create hands-on evidence.</p>
-      {optionalCapabilities.length > 0 && <p className="sb-runner-capabilities">Also configured: {optionalCapabilities.map(item => item.language === 'relational' ? 'relational connector' : 'Python').join(', ')}</p>}
       {(runner.confirmation.isError || runner.create.isError || runner.run.isError || runner.cancel.isError) && <p className="sb-hands-on-error" role="alert">The runner request failed. No static-review submission was affected.</p>}
       {run && <div className="sb-runner-actions"><span>Run {run.id} · {run.cleanup_state ?? 'cleanup pending'}</span>{['queued', 'preparing', 'running', 'cancel-requested'].includes(run.state) && <button className="sb-button sb-button--secondary" disabled={runner.cancel.isPending || run.state === 'cancel-requested'} onClick={() => runner.cancel.mutate()}>{runner.cancel.isPending || run.state === 'cancel-requested' ? 'Cancel requested…' : 'Cancel run'}</button>}{['failed', 'timed-out-or-limited', 'cancelled', 'cleanup-failed'].includes(run.state) && <button className="sb-button sb-button--secondary" onClick={() => void requestRun()}>Confirm fresh retry</button>}</div>}
       {run?.cleanup_state === 'cleanup-failed' && <p className="sb-hands-on-error" role="alert">Cleanup failed. A process or temporary file may require manual recovery. {run.cleanup_diagnostic}</p>}

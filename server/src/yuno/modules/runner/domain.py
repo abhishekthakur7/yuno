@@ -10,9 +10,17 @@ RUNNER_LIMITATION = (
 
 
 class RunnerLanguage(StrEnum):
+    """The only language the runner can confirm, persist, or execute.
+
+    Approved IDK-005 records learner Python execution as "None in MVP" and
+    approved IDK-008 (`database-exercise-posture-v1`) approves the absence of
+    any executable database capability, so `python` and `relational` are gone
+    from the enum, the OpenAPI schema, and the SQLite checks rather than kept
+    as rejected values. A request carrying either is an ordinary closed-schema
+    validation failure, handled before the route or unit of work.
+    """
+
     JAVA = "java"
-    PYTHON = "python"
-    RELATIONAL = "relational"
 
 
 class CapabilityState(StrEnum):

@@ -76,7 +76,7 @@ describe('hands-on lifecycle', () => {
       const request = input instanceof Request ? input : new Request(new URL(String(input), 'http://localhost'), init)
       requests.push(request)
       const path = new URL(request.url).pathname
-      if (path === '/api/v1/runner/capabilities') return json({ enabled: true, disabled_reason: null, environment_policy_version: 'runner-env-v1', limits_config_version: 'runner-limits-v1', limitation: 'Controlled subprocess only.', capabilities: [{ language: 'java', capability: 'compile-test', state: 'supported', detail: 'Configured Java toolchain.' }, { language: 'python', capability: 'execute', state: 'supported', detail: 'Configured Python.' }] })
+      if (path === '/api/v1/runner/capabilities') return json({ enabled: true, disabled_reason: null, environment_policy_version: 'runner-env-v1', limits_config_version: 'runner-limits-v1', limitation: 'Controlled subprocess only.', capabilities: [{ language: 'java', capability: 'compile-test', state: 'supported', detail: 'Configured Java toolchain.' }] })
       if (path === '/api/v1/runner/confirmations') return json({ id: 'confirmation-1', language: 'java', capability: 'compile-test', inputs: [(await request.clone().json() as { inputs: unknown[] }).inputs[0]], confirmed_at: '2026-08-13T01:00:00Z' }, 201)
       if (path === '/api/v1/runner-runs' && request.method === 'POST') {
         createKeys.push(request.headers.get('Idempotency-Key'))
@@ -114,7 +114,6 @@ describe('hands-on lifecycle', () => {
     expect(requests.filter(request => new URL(request.url).pathname.endsWith('/runner/confirmations'))).toHaveLength(1)
     const runtime = container.querySelector('[data-result-region="runtime"]')!
     expect(runtime.textContent!.indexOf('first')).toBeLessThan(runtime.textContent!.indexOf('second'))
-    expect(screen.getByText('Also configured: Python')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
     expect(await screen.findByText(/Cancel requested/i)).toBeInTheDocument()
     const cancelRequest = requests.find(request => new URL(request.url).pathname.endsWith('/runner-1/cancel'))!

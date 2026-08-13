@@ -7412,10 +7412,9 @@
         "type": "object"
       },
       "RunnerLanguage": {
+        "description": "The only language the runner can confirm, persist, or execute.\n\nApproved IDK-005 records learner Python execution as \"None in MVP\" and\napproved IDK-008 (`database-exercise-posture-v1`) approves the absence of\nany executable database capability, so `python` and `relational` are gone\nfrom the enum, the OpenAPI schema, and the SQLite checks rather than kept\nas rejected values. A request carrying either is an ordinary closed-schema\nvalidation failure, handled before the route or unit of work.",
         "enum": [
-          "java",
-          "python",
-          "relational"
+          "java"
         ],
         "title": "RunnerLanguage",
         "type": "string"
