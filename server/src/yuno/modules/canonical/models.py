@@ -141,7 +141,6 @@ class MergeItemRow(Base):
             "chosen_resolution IS NULL OR chosen_resolution IN ('accept-canonical','overlay-wins','retain-local')",
             name="chosen_resolution_valid",
         ),
-        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
         Index("ix_merge_items_proposal", "proposal_id", "id"),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"],
@@ -164,21 +163,35 @@ class MergeItemRow(Base):
     id: Mapped[str] = id_column()
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
-    proposal_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("canonical_merge_proposals.id"), nullable=False
-    )
+    proposal_id: Mapped[str] = mapped_column(Text, nullable=False)
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     change_type: Mapped[str] = mapped_column(Text, nullable=False)
     topic_id: Mapped[str | None] = mapped_column(Text)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    impact: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     conflict_type: Mapped[str | None] = mapped_column(Text)
     selected: Mapped[int] = mapped_column(Integer, nullable=False)
     recommended_resolution: Mapped[str] = mapped_column(Text, nullable=False)
     chosen_resolution: Mapped[str | None] = mapped_column(Text)
+
+
+class MergeItemBodyRow(Base):
+    __tablename__ = "merge_item_bodies"
+    item_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    impact: Mapped[str] = mapped_column(Text, nullable=False)
     resolution_explanation: Mapped[str] = mapped_column(Text, nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["item_id", "owner_id", "goal_id"],
+            ["merge_items.id", "merge_items.owner_id", "merge_items.goal_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
+    )
 
 
 class CanonicalMergeFollowupRow(Base):
@@ -192,7 +205,6 @@ class CanonicalMergeFollowupRow(Base):
             "status IN ('pending-dispatch','dispatched','completed-derived')",
             name="status_valid",
         ),
-        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
         UniqueConstraint(
             "proposal_id",
             "kind",
@@ -225,11 +237,30 @@ class CanonicalMergeFollowupRow(Base):
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     proposal_id: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     job_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
+
+
+class CanonicalMergeFollowupBodyRow(Base):
+    __tablename__ = "canonical_merge_followup_bodies"
+    followup_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["followup_id", "owner_id", "goal_id"],
+            [
+                "canonical_merge_followups.id",
+                "canonical_merge_followups.owner_id",
+                "canonical_merge_followups.goal_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
+    )
 
 
 class TopicIdentityRow(Base):

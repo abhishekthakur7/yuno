@@ -8,6 +8,15 @@ from collections.abc import Sequence
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from yuno.modules.data_lifecycle.models import (
+    LearnerCorrectionBodyRow,
+    LearningStateBodyRow,
+    OverlayEntryBodyRow,
+    OverlayProposalBodyRow,
+    OverlayProposalDecisionBodyRow,
+    RoadmapIdempotencyBodyRow,
+    TransferredEvidenceRefBodyRow,
+)
 from yuno.modules.roadmap.domain import (
     CorrectionType,
     LearnerCorrection,
@@ -40,6 +49,7 @@ from yuno.modules.roadmap.ports import (
     TransferLearningStateView,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
@@ -101,23 +111,30 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
         return self.get_overlay(owner_id, goal_id)
 
     def append_overlay_entry(self, entry: OverlayEntry) -> OverlayEntry:
+        row = OverlayEntryRow(
+            id=entry.id,
+            owner_id=entry.owner_id,
+            goal_id=entry.goal_id,
+            overlay_id=entry.overlay_id,
+            graph_version_id=entry.graph_version_id,
+            topic_stable_id=entry.topic_stable_id,
+            entry_type=entry.entry_type.value,
+            source=entry.source,
+            approved_at=entry.approved_at,
+            supersedes_entry_id=entry.supersedes_entry_id,
+            content_hash=entry.content_hash,
+        )
+        self._session.add(row)
+        self._session.flush()
         self._session.add(
-            OverlayEntryRow(
-                id=entry.id,
+            OverlayEntryBodyRow(
+                entry_id=entry.id,
                 owner_id=entry.owner_id,
                 goal_id=entry.goal_id,
-                overlay_id=entry.overlay_id,
-                graph_version_id=entry.graph_version_id,
-                topic_stable_id=entry.topic_stable_id,
-                entry_type=entry.entry_type.value,
                 value_json=json.dumps(
                     entry.value, sort_keys=True, separators=(",", ":")
                 ),
                 reason=entry.reason,
-                source=entry.source,
-                approved_at=entry.approved_at,
-                supersedes_entry_id=entry.supersedes_entry_id,
-                content_hash=entry.content_hash,
             )
         )
         self._session.flush()
@@ -126,63 +143,91 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
     def list_overlay_entries(
         self, owner_id: str, goal_id: str
     ) -> Sequence[OverlayEntry]:
-        rows = self._session.scalars(
-            owner_scoped_select(OverlayEntryRow, owner_id)
+        rows = self._session.execute(
+            select(OverlayEntryRow, OverlayEntryBodyRow)
+            .join(
+                OverlayEntryBodyRow, OverlayEntryBodyRow.entry_id == OverlayEntryRow.id
+            )
+            .where(OverlayEntryRow.owner_id == owner_id)
             .where(OverlayEntryRow.goal_id == goal_id)
             .order_by(OverlayEntryRow.approved_at, OverlayEntryRow.id)
         ).all()
-        return tuple(_entry(row) for row in rows)
+        return tuple(_entry(row, body) for row, body in rows)
 
     def add_proposal(self, proposal: OverlayProposal) -> OverlayProposal:
+        row = OverlayProposalRow(
+            id=proposal.id,
+            owner_id=proposal.owner_id,
+            goal_id=proposal.goal_id,
+            generated_against_graph_version_id=proposal.generated_against_graph_version_id,
+            topic_stable_id=proposal.topic_stable_id,
+            proposal_type=proposal.proposal_type.value,
+            content_hash=proposal.content_hash,
+            state=proposal.state.value,
+            created_at=proposal.created_at,
+            decided_at=proposal.decided_at,
+        )
+        self._session.add(row)
+        self._session.flush()
         self._session.add(
-            OverlayProposalRow(
-                id=proposal.id,
+            OverlayProposalBodyRow(
+                proposal_id=proposal.id,
                 owner_id=proposal.owner_id,
                 goal_id=proposal.goal_id,
-                generated_against_graph_version_id=proposal.generated_against_graph_version_id,
-                topic_stable_id=proposal.topic_stable_id,
-                proposal_type=proposal.proposal_type.value,
                 payload_json=json.dumps(
                     proposal.payload, sort_keys=True, separators=(",", ":")
                 ),
-                content_hash=proposal.content_hash,
-                state=proposal.state.value,
                 state_reason=proposal.state_reason,
-                created_at=proposal.created_at,
-                decided_at=proposal.decided_at,
             )
         )
         self._session.flush()
         return proposal
 
     def get_proposal(self, owner_id: str, proposal_id: str) -> OverlayProposal | None:
-        row = self._session.scalars(
-            owner_scoped_select(OverlayProposalRow, owner_id).where(
-                OverlayProposalRow.id == proposal_id
+        pair = self._session.execute(
+            select(OverlayProposalRow, OverlayProposalBodyRow)
+            .join(
+                OverlayProposalBodyRow,
+                OverlayProposalBodyRow.proposal_id == OverlayProposalRow.id,
+            )
+            .where(
+                OverlayProposalRow.owner_id == owner_id,
+                OverlayProposalRow.id == proposal_id,
             )
         ).one_or_none()
-        return _proposal(row) if row else None
+        return _proposal(*pair) if pair else None
 
     def get_pending_proposal_by_hash(
         self, owner_id: str, goal_id: str, content_hash: str
     ) -> OverlayProposal | None:
-        row = self._session.scalars(
-            owner_scoped_select(OverlayProposalRow, owner_id).where(
+        pair = self._session.execute(
+            select(OverlayProposalRow, OverlayProposalBodyRow)
+            .join(
+                OverlayProposalBodyRow,
+                OverlayProposalBodyRow.proposal_id == OverlayProposalRow.id,
+            )
+            .where(
+                OverlayProposalRow.owner_id == owner_id,
                 OverlayProposalRow.goal_id == goal_id,
                 OverlayProposalRow.content_hash == content_hash,
                 OverlayProposalRow.state
                 == OverlayProposalState.AWAITING_DECISION.value,
             )
         ).one_or_none()
-        return _proposal(row) if row else None
+        return _proposal(*pair) if pair else None
 
     def list_proposals(self, owner_id: str, goal_id: str) -> Sequence[OverlayProposal]:
-        rows = self._session.scalars(
-            owner_scoped_select(OverlayProposalRow, owner_id)
+        rows = self._session.execute(
+            select(OverlayProposalRow, OverlayProposalBodyRow)
+            .join(
+                OverlayProposalBodyRow,
+                OverlayProposalBodyRow.proposal_id == OverlayProposalRow.id,
+            )
+            .where(OverlayProposalRow.owner_id == owner_id)
             .where(OverlayProposalRow.goal_id == goal_id)
             .order_by(OverlayProposalRow.created_at, OverlayProposalRow.id)
         ).all()
-        return tuple(_proposal(row) for row in rows)
+        return tuple(_proposal(row, body) for row, body in rows)
 
     def count_pending_proposals(self, owner_id: str, goal_id: str) -> int:
         return int(
@@ -216,29 +261,41 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 OverlayProposalRow.id == proposal_id,
                 OverlayProposalRow.state == expected_state,
             )
-            .values(
-                state=state,
-                state_reason=state_reason,
-                decided_at=decided_at,
-            )
+            .values(state=state, decided_at=decided_at)
         )
         if result.rowcount != 1:
             return None
+        self._session.execute(
+            update(OverlayProposalBodyRow)
+            .where(
+                OverlayProposalBodyRow.owner_id == owner_id,
+                OverlayProposalBodyRow.proposal_id == proposal_id,
+            )
+            .values(state_reason=state_reason)
+        )
         self._session.flush()
         return self.get_proposal(owner_id, proposal_id)
 
     def append_proposal_decision(
         self, decision: OverlayProposalDecision
     ) -> OverlayProposalDecision:
+        row = OverlayProposalDecisionRow(
+            id=decision.id,
+            owner_id=decision.owner_id,
+            goal_id=decision.goal_id,
+            proposal_id=decision.proposal_id,
+            decision=decision.decision.value,
+            body_hash=hash_payload(decision.reason),
+            decided_at=decision.decided_at,
+        )
+        self._session.add(row)
+        self._session.flush()
         self._session.add(
-            OverlayProposalDecisionRow(
-                id=decision.id,
+            OverlayProposalDecisionBodyRow(
+                decision_id=decision.id,
                 owner_id=decision.owner_id,
                 goal_id=decision.goal_id,
-                proposal_id=decision.proposal_id,
-                decision=decision.decision.value,
                 reason=decision.reason,
-                decided_at=decision.decided_at,
             )
         )
         self._session.flush()
@@ -247,31 +304,45 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
     def list_proposal_decisions(
         self, owner_id: str, proposal_id: str
     ) -> Sequence[OverlayProposalDecision]:
-        rows = self._session.scalars(
-            owner_scoped_select(OverlayProposalDecisionRow, owner_id)
+        rows = self._session.execute(
+            select(OverlayProposalDecisionRow, OverlayProposalDecisionBodyRow)
+            .join(
+                OverlayProposalDecisionBodyRow,
+                OverlayProposalDecisionBodyRow.decision_id
+                == OverlayProposalDecisionRow.id,
+            )
+            .where(OverlayProposalDecisionRow.owner_id == owner_id)
             .where(OverlayProposalDecisionRow.proposal_id == proposal_id)
             .order_by(
                 OverlayProposalDecisionRow.decided_at,
                 OverlayProposalDecisionRow.id,
             )
         ).all()
-        return tuple(_proposal_decision(row) for row in rows)
+        return tuple(_proposal_decision(row, body) for row, body in rows)
 
     def add_learning_state(self, state: LearningState) -> LearningState:
+        row = LearningStateRow(
+            id=state.id,
+            owner_id=state.owner_id,
+            goal_id=state.goal_id,
+            topic_stable_id=state.topic_stable_id,
+            graph_version_id=state.graph_version_id,
+            classification=state.classification.value,
+            origin=state.origin,
+            recommended_depth=state.recommended_depth,
+            body_hash=hash_payload(state.explanation),
+            derivation_version=state.derivation_version,
+            input_hash=state.input_hash,
+            derived_at=state.derived_at,
+        )
+        self._session.add(row)
+        self._session.flush()
         self._session.add(
-            LearningStateRow(
-                id=state.id,
+            LearningStateBodyRow(
+                state_id=state.id,
                 owner_id=state.owner_id,
                 goal_id=state.goal_id,
-                topic_stable_id=state.topic_stable_id,
-                graph_version_id=state.graph_version_id,
-                classification=state.classification.value,
-                origin=state.origin,
-                recommended_depth=state.recommended_depth,
                 explanation=state.explanation,
-                derivation_version=state.derivation_version,
-                input_hash=state.input_hash,
-                derived_at=state.derived_at,
             )
         )
         self._session.flush()
@@ -280,25 +351,40 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
     def list_learning_states(
         self, owner_id: str, goal_id: str
     ) -> Sequence[LearningState]:
-        rows = self._session.scalars(
-            owner_scoped_select(LearningStateRow, owner_id)
+        rows = self._session.execute(
+            select(LearningStateRow, LearningStateBodyRow)
+            .join(
+                LearningStateBodyRow,
+                LearningStateBodyRow.state_id == LearningStateRow.id,
+            )
+            .where(LearningStateRow.owner_id == owner_id)
             .where(LearningStateRow.goal_id == goal_id)
             .order_by(LearningStateRow.topic_stable_id)
         ).all()
-        return tuple(_state(row) for row in rows)
+        return tuple(_state(row, body) for row, body in rows)
 
     def append_correction(self, correction: LearnerCorrection) -> LearnerCorrection:
+        row = LearnerCorrectionRow(
+            id=correction.id,
+            owner_id=correction.owner_id,
+            goal_id=correction.goal_id,
+            topic_stable_id=correction.topic_stable_id,
+            correction_type=correction.correction_type.value,
+            body_hash=hash_payload(
+                {"value": correction.value, "reason": correction.reason}
+            ),
+            created_at=correction.created_at,
+            supersedes_correction_id=correction.supersedes_correction_id,
+        )
+        self._session.add(row)
+        self._session.flush()
         self._session.add(
-            LearnerCorrectionRow(
-                id=correction.id,
+            LearnerCorrectionBodyRow(
+                correction_id=correction.id,
                 owner_id=correction.owner_id,
                 goal_id=correction.goal_id,
-                topic_stable_id=correction.topic_stable_id,
-                correction_type=correction.correction_type.value,
                 value=correction.value,
                 reason=correction.reason,
-                created_at=correction.created_at,
-                supersedes_correction_id=correction.supersedes_correction_id,
             )
         )
         self._session.flush()
@@ -307,12 +393,17 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
     def list_corrections(
         self, owner_id: str, goal_id: str
     ) -> Sequence[LearnerCorrection]:
-        rows = self._session.scalars(
-            owner_scoped_select(LearnerCorrectionRow, owner_id)
+        rows = self._session.execute(
+            select(LearnerCorrectionRow, LearnerCorrectionBodyRow)
+            .join(
+                LearnerCorrectionBodyRow,
+                LearnerCorrectionBodyRow.correction_id == LearnerCorrectionRow.id,
+            )
+            .where(LearnerCorrectionRow.owner_id == owner_id)
             .where(LearnerCorrectionRow.goal_id == goal_id)
             .order_by(LearnerCorrectionRow.created_at, LearnerCorrectionRow.id)
         ).all()
-        return tuple(_correction(row) for row in rows)
+        return tuple(_correction(row, body) for row, body in rows)
 
     def list_transferred_evidence_topic_ids(
         self, owner_id: str, goal_id: str
@@ -336,8 +427,14 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
         stmt = (
             select(
                 TransferredEvidenceRefRow,
+                TransferredEvidenceRefBodyRow,
                 LearningStateRow.topic_stable_id,
                 LearningStateRow.classification,
+            )
+            .join(
+                TransferredEvidenceRefBodyRow,
+                TransferredEvidenceRefBodyRow.transfer_id
+                == TransferredEvidenceRefRow.id,
             )
             .join(
                 LearningStateRow,
@@ -357,17 +454,23 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 topic,
                 row.source_evidence_id,
                 classification,
-                row.rationale,
+                body.rationale,
                 row.created_at,
             )
-            for row, topic, classification in self._session.execute(stmt)
+            for row, body, topic, classification in self._session.execute(stmt)
         )
 
     def list_evidence_transfers(
         self, owner_id: str, evidence_id: str
     ) -> Sequence[EvidenceTransferView]:
-        rows = self._session.scalars(
-            owner_scoped_select(TransferredEvidenceRefRow, owner_id)
+        rows = self._session.execute(
+            select(TransferredEvidenceRefRow, TransferredEvidenceRefBodyRow)
+            .join(
+                TransferredEvidenceRefBodyRow,
+                TransferredEvidenceRefBodyRow.transfer_id
+                == TransferredEvidenceRefRow.id,
+            )
+            .where(TransferredEvidenceRefRow.owner_id == owner_id)
             .where(TransferredEvidenceRefRow.source_evidence_id == evidence_id)
             .order_by(
                 TransferredEvidenceRefRow.created_at, TransferredEvidenceRefRow.id
@@ -379,55 +482,77 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 row.goal_id,
                 row.learning_state_id,
                 row.classification,
-                row.rationale,
+                body.rationale,
                 row.created_at,
             )
-            for row in rows
+            for row, body in rows
         )
 
     def get_learning_state_for_topic(
         self, owner_id: str, goal_id: str, topic_stable_id: str
     ) -> LearningState | None:
-        row = self._session.scalars(
-            owner_scoped_select(LearningStateRow, owner_id).where(
+        pair = self._session.execute(
+            select(LearningStateRow, LearningStateBodyRow)
+            .join(
+                LearningStateBodyRow,
+                LearningStateBodyRow.state_id == LearningStateRow.id,
+            )
+            .where(
+                LearningStateRow.owner_id == owner_id,
                 LearningStateRow.goal_id == goal_id,
                 LearningStateRow.topic_stable_id == topic_stable_id,
             )
         ).one_or_none()
-        return _state(row) if row else None
+        return _state(*pair) if pair else None
 
     def add_transferred_evidence(
         self,
         learning_state: TransferLearningStateView,
         transfer_ref: TransferEvidenceRefView,
     ) -> None:
+        state_row = LearningStateRow(
+            id=learning_state.id,
+            owner_id=learning_state.owner_id,
+            goal_id=learning_state.goal_id,
+            topic_stable_id=learning_state.topic_stable_id,
+            graph_version_id=learning_state.graph_version_id,
+            classification=learning_state.classification.value,
+            origin=learning_state.origin,
+            recommended_depth=learning_state.recommended_depth,
+            body_hash=hash_payload(learning_state.explanation),
+            derivation_version=learning_state.derivation_version,
+            input_hash=learning_state.input_hash,
+            derived_at=learning_state.derived_at,
+        )
+        self._session.add(state_row)
+        self._session.flush()
         self._session.add(
-            LearningStateRow(
-                id=learning_state.id,
+            LearningStateBodyRow(
+                state_id=learning_state.id,
                 owner_id=learning_state.owner_id,
                 goal_id=learning_state.goal_id,
-                topic_stable_id=learning_state.topic_stable_id,
-                graph_version_id=learning_state.graph_version_id,
-                classification=learning_state.classification.value,
-                origin=learning_state.origin,
-                recommended_depth=learning_state.recommended_depth,
                 explanation=learning_state.explanation,
-                derivation_version=learning_state.derivation_version,
-                input_hash=learning_state.input_hash,
-                derived_at=learning_state.derived_at,
             )
         )
+        ref_row = TransferredEvidenceRefRow(
+            id=transfer_ref.id,
+            owner_id=transfer_ref.owner_id,
+            goal_id=transfer_ref.goal_id,
+            learning_state_id=transfer_ref.learning_state_id,
+            source_goal_id=transfer_ref.source_goal_id,
+            source_evidence_id=transfer_ref.source_evidence_id,
+            classification=transfer_ref.classification.value,
+            body_hash=hash_payload(transfer_ref.rationale),
+            created_at=transfer_ref.created_at,
+        )
+        self._session.add(ref_row)
+        self._session.flush()
         self._session.add(
-            TransferredEvidenceRefRow(
-                id=transfer_ref.id,
+            TransferredEvidenceRefBodyRow(
+                transfer_id=transfer_ref.id,
                 owner_id=transfer_ref.owner_id,
                 goal_id=transfer_ref.goal_id,
-                learning_state_id=transfer_ref.learning_state_id,
-                source_goal_id=transfer_ref.source_goal_id,
-                source_evidence_id=transfer_ref.source_evidence_id,
-                classification=transfer_ref.classification.value,
                 rationale=transfer_ref.rationale,
-                created_at=transfer_ref.created_at,
             )
         )
         self._session.flush()
@@ -467,10 +592,22 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
             .values(
                 classification="unverified",
                 origin="tombstoned-transfer",
-                explanation="The source evidence was tombstoned when its goal was deleted.",
+                body_hash=hash_payload(
+                    "The source evidence was tombstoned when its goal was deleted."
+                ),
                 derivation_version="transfer-tombstone-v1",
                 input_hash="tombstoned",
                 derived_at=derived_at,
+            )
+        )
+        self._session.execute(
+            update(LearningStateBodyRow)
+            .where(
+                LearningStateBodyRow.owner_id == owner_id,
+                LearningStateBodyRow.state_id.in_(state_ids),
+            )
+            .values(
+                explanation="The source evidence was tombstoned when its goal was deleted."
             )
         )
         self._session.flush()
@@ -486,6 +623,9 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
         ).one_or_none()
         if row is None:
             return None
+        body = self._session.get(RoadmapIdempotencyBodyRow, row.id)
+        if body is None:
+            return None
         return RoadmapIdempotencyRecord(
             id=row.id,
             owner_id=row.owner_id,
@@ -493,7 +633,7 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
             operation=row.operation,
             idempotency_key=row.idempotency_key,
             request_hash=row.request_hash,
-            response_json=row.response_json,
+            response_json=body.response_json,
             created_at=row.created_at,
         )
 
@@ -506,8 +646,16 @@ class SqlAlchemyRoadmapRepository(SqlAlchemyRepository):
                 operation=record.operation,
                 idempotency_key=record.idempotency_key,
                 request_hash=record.request_hash,
-                response_json=record.response_json,
+                response_hash=hash_payload(record.response_json),
                 created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        self._session.add(
+            RoadmapIdempotencyBodyRow(
+                idempotency_id=record.id,
+                owner_id=record.owner_id,
+                response_json=record.response_json,
             )
         )
         self._session.flush()
@@ -525,7 +673,7 @@ def _overlay(row: PersonalOverlayRow) -> PersonalOverlay:
     )
 
 
-def _proposal(row: OverlayProposalRow) -> OverlayProposal:
+def _proposal(row: OverlayProposalRow, body: OverlayProposalBodyRow) -> OverlayProposal:
     return OverlayProposal(
         id=row.id,
         owner_id=row.owner_id,
@@ -533,28 +681,30 @@ def _proposal(row: OverlayProposalRow) -> OverlayProposal:
         generated_against_graph_version_id=row.generated_against_graph_version_id,
         topic_stable_id=row.topic_stable_id,
         proposal_type=OverlayProposalType(row.proposal_type),
-        payload=json.loads(row.payload_json),
+        payload=json.loads(body.payload_json),
         content_hash=row.content_hash,
         state=OverlayProposalState(row.state),
-        state_reason=row.state_reason,
+        state_reason=body.state_reason,
         created_at=row.created_at,
         decided_at=row.decided_at,
     )
 
 
-def _proposal_decision(row: OverlayProposalDecisionRow) -> OverlayProposalDecision:
+def _proposal_decision(
+    row: OverlayProposalDecisionRow, body: OverlayProposalDecisionBodyRow
+) -> OverlayProposalDecision:
     return OverlayProposalDecision(
         id=row.id,
         owner_id=row.owner_id,
         goal_id=row.goal_id,
         proposal_id=row.proposal_id,
         decision=OverlayDecisionType(row.decision),
-        reason=row.reason,
+        reason=body.reason,
         decided_at=row.decided_at,
     )
 
 
-def _entry(row: OverlayEntryRow) -> OverlayEntry:
+def _entry(row: OverlayEntryRow, body: OverlayEntryBodyRow) -> OverlayEntry:
     return OverlayEntry(
         row.id,
         row.owner_id,
@@ -563,8 +713,8 @@ def _entry(row: OverlayEntryRow) -> OverlayEntry:
         row.graph_version_id,
         row.topic_stable_id,
         OverlayEntryType(row.entry_type),
-        json.loads(row.value_json),
-        row.reason,
+        json.loads(body.value_json),
+        body.reason,
         row.source,
         row.approved_at,
         row.supersedes_entry_id,
@@ -572,7 +722,7 @@ def _entry(row: OverlayEntryRow) -> OverlayEntry:
     )
 
 
-def _state(row: LearningStateRow) -> LearningState:
+def _state(row: LearningStateRow, body: LearningStateBodyRow) -> LearningState:
     return LearningState(
         row.id,
         row.owner_id,
@@ -582,22 +732,24 @@ def _state(row: LearningStateRow) -> LearningState:
         LearningClassification(row.classification),
         row.origin,
         row.recommended_depth,
-        row.explanation,
+        body.explanation,
         row.derivation_version,
         row.input_hash,
         row.derived_at,
     )
 
 
-def _correction(row: LearnerCorrectionRow) -> LearnerCorrection:
+def _correction(
+    row: LearnerCorrectionRow, body: LearnerCorrectionBodyRow
+) -> LearnerCorrection:
     return LearnerCorrection(
         row.id,
         row.owner_id,
         row.goal_id,
         row.topic_stable_id,
         CorrectionType(row.correction_type),
-        row.value,
-        row.reason,
+        body.value,
+        body.reason,
         row.created_at,
         row.supersedes_correction_id,
     )

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from yuno.modules.audit import models as audit_models
 from yuno.modules.canonical import models as canonical_models
+from yuno.modules.data_lifecycle import models as data_lifecycle_models
 from yuno.modules.diagnostics import models as diagnostics_models
 from yuno.modules.evidence_evaluation import models as evidence_evaluation_models
 from yuno.modules.hands_on import models as hands_on_models
@@ -33,6 +34,7 @@ from yuno.modules.settings_data import models as settings_data_models
 __all__ = [
     "audit_models",
     "canonical_models",
+    "data_lifecycle_models",
     "diagnostics_models",
     "evidence_evaluation_models",
     "hands_on_models",

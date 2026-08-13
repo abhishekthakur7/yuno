@@ -135,7 +135,9 @@ _DEFINITIONS = {
     "retention": "How recently the supporting fixture evidence was recorded, using fixture-only date bands.",
     "readiness": "The most uncertain supported fixture dimension after standing learner corrections are applied.",
 }
-_UNCERTAINTY = "Fixture-only derivation pending approval of production rules under IDK-009."
+_UNCERTAINTY = (
+    "Fixture-only derivation pending approval of production rules under IDK-009."
+)
 _ORDER = {
     ProgressClassification.NEW: 0,
     ProgressClassification.UNVERIFIED: 1,
@@ -197,30 +199,51 @@ def derive_progress(
         raise ValueError("now must be a canonical UTC timestamp.") from exc
     if effective_now.tzinfo is None or not now.endswith("Z"):
         raise ValueError("now must be a canonical UTC timestamp.")
-    if len(topic_ids) != len(set(topic_ids)) or not goal_id or any(not item for item in topic_ids):
+    if (
+        len(topic_ids) != len(set(topic_ids))
+        or not goal_id
+        or any(not item for item in topic_ids)
+    ):
         raise ValueError("The goal and canonical topic spine must be valid and unique.")
     topic_set = set(topic_ids)
     for item in evidence:
-        if item.evidence.goal_id != goal_id or item.evidence.topic_stable_id not in topic_set:
-            raise ValueError("Evidence must belong to the requested goal and topic spine.")
+        if (
+            item.evidence.goal_id != goal_id
+            or item.evidence.topic_stable_id not in topic_set
+        ):
+            raise ValueError(
+                "Evidence must belong to the requested goal and topic spine."
+            )
         created = datetime.fromisoformat(item.evidence.created_at)
-        if created.tzinfo is None or not item.evidence.created_at.endswith("Z") or created > effective_now:
-            raise ValueError("Evidence timestamps must be canonical UTC and no later than now.")
+        if (
+            created.tzinfo is None
+            or not item.evidence.created_at.endswith("Z")
+            or created > effective_now
+        ):
+            raise ValueError(
+                "Evidence timestamps must be canonical UTC and no later than now."
+            )
         if item.assessment is not None and (
             item.assessment.owner_id != item.evidence.owner_id
-            or item.assessment.goal_id != goal_id or item.assessment.evidence_id != item.evidence.id
+            or item.assessment.goal_id != goal_id
+            or item.assessment.evidence_id != item.evidence.id
         ):
             raise ValueError("Assessments must match their evidence scope.")
         if any(
             dimension.owner_id != item.evidence.owner_id
             or dimension.goal_id != goal_id
-            or (item.assessment is not None and dimension.assessment_id != item.assessment.id)
+            or (
+                item.assessment is not None
+                and dimension.assessment_id != item.assessment.id
+            )
             for dimension in item.dimensions
         ):
             raise ValueError("Assessment dimensions must match their assessment scope.")
-    owners = ({item.evidence.owner_id for item in evidence}
-              | {item.owner_id for item in corrections}
-              | {item.owner_id for item in transfers})
+    owners = (
+        {item.evidence.owner_id for item in evidence}
+        | {item.owner_id for item in corrections}
+        | {item.owner_id for item in transfers}
+    )
     if len(owners) > 1:
         raise ValueError("Progress inputs must belong to one owner.")
     correction_by_id = {item.id: item for item in corrections}
@@ -229,7 +252,9 @@ def derive_progress(
     children: dict[str, list[str]] = {}
     for item in corrections:
         if item.goal_id != goal_id or item.topic_stable_id not in topic_set:
-            raise ValueError("Corrections must belong to the requested goal and topic spine.")
+            raise ValueError(
+                "Corrections must belong to the requested goal and topic spine."
+            )
         if item.supersedes_correction_id:
             predecessor = correction_by_id.get(item.supersedes_correction_id)
             if predecessor is None or (
@@ -237,21 +262,42 @@ def derive_progress(
                 predecessor.goal_id,
                 predecessor.topic_stable_id,
             ) != (item.owner_id, item.goal_id, item.topic_stable_id):
-                raise ValueError("A correction may only supersede its same-scope predecessor.")
+                raise ValueError(
+                    "A correction may only supersede its same-scope predecessor."
+                )
             children.setdefault(predecessor.id, []).append(item.id)
         if item.value not in ProgressClassification or item.correction_type not in {
-            "correction", "confirmation", "gap", "transfer-confirmation"
+            "correction",
+            "confirmation",
+            "gap",
+            "transfer-confirmation",
         }:
-            raise ValueError("Correction type and value must use the closed vocabularies.")
+            raise ValueError(
+                "Correction type and value must use the closed vocabularies."
+            )
         corrected = datetime.fromisoformat(item.created_at)
-        if corrected.tzinfo is None or not item.created_at.endswith("Z") or corrected > effective_now:
-            raise ValueError("Correction timestamps must be canonical UTC and no later than now.")
+        if (
+            corrected.tzinfo is None
+            or not item.created_at.endswith("Z")
+            or corrected > effective_now
+        ):
+            raise ValueError(
+                "Correction timestamps must be canonical UTC and no later than now."
+            )
     for item in transfers:
         if item.goal_id != goal_id or item.topic_stable_id not in topic_set:
-            raise ValueError("Transfers must belong to the requested goal and topic spine.")
+            raise ValueError(
+                "Transfers must belong to the requested goal and topic spine."
+            )
         transferred = datetime.fromisoformat(item.created_at)
-        if transferred.tzinfo is None or not item.created_at.endswith("Z") or transferred > effective_now:
-            raise ValueError("Transfer timestamps must be canonical UTC and no later than now.")
+        if (
+            transferred.tzinfo is None
+            or not item.created_at.endswith("Z")
+            or transferred > effective_now
+        ):
+            raise ValueError(
+                "Transfer timestamps must be canonical UTC and no later than now."
+            )
     if any(len(value) != 1 for value in children.values()):
         raise ValueError("Correction histories cannot branch.")
     for topic in topic_ids:
@@ -267,7 +313,9 @@ def derive_progress(
             cursor = children.get(cursor, [None])[0]
         if len(visited) != len(topic_rows):
             raise ValueError("Correction histories must be one connected linear chain.")
-    input_hash = progress_input_hash(goal_id, topic_ids, evidence, corrections, transfers, now, rule_version)
+    input_hash = progress_input_hash(
+        goal_id, topic_ids, evidence, corrections, transfers, now, rule_version
+    )
     by_topic: dict[str, list[ProgressEvidence]] = {}
     for item in sorted(evidence, key=lambda item: item.evidence.id):
         by_topic.setdefault(item.evidence.topic_stable_id, []).append(item)
@@ -315,8 +363,12 @@ def derive_progress(
         ]
         ambiguity_only = bool(topic_evidence) and not outcomes
         transfer_classification = (
-            min((item.classification for item in topic_transfers), key=_ORDER.__getitem__)
-            if topic_transfers else None
+            min(
+                (item.classification for item in topic_transfers),
+                key=_ORDER.__getitem__,
+            )
+            if topic_transfers
+            else None
         )
         if not topic_evidence and transfer_classification is not None:
             classification = transfer_classification
@@ -329,7 +381,10 @@ def derive_progress(
         elif DimensionOutcome.FACTUAL_CORRECTION in outcomes:
             classification = (
                 ProgressClassification.PARTIAL
-                if any(value in (DimensionOutcome.PASS, DimensionOutcome.TRADE_OFF) for value in outcomes)
+                if any(
+                    value in (DimensionOutcome.PASS, DimensionOutcome.TRADE_OFF)
+                    for value in outcomes
+                )
                 else ProgressClassification.UNVERIFIED
             )
         else:
@@ -338,7 +393,9 @@ def derive_progress(
             classification = min(
                 (classification, transfer_classification), key=_ORDER.__getitem__
             )
-        transfer_refs = tuple(sorted(item.source_evidence_id for item in topic_transfers))
+        transfer_refs = tuple(
+            sorted(item.source_evidence_id for item in topic_transfers)
+        )
         refs = tuple(sorted(set(refs) | set(transfer_refs)))
         states.append(
             LearningStateExplanation(
@@ -353,7 +410,8 @@ def derive_progress(
         metric_states.append(
             classification
             if ambiguity_only and transfer_classification is not None
-            else ProgressClassification.NEW if ambiguity_only
+            else ProgressClassification.NEW
+            if ambiguity_only
             else classification
         )
         if not ambiguity_only:
@@ -363,26 +421,50 @@ def derive_progress(
 
     evidence_refs = tuple(sorted(set(metric_evidence_refs)))
     if not topics:
-        coverage_value = proficiency_value = retention_value = readiness_value = ProgressClassification.NEW
+        coverage_value = proficiency_value = retention_value = readiness_value = (
+            ProgressClassification.NEW
+        )
     else:
-        covered_topics = len({item.evidence.topic_stable_id for item in evidence if item.evidence.id in evidence_refs} | set(active_corrections) | set(transfers_by_topic))
+        covered_topics = len(
+            {
+                item.evidence.topic_stable_id
+                for item in evidence
+                if item.evidence.id in evidence_refs
+            }
+            | set(active_corrections)
+            | set(transfers_by_topic)
+        )
         coverage_value = (
-            ProgressClassification.NEW if covered_topics == 0
-            else ProgressClassification.LIKELY_KNOWN if covered_topics == len(topics)
+            ProgressClassification.NEW
+            if covered_topics == 0
+            else ProgressClassification.LIKELY_KNOWN
+            if covered_topics == len(topics)
             else ProgressClassification.PARTIAL
         )
-        proficiency_value = min(metric_states, key=_ORDER.__getitem__) if metric_states else ProgressClassification.NEW
+        proficiency_value = (
+            min(metric_states, key=_ORDER.__getitem__)
+            if metric_states
+            else ProgressClassification.NEW
+        )
         # Deliberately simple, explicitly non-production fixture bands. Corrections
         # remain authoritative and therefore are not decayed by evidence age.
-        dated = ([item.evidence.created_at[:10] for item in evidence if item.evidence.id in evidence_refs]
-                 + [item.created_at[:10] for item in transfers])
+        dated = [
+            item.evidence.created_at[:10]
+            for item in evidence
+            if item.evidence.id in evidence_refs
+        ] + [item.created_at[:10] for item in transfers]
         if not dated:
             retention_value = proficiency_value
         else:
-            age = (date.fromisoformat(now[:10]) - max(date.fromisoformat(value) for value in dated)).days
+            age = (
+                date.fromisoformat(now[:10])
+                - max(date.fromisoformat(value) for value in dated)
+            ).days
             retention_value = (
-                ProgressClassification.LIKELY_KNOWN if age <= 30
-                else ProgressClassification.PARTIAL if age <= 90
+                ProgressClassification.LIKELY_KNOWN
+                if age <= 30
+                else ProgressClassification.PARTIAL
+                if age <= 90
                 else ProgressClassification.UNVERIFIED
             )
         if active_corrections and not evidence_refs:

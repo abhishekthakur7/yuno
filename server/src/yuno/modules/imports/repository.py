@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
+from yuno.modules.data_lifecycle.models import (
+    ImportRecordBodyRow,
+    ImportsIdempotencyBodyRow,
+    ImportStatementBodyRow,
+    ImportStatementDecisionBodyRow,
+)
 from yuno.modules.imports.domain import (
     ImportIdempotencyRecord,
     ImportRecord,
@@ -27,6 +33,7 @@ from yuno.modules.imports.models import (
     ImportStatementRow,
     TopicImportHashRow,
 )
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
     owner_scoped_select,
@@ -34,6 +41,33 @@ from yuno.shared.infrastructure.repository import (
 
 
 class SqlAlchemyImportRepository(SqlAlchemyRepository):
+    def count_live_imports(self, owner_id: str) -> int:
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(ImportRecordBodyRow)
+                .where(ImportRecordBodyRow.owner_id == owner_id)
+            )
+            or 0
+        )
+
+    def count_unreviewed_statements(self, owner_id: str) -> int:
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(ImportStatementBodyRow)
+                .join(
+                    ImportStatementRow,
+                    ImportStatementRow.id == ImportStatementBodyRow.statement_id,
+                )
+                .where(
+                    ImportStatementBodyRow.owner_id == owner_id,
+                    ImportStatementRow.trust_state == "untrusted",
+                )
+            )
+            or 0
+        )
+
     def add_import(self, record: ImportRecord) -> ImportRecord:
         self._session.add(
             ImportRecordRow(
@@ -41,7 +75,6 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 owner_id=record.owner_id,
                 goal_id=record.goal_id,
                 type=record.import_type.value,
-                original_content=record.original_content,
                 original_hash=record.original_hash,
                 parser_version=record.parser_version,
                 status=record.status.value,
@@ -53,26 +86,51 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
             )
         )
         self._session.flush()
+        self._session.add(
+            ImportRecordBodyRow(
+                import_id=record.id,
+                owner_id=record.owner_id,
+                original_content=record.original_content,
+            )
+        )
+        self._session.flush()
         return record
 
     def get_import(self, owner_id: str, import_id: str) -> ImportRecord | None:
-        row = self._session.scalars(
-            owner_scoped_select(ImportRecordRow, owner_id).where(
-                ImportRecordRow.id == import_id
+        pair = self._session.execute(
+            select(ImportRecordRow, ImportRecordBodyRow)
+            .join(
+                ImportRecordBodyRow,
+                ImportRecordBodyRow.import_id == ImportRecordRow.id,
+            )
+            .where(
+                ImportRecordRow.owner_id == owner_id,
+                ImportRecordBodyRow.owner_id == owner_id,
+                ImportRecordRow.id == import_id,
             )
         ).one_or_none()
-        return _record(row) if row else None
+        return _record(pair[0], bytes(pair[1].original_content)) if pair else None
 
     def list_imports(
         self, owner_id: str, goal_id: str | None = None
     ) -> Sequence[ImportRecord]:
-        stmt = owner_scoped_select(ImportRecordRow, owner_id)
+        stmt = (
+            select(ImportRecordRow, ImportRecordBodyRow)
+            .join(
+                ImportRecordBodyRow,
+                ImportRecordBodyRow.import_id == ImportRecordRow.id,
+            )
+            .where(
+                ImportRecordRow.owner_id == owner_id,
+                ImportRecordBodyRow.owner_id == owner_id,
+            )
+        )
         if goal_id is not None:
             stmt = stmt.where(ImportRecordRow.goal_id == goal_id)
-        rows = self._session.scalars(
+        pairs = self._session.execute(
             stmt.order_by(ImportRecordRow.created_at, ImportRecordRow.id)
         ).all()
-        return tuple(_record(row) for row in rows)
+        return tuple(_record(row, bytes(body.original_content)) for row, body in pairs)
 
     def update_import(
         self,
@@ -105,48 +163,58 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 import_id=statement.import_id,
                 sequence=statement.sequence,
                 parser_version=statement.parser_version,
-                original_text=statement.original_text,
                 original_hash=statement.original_hash,
-                normalized_text=statement.normalized_text,
                 normalized_hash=statement.normalized_hash,
                 confidence=statement.confidence,
                 duplicate_of_statement_id=statement.duplicate_of_statement_id,
                 trust_state=statement.trust_state.value,
                 mapping_state=statement.mapping_state.value,
-                corrected_text=statement.corrected_text,
+                corrected_hash=statement.normalized_hash
+                if statement.corrected_text
+                else None,
                 row_version=statement.row_version,
                 created_at=statement.created_at,
                 updated_at=statement.updated_at,
             )
         )
         self._session.flush()
+        self._session.add(
+            ImportStatementBodyRow(
+                statement_id=statement.id,
+                owner_id=statement.owner_id,
+                original_text=statement.original_text,
+                normalized_text=statement.normalized_text,
+                corrected_text=statement.corrected_text,
+            )
+        )
+        self._session.flush()
         return statement
 
     def get_statement(self, owner_id: str, statement_id: str) -> ImportStatement | None:
-        row = self._session.scalars(
-            owner_scoped_select(ImportStatementRow, owner_id).where(
+        pair = self._session.execute(
+            self._live_statement_select(owner_id).where(
                 ImportStatementRow.id == statement_id
             )
         ).one_or_none()
-        return _statement(row) if row else None
+        return _statement(*pair) if pair else None
 
     def get_statement_for_occurrence(
         self, owner_id: str, import_id: str, sequence: int, parser_version: str
     ) -> ImportStatement | None:
-        row = self._session.scalars(
-            owner_scoped_select(ImportStatementRow, owner_id).where(
+        pair = self._session.execute(
+            self._live_statement_select(owner_id).where(
                 ImportStatementRow.import_id == import_id,
                 ImportStatementRow.sequence == sequence,
                 ImportStatementRow.parser_version == parser_version,
             )
         ).one_or_none()
-        return _statement(row) if row else None
+        return _statement(*pair) if pair else None
 
     def get_unmapped_canonical_by_hash(
         self, owner_id: str, parser_version: str, normalized_hash: str
     ) -> ImportStatement | None:
-        row = self._session.scalars(
-            owner_scoped_select(ImportStatementRow, owner_id)
+        pair = self._session.execute(
+            self._live_statement_select(owner_id)
             .where(
                 ImportStatementRow.parser_version == parser_version,
                 ImportStatementRow.normalized_hash == normalized_hash,
@@ -155,13 +223,13 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
             .order_by(ImportStatementRow.created_at, ImportStatementRow.id)
             .limit(1)
         ).first()
-        return _statement(row) if row else None
+        return _statement(*pair) if pair else None
 
     def list_statements(
         self, owner_id: str, import_id: str
     ) -> Sequence[ImportStatement]:
-        rows = self._session.scalars(
-            owner_scoped_select(ImportStatementRow, owner_id)
+        pairs = self._session.execute(
+            self._live_statement_select(owner_id)
             .where(ImportStatementRow.import_id == import_id)
             .order_by(
                 ImportStatementRow.parser_version,
@@ -169,7 +237,7 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 ImportStatementRow.id,
             )
         ).all()
-        return tuple(_statement(row) for row in rows)
+        return tuple(_statement(*pair) for pair in pairs)
 
     def update_statement(
         self,
@@ -179,6 +247,11 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
         changes: dict[str, object],
     ) -> ImportStatement | None:
         values = _enum_values(changes)
+        body_values = {
+            key: values.pop(key)
+            for key in ("original_text", "normalized_text", "corrected_text")
+            if key in values
+        }
         values["row_version"] = expected_version + 1
         result = self._session.execute(
             update(ImportStatementRow)
@@ -191,6 +264,15 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
         )
         if result.rowcount != 1:
             return None
+        if body_values:
+            self._session.execute(
+                update(ImportStatementBodyRow)
+                .where(
+                    ImportStatementBodyRow.owner_id == owner_id,
+                    ImportStatementBodyRow.statement_id == statement_id,
+                )
+                .values(**body_values)
+            )
         self._session.flush()
         return self.get_statement(owner_id, statement_id)
 
@@ -203,8 +285,17 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 owner_id=decision.owner_id,
                 statement_id=decision.statement_id,
                 decision_type=decision.decision_type.value,
-                value=decision.value,
+                value_hash=decision.value
+                and __import__("hashlib").sha256(decision.value.encode()).hexdigest(),
                 decided_at=decision.decided_at,
+            )
+        )
+        self._session.flush()
+        self._session.add(
+            ImportStatementDecisionBodyRow(
+                decision_id=decision.id,
+                owner_id=decision.owner_id,
+                value=decision.value,
             )
         )
         self._session.flush()
@@ -265,13 +356,22 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
         self, owner_id: str, goal_id: str, graph_version_id: str, topic_stable_id: str
     ) -> Sequence[tuple[ImportStatementMapping, ImportStatement]]:
         stmt = (
-            select(ImportStatementMappingRow, ImportStatementRow)
+            select(
+                ImportStatementMappingRow,
+                ImportStatementRow,
+                ImportStatementBodyRow,
+            )
             .join(
                 ImportStatementRow,
                 ImportStatementRow.id == ImportStatementMappingRow.statement_id,
             )
+            .join(
+                ImportStatementBodyRow,
+                ImportStatementBodyRow.statement_id == ImportStatementRow.id,
+            )
             .where(
                 ImportStatementMappingRow.owner_id == owner_id,
+                ImportStatementBodyRow.owner_id == owner_id,
                 ImportStatementMappingRow.goal_id == goal_id,
                 ImportStatementMappingRow.graph_version_id == graph_version_id,
                 ImportStatementMappingRow.topic_stable_id == topic_stable_id,
@@ -281,8 +381,22 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
             .order_by(ImportStatementMappingRow.id)
         )
         return tuple(
-            (_mapping(mapping), _statement(statement))
-            for mapping, statement in self._session.execute(stmt).all()
+            (_mapping(mapping), _statement(statement, body))
+            for mapping, statement, body in self._session.execute(stmt).all()
+        )
+
+    @staticmethod
+    def _live_statement_select(owner_id: str):
+        return (
+            select(ImportStatementRow, ImportStatementBodyRow)
+            .join(
+                ImportStatementBodyRow,
+                ImportStatementBodyRow.statement_id == ImportStatementRow.id,
+            )
+            .where(
+                ImportStatementRow.owner_id == owner_id,
+                ImportStatementBodyRow.owner_id == owner_id,
+            )
         )
 
     def upsert_topic_hash(self, topic_hash: TopicImportHash) -> TopicImportHash:
@@ -333,7 +447,18 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
     def add_idempotency(
         self, record: ImportIdempotencyRecord
     ) -> ImportIdempotencyRecord:
-        self._session.add(ImportsIdempotencyRow(**record.__dict__))
+        values = record.__dict__.copy()
+        response_json = values.pop("response_json")
+        values["response_hash"] = hash_payload(response_json)
+        self._session.add(ImportsIdempotencyRow(**values))
+        self._session.flush()
+        self._session.add(
+            ImportsIdempotencyBodyRow(
+                idempotency_id=record.id,
+                owner_id=record.owner_id,
+                response_json=response_json,
+            )
+        )
         self._session.flush()
         return record
 
@@ -346,6 +471,7 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 ImportsIdempotencyRow.idempotency_key == idempotency_key,
             )
         ).one_or_none()
+        body = self._session.get(ImportsIdempotencyBodyRow, row.id) if row else None
         return (
             ImportIdempotencyRecord(
                 row.id,
@@ -353,21 +479,21 @@ class SqlAlchemyImportRepository(SqlAlchemyRepository):
                 row.operation,
                 row.idempotency_key,
                 row.request_hash,
-                row.response_json,
+                body.response_json,
                 row.created_at,
             )
-            if row
+            if row and body
             else None
         )
 
 
-def _record(row: ImportRecordRow) -> ImportRecord:
+def _record(row: ImportRecordRow, original_content: bytes) -> ImportRecord:
     return ImportRecord(
         row.id,
         row.owner_id,
         row.goal_id,
         ImportType(row.type),
-        bytes(row.original_content),
+        original_content,
         row.original_hash,
         row.parser_version,
         ImportStatus(row.status),
@@ -379,22 +505,24 @@ def _record(row: ImportRecordRow) -> ImportRecord:
     )
 
 
-def _statement(row: ImportStatementRow) -> ImportStatement:
+def _statement(
+    row: ImportStatementRow, body: ImportStatementBodyRow
+) -> ImportStatement:
     return ImportStatement(
         row.id,
         row.owner_id,
         row.import_id,
         row.sequence,
         row.parser_version,
-        row.original_text,
+        body.original_text,
         row.original_hash,
-        row.normalized_text,
+        body.normalized_text,
         row.normalized_hash,
         row.confidence,
         row.duplicate_of_statement_id,
         TrustState(row.trust_state),
         MappingState(row.mapping_state),
-        row.corrected_text,
+        body.corrected_text,
         row.row_version,
         row.created_at,
         row.updated_at,

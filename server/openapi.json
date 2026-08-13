@@ -1376,8 +1376,233 @@
         "title": "CorrectionType",
         "type": "string"
       },
+      "DataLifecyclePolicyResponse": {
+        "properties": {
+          "diagnostic_abandoned_retention_days": {
+            "title": "Diagnostic Abandoned Retention Days",
+            "type": "integer"
+          },
+          "evidence_payload_max_bytes": {
+            "title": "Evidence Payload Max Bytes",
+            "type": "integer"
+          },
+          "evidence_retained_owner_limit": {
+            "title": "Evidence Retained Owner Limit",
+            "type": "integer"
+          },
+          "export_available": {
+            "title": "Export Available",
+            "type": "boolean"
+          },
+          "export_format": {
+            "const": "yuno-portable-export",
+            "title": "Export Format",
+            "type": "string"
+          },
+          "export_operation_retention_days": {
+            "title": "Export Operation Retention Days",
+            "type": "integer"
+          },
+          "export_package_retention_seconds": {
+            "title": "Export Package Retention Seconds",
+            "type": "integer"
+          },
+          "export_version": {
+            "const": "1.0",
+            "title": "Export Version",
+            "type": "string"
+          },
+          "generated_body_max_bytes": {
+            "title": "Generated Body Max Bytes",
+            "type": "integer"
+          },
+          "generated_retained_owner_limit": {
+            "title": "Generated Retained Owner Limit",
+            "type": "integer"
+          },
+          "import_original_max_bytes": {
+            "title": "Import Original Max Bytes",
+            "type": "integer"
+          },
+          "import_retained_owner_limit": {
+            "title": "Import Retained Owner Limit",
+            "type": "integer"
+          },
+          "import_statements_per_import_limit": {
+            "title": "Import Statements Per Import Limit",
+            "type": "integer"
+          },
+          "import_unreviewed_owner_limit": {
+            "title": "Import Unreviewed Owner Limit",
+            "type": "integer"
+          },
+          "interview_bytes_per_session_limit": {
+            "title": "Interview Bytes Per Session Limit",
+            "type": "integer"
+          },
+          "interview_inactive_retention_days": {
+            "title": "Interview Inactive Retention Days",
+            "type": "integer"
+          },
+          "interview_sessions_owner_limit": {
+            "title": "Interview Sessions Owner Limit",
+            "type": "integer"
+          },
+          "interview_turns_per_session_limit": {
+            "title": "Interview Turns Per Session Limit",
+            "type": "integer"
+          },
+          "job_event_owner_limit": {
+            "title": "Job Event Owner Limit",
+            "type": "integer"
+          },
+          "job_event_retention_days": {
+            "title": "Job Event Retention Days",
+            "type": "integer"
+          },
+          "overlay_proposal_pending_cap": {
+            "title": "Overlay Proposal Pending Cap",
+            "type": "integer"
+          },
+          "pending_job_cap": {
+            "title": "Pending Job Cap",
+            "type": "integer"
+          },
+          "policy_version": {
+            "const": "1.0",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "recovery_window_days": {
+            "const": 0,
+            "title": "Recovery Window Days",
+            "type": "integer"
+          },
+          "remote_support_access": {
+            "const": false,
+            "title": "Remote Support Access",
+            "type": "boolean"
+          },
+          "runner_input_bytes_limit": {
+            "title": "Runner Input Bytes Limit",
+            "type": "integer"
+          },
+          "runner_input_files_limit": {
+            "title": "Runner Input Files Limit",
+            "type": "integer"
+          },
+          "runner_output_bytes_limit": {
+            "title": "Runner Output Bytes Limit",
+            "type": "integer"
+          },
+          "runner_output_retention_days": {
+            "title": "Runner Output Retention Days",
+            "type": "integer"
+          },
+          "runner_stderr_bytes_limit": {
+            "title": "Runner Stderr Bytes Limit",
+            "type": "integer"
+          },
+          "runner_stdout_bytes_limit": {
+            "title": "Runner Stdout Bytes Limit",
+            "type": "integer"
+          },
+          "runner_temp_bytes_limit": {
+            "title": "Runner Temp Bytes Limit",
+            "type": "integer"
+          },
+          "runner_temp_files_limit": {
+            "title": "Runner Temp Files Limit",
+            "type": "integer"
+          },
+          "runner_workspace_retention_seconds": {
+            "title": "Runner Workspace Retention Seconds",
+            "type": "integer"
+          },
+          "structured_log_file_count": {
+            "title": "Structured Log File Count",
+            "type": "integer"
+          },
+          "structured_log_file_max_bytes": {
+            "title": "Structured Log File Max Bytes",
+            "type": "integer"
+          },
+          "structured_log_retention_days": {
+            "title": "Structured Log Retention Days",
+            "type": "integer"
+          },
+          "structured_log_total_max_bytes": {
+            "title": "Structured Log Total Max Bytes",
+            "type": "integer"
+          },
+          "terminal_job_retention_days": {
+            "title": "Terminal Job Retention Days",
+            "type": "integer"
+          },
+          "yuno_managed_backups": {
+            "const": false,
+            "title": "Yuno Managed Backups",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "policy_version",
+          "import_original_max_bytes",
+          "import_retained_owner_limit",
+          "import_statements_per_import_limit",
+          "import_unreviewed_owner_limit",
+          "evidence_payload_max_bytes",
+          "evidence_retained_owner_limit",
+          "generated_body_max_bytes",
+          "generated_retained_owner_limit",
+          "interview_turns_per_session_limit",
+          "interview_bytes_per_session_limit",
+          "interview_sessions_owner_limit",
+          "runner_input_files_limit",
+          "runner_input_bytes_limit",
+          "runner_stdout_bytes_limit",
+          "runner_stderr_bytes_limit",
+          "runner_output_bytes_limit",
+          "runner_temp_bytes_limit",
+          "runner_temp_files_limit",
+          "overlay_proposal_pending_cap",
+          "pending_job_cap",
+          "diagnostic_abandoned_retention_days",
+          "interview_inactive_retention_days",
+          "terminal_job_retention_days",
+          "job_event_retention_days",
+          "job_event_owner_limit",
+          "runner_output_retention_days",
+          "runner_workspace_retention_seconds",
+          "export_package_retention_seconds",
+          "export_operation_retention_days",
+          "structured_log_file_count",
+          "structured_log_file_max_bytes",
+          "structured_log_total_max_bytes",
+          "structured_log_retention_days",
+          "export_format",
+          "export_version",
+          "export_available",
+          "recovery_window_days",
+          "yuno_managed_backups",
+          "remote_support_access"
+        ],
+        "title": "DataLifecyclePolicyResponse",
+        "type": "object"
+      },
       "DeleteOperationResponse": {
         "properties": {
+          "cleanup_failure_classifications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleanup Failure Classifications",
+            "type": "array"
+          },
+          "cleanup_pending_count": {
+            "title": "Cleanup Pending Count",
+            "type": "integer"
+          },
           "confirmed_at": {
             "anyOf": [
               {
@@ -1461,6 +1686,8 @@
               "preflight",
               "queued",
               "running",
+              "cleanup-pending",
+              "cleanup-failed",
               "complete",
               "failed"
             ],
@@ -1480,6 +1707,8 @@
           "evidence_ids",
           "learning_state_ids",
           "status",
+          "cleanup_pending_count",
+          "cleanup_failure_classifications",
           "job_id",
           "result_ref",
           "confirmed_at",
@@ -2022,7 +2251,8 @@
           "resumed",
           "roadmap-preview",
           "confirmed",
-          "failed"
+          "failed",
+          "expired"
         ],
         "title": "DiagnosticState",
         "type": "string"
@@ -2494,6 +2724,11 @@
               }
             ],
             "title": "Goal Id"
+          },
+          "version": {
+            "default": "1.0",
+            "title": "Version",
+            "type": "string"
           }
         },
         "title": "ExportCreateRequest",
@@ -2501,9 +2736,24 @@
       },
       "ExportOperationResponse": {
         "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "download_available": {
+            "title": "Download Available",
+            "type": "boolean"
           },
           "failure_reference": {
             "anyOf": [
@@ -2516,8 +2766,20 @@
             ],
             "title": "Failure Reference"
           },
-          "format_version": {
-            "title": "Format Version",
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "format": {
+            "const": "yuno-portable-export",
+            "title": "Format",
             "type": "string"
           },
           "goal_id": {
@@ -2546,17 +2808,38 @@
             ],
             "title": "Job Id"
           },
-          "package": {
+          "metadata_expires_at": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Package"
+            "title": "Metadata Expires At"
+          },
+          "package_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Expires At"
+          },
+          "package_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Hash"
           },
           "result_ref": {
             "anyOf": [
@@ -2574,7 +2857,8 @@
               "queued",
               "running",
               "complete",
-              "failed"
+              "failed",
+              "expired"
             ],
             "title": "Status",
             "type": "string"
@@ -2582,14 +2866,25 @@
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "version": {
+            "const": "1.0",
+            "title": "Version",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "goal_id",
           "status",
-          "format_version",
-          "package",
+          "format",
+          "version",
+          "filename",
+          "package_hash",
+          "completed_at",
+          "package_expires_at",
+          "metadata_expires_at",
+          "download_available",
           "job_id",
           "result_ref",
           "failure_reference",
@@ -9430,6 +9725,46 @@
         ]
       }
     },
+    "/api/v1/exports/{operation_id}/download": {
+      "get": {
+        "operationId": "download_export_api_v1_exports__operation_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Download Export",
+        "tags": [
+          "data-lifecycle"
+        ]
+      }
+    },
     "/api/v1/goals": {
       "get": {
         "operationId": "list_goals_api_v1_goals_get",
@@ -11806,6 +12141,39 @@
       }
     },
     "/api/v1/imports/{import_id}": {
+      "delete": {
+        "operationId": "delete_import_record_api_v1_imports__import_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Delete Import Record",
+        "tags": [
+          "imports"
+        ]
+      },
       "get": {
         "operationId": "get_import_record_api_v1_imports__import_id__get",
         "parameters": [
@@ -12378,6 +12746,39 @@
       }
     },
     "/api/v1/interview-runs/{run_id}": {
+      "delete": {
+        "operationId": "delete_interview_run_api_v1_interview_runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Delete Interview Run",
+        "tags": [
+          "interview"
+        ]
+      },
       "get": {
         "operationId": "read_interview_run_api_v1_interview_runs__run_id__get",
         "parameters": [
@@ -14036,6 +14437,37 @@
           }
         },
         "summary": "Update Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/data-lifecycle-policy": {
+      "get": {
+        "operationId": "get_data_lifecycle_policy_api_v1_settings_data_lifecycle_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataLifecyclePolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Default Response"
+          }
+        },
+        "summary": "Get Data Lifecycle Policy",
         "tags": [
           "settings"
         ]

@@ -11,6 +11,7 @@ from yuno.modules.interview.service import (
     cancel_mock_generation,
     submit_mock_answer,
 )
+from yuno.shared.domain.hashing import hash_payload
 
 
 class FakeMockAdapter:
@@ -177,10 +178,14 @@ def test_mock_next_turn_cancel_preserves_transcript_and_db_rejects_hint(
             connection.execute(
                 text("""
                 INSERT INTO interview_turns
-                  (id, owner_id, run_id, turn_number, kind, body, created_at)
-                VALUES ('illegal-hint', :owner, :run, 99, 'hint', 'forbidden', 'now')
+                  (id, owner_id, run_id, turn_number, kind, body_hash, created_at)
+                VALUES ('illegal-hint', :owner, :run, 99, 'hint', :body_hash, 'now')
             """),
-                {"owner": owner_id, "run": run["id"]},
+                {
+                    "owner": owner_id,
+                    "run": run["id"],
+                    "body_hash": hash_payload("forbidden"),
+                },
             )
         except sa_exc.IntegrityError as exc:
             assert "mock_feedback_withheld" in str(exc)

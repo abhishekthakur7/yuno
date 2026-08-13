@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 
 from sqlalchemy import update
 
+from yuno.modules.data_lifecycle.models import NotebookReviewIdempotencyBodyRow
 from yuno.modules.notebook_review.domain import (
     GoalReviewPreferences,
     NotebookEntry,
@@ -20,11 +23,15 @@ from yuno.modules.notebook_review.domain import (
 )
 from yuno.modules.notebook_review.models import (
     GoalReviewPreferencesRow,
+    NotebookEntryBodyRow,
     NotebookEntryRow,
     NotebookReviewIdempotencyRow,
+    ReviewAttemptBodyRow,
     ReviewAttemptRow,
+    ReviewItemBodyRow,
     ReviewItemRow,
 )
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
     owner_scoped_select,
@@ -34,9 +41,19 @@ from yuno.shared.infrastructure.repository import (
 class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
     def add_entry(self, entry: NotebookEntry) -> NotebookEntry:
         values = entry.__dict__.copy()
+        markdown = values.pop("markdown")
         values["entry_kind"] = entry.entry_kind.value
+        values["body_hash"] = _body_hash(markdown=markdown)
         self._session.add(NotebookEntryRow(**values))
         self._session.flush()
+        self._session.add(
+            NotebookEntryBodyRow(
+                entry_id=entry.id,
+                owner_id=entry.owner_id,
+                goal_id=entry.goal_id,
+                markdown=markdown,
+            )
+        )
         return entry
 
     def get_entry(self, owner_id: str, entry_id: str) -> NotebookEntry | None:
@@ -56,7 +73,7 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
             )
             .order_by(NotebookEntryRow.updated_at.desc(), NotebookEntryRow.id)
         ).all()
-        return tuple(_entry(row) for row in rows)
+        return tuple(item for row in rows if (item := _entry(row)) is not None)
 
     def update_entry(
         self,
@@ -69,6 +86,9 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
             key: value.value if isinstance(value, NotebookEntryKind) else value
             for key, value in changes.items()
         }
+        markdown = values.pop("markdown", None)
+        if markdown is not None:
+            values["body_hash"] = _body_hash(markdown=markdown)
         values["row_version"] = expected_version + 1
         result = self._session.execute(
             update(NotebookEntryRow)
@@ -82,6 +102,15 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
         )
         if result.rowcount != 1:
             return None
+        if markdown is not None:
+            self._session.execute(
+                update(NotebookEntryBodyRow)
+                .where(
+                    NotebookEntryBodyRow.owner_id == owner_id,
+                    NotebookEntryBodyRow.entry_id == entry_id,
+                )
+                .values(markdown=markdown)
+            )
         self._session.flush()
         return self.get_entry(owner_id, entry_id)
 
@@ -133,9 +162,19 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
 
     def add_review_item(self, item: ReviewItem) -> ReviewItem:
         values = item.__dict__.copy()
+        body = {key: values.pop(key) for key in ("prompt", "answer", "context")}
         values.update(prompt_type=item.prompt_type.value, status=item.status.value)
+        values["body_hash"] = _body_hash(**body)
         self._session.add(ReviewItemRow(**values))
         self._session.flush()
+        self._session.add(
+            ReviewItemBodyRow(
+                review_item_id=item.id,
+                owner_id=item.owner_id,
+                goal_id=item.goal_id,
+                **body,
+            )
+        )
         return item
 
     def get_review_item(self, owner_id: str, review_id: str) -> ReviewItem | None:
@@ -152,7 +191,7 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
             .where(ReviewItemRow.goal_id == goal_id)
             .order_by(ReviewItemRow.due_at, ReviewItemRow.created_at, ReviewItemRow.id)
         ).all()
-        return tuple(_item(row) for row in rows)
+        return tuple(item for row in rows if (item := _item(row)) is not None)
 
     def transition_review_item(
         self,
@@ -165,6 +204,22 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
             key: value.value if isinstance(value, ReviewItemStatus) else value
             for key, value in changes.items()
         }
+        body_values = {
+            key: values.pop(key)
+            for key in ("prompt", "answer", "context")
+            if key in values
+        }
+        if body_values:
+            current = self._session.get(ReviewItemBodyRow, review_id)
+            if current is None or current.owner_id != owner_id:
+                return None
+            merged = {
+                "prompt": current.prompt,
+                "answer": current.answer,
+                "context": current.context,
+                **body_values,
+            }
+            values["body_hash"] = _body_hash(**merged)
         result = self._session.execute(
             update(ReviewItemRow)
             .where(
@@ -176,14 +231,42 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
         )
         if result.rowcount != 1:
             return None
+        if body_values:
+            self._session.execute(
+                update(ReviewItemBodyRow)
+                .where(
+                    ReviewItemBodyRow.owner_id == owner_id,
+                    ReviewItemBodyRow.review_item_id == review_id,
+                )
+                .values(**body_values)
+            )
         self._session.flush()
         return self.get_review_item(owner_id, review_id)
 
     def add_attempt(self, attempt: ReviewAttempt) -> ReviewAttempt:
         values = attempt.__dict__.copy()
+        body = {
+            key: values.pop(key)
+            for key in (
+                "response",
+                "feedback",
+                "correction",
+                "context_variation",
+                "context_result",
+            )
+        }
         values["confidence"] = attempt.confidence.value if attempt.confidence else None
+        values["body_hash"] = _body_hash(**body)
         self._session.add(ReviewAttemptRow(**values))
         self._session.flush()
+        self._session.add(
+            ReviewAttemptBodyRow(
+                attempt_id=attempt.id,
+                owner_id=attempt.owner_id,
+                goal_id=attempt.goal_id,
+                **body,
+            )
+        )
         return attempt
 
     def list_attempts(self, owner_id: str, review_id: str) -> Sequence[ReviewAttempt]:
@@ -192,7 +275,7 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
             .where(ReviewAttemptRow.review_item_id == review_id)
             .order_by(ReviewAttemptRow.created_at, ReviewAttemptRow.id)
         ).all()
-        return tuple(_attempt(row) for row in rows)
+        return tuple(item for row in rows if (item := _attempt(row)) is not None)
 
     def disable_active_review_items(
         self, owner_id: str, goal_id: str, updated_at: str
@@ -223,6 +306,9 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
                 NotebookReviewIdempotencyRow.idempotency_key == key,
             )
         ).one_or_none()
+        body = (
+            self._session.get(NotebookReviewIdempotencyBodyRow, row.id) if row else None
+        )
         return (
             NotebookReviewIdempotencyRecord(
                 row.id,
@@ -230,19 +316,33 @@ class SqlAlchemyNotebookReviewRepository(SqlAlchemyRepository):
                 row.operation,
                 row.idempotency_key,
                 row.request_hash,
-                row.response_json,
+                body.response_json,
                 row.created_at,
             )
-            if row
+            if row and body
             else None
         )
 
     def add_idempotency(self, record: NotebookReviewIdempotencyRecord) -> None:
-        self._session.add(NotebookReviewIdempotencyRow(**record.__dict__))
+        values = record.__dict__.copy()
+        response_json = values.pop("response_json")
+        values["response_hash"] = hash_payload(response_json)
+        self._session.add(NotebookReviewIdempotencyRow(**values))
+        self._session.flush()
+        self._session.add(
+            NotebookReviewIdempotencyBodyRow(
+                idempotency_id=record.id,
+                owner_id=record.owner_id,
+                response_json=response_json,
+            )
+        )
         self._session.flush()
 
 
-def _entry(row: NotebookEntryRow) -> NotebookEntry:
+def _entry(row: NotebookEntryRow) -> NotebookEntry | None:
+    body = row.body
+    if body is None:
+        return None
     return NotebookEntry(
         row.id,
         row.owner_id,
@@ -251,7 +351,7 @@ def _entry(row: NotebookEntryRow) -> NotebookEntry:
         row.evidence_id,
         row.source_id,
         NotebookEntryKind(row.entry_kind),
-        row.markdown,
+        body.markdown,
         row.row_version,
         row.created_at,
         row.updated_at,
@@ -274,7 +374,10 @@ def _preferences(row: GoalReviewPreferencesRow) -> GoalReviewPreferences:
     )
 
 
-def _item(row: ReviewItemRow) -> ReviewItem:
+def _item(row: ReviewItemRow) -> ReviewItem | None:
+    body = row.body
+    if body is None:
+        return None
     return ReviewItem(
         row.id,
         row.owner_id,
@@ -282,12 +385,12 @@ def _item(row: ReviewItemRow) -> ReviewItem:
         row.topic_stable_id,
         row.prompt_ref,
         ReviewPromptType(row.prompt_type),
-        row.prompt,
-        row.answer,
+        body.prompt,
+        body.answer,
         ReviewItemStatus(row.status),
         row.due_at,
         row.interval_label,
-        row.context,
+        body.context,
         row.scheduling_version,
         row.failure_reference,
         row.row_version,
@@ -296,19 +399,29 @@ def _item(row: ReviewItemRow) -> ReviewItem:
     )
 
 
-def _attempt(row: ReviewAttemptRow) -> ReviewAttempt:
+def _attempt(row: ReviewAttemptRow) -> ReviewAttempt | None:
+    body = row.body
+    if body is None:
+        return None
     return ReviewAttempt(
         row.id,
         row.owner_id,
         row.goal_id,
         row.review_item_id,
-        row.response,
+        body.response,
         ReviewConfidence(row.confidence) if row.confidence else None,
-        row.feedback,
-        row.correction,
+        body.feedback,
+        body.correction,
         row.next_interval_label,
-        row.context_variation,
-        row.context_result,
+        body.context_variation,
+        body.context_result,
         row.scheduling_version,
         row.created_at,
     )
+
+
+def _body_hash(**values: object) -> str:
+    encoded = json.dumps(
+        values, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

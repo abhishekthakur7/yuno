@@ -59,7 +59,7 @@ class GeneratedArtifactRow(Base):
             name="last_attempt_status_valid",
         ),
         CheckConstraint(
-            "state != 'ready' OR (body_ref IS NOT NULL AND body_hash IS NOT NULL AND current_snapshot_id IS NOT NULL AND producing_job_id IS NOT NULL)",
+            "state != 'ready' OR (body_hash IS NOT NULL AND current_snapshot_id IS NOT NULL AND producing_job_id IS NOT NULL)",
             name="ready_complete",
         ),
         Index(
@@ -92,7 +92,6 @@ class GeneratedArtifactRow(Base):
     prompt_template_version: Mapped[str] = mapped_column(Text, nullable=False)
     cache_key_hash: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     state: Mapped[str] = mapped_column(Text, nullable=False)
-    body_ref: Mapped[str | None] = mapped_column(Text)
     body_hash: Mapped[str | None] = mapped_column(Text)
     current_snapshot_id: Mapped[str | None] = mapped_column(Text)
     producing_job_id: Mapped[str | None] = mapped_column(Text)
@@ -185,7 +184,6 @@ class LearningContentIdempotencyRow(Base):
             "idempotency_key",
             name="uq_learning_content_idempotency_owner_key",
         ),
-        CheckConstraint("json_valid(response_json)", name="response_json_valid"),
         ForeignKeyConstraint(
             ["attempt_id"],
             ["artifact_generation_attempts.id"],
@@ -199,7 +197,7 @@ class LearningContentIdempotencyRow(Base):
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
     attempt_id: Mapped[str] = mapped_column(Text, nullable=False)
     job_id: Mapped[str] = mapped_column(Text, nullable=False)
-    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()
 
 
@@ -239,7 +237,6 @@ class TopicConversationTurnRow(Base):
         UniqueConstraint("response_to_id", name="uq_topic_conversation_turns_response"),
         UniqueConstraint("job_id", name="uq_topic_conversation_turns_job"),
         CheckConstraint("role IN ('learner','tutor')", name="role_valid"),
-        CheckConstraint("length(trim(body)) > 0", name="body_non_blank"),
         CheckConstraint(
             "(role = 'learner' AND response_to_id IS NULL AND job_id IS NOT NULL AND idempotency_key IS NOT NULL AND request_hash IS NOT NULL) OR "
             "(role = 'tutor' AND response_to_id IS NOT NULL AND job_id IS NULL AND idempotency_key IS NULL AND request_hash IS NULL)",
@@ -260,7 +257,7 @@ class TopicConversationTurnRow(Base):
     graph_version_id: Mapped[str] = mapped_column(Text, nullable=False)
     topic_stable_id: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     response_to_id: Mapped[str | None] = mapped_column(Text)
     job_id: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str | None] = mapped_column(Text)

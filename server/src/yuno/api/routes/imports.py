@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel
 
 from yuno.api.contracts import (
@@ -21,11 +21,14 @@ from yuno.api.contracts import (
 from yuno.api.dependencies import (
     get_job_dispatcher,
     get_owner_id,
+    get_settings_dependency,
     get_unit_of_work,
     idempotency_key,
     if_match,
     parse_if_match,
 )
+from yuno.config import Settings
+from yuno.modules.data_lifecycle.service import delete_import_bodies
 from yuno.modules.imports.domain import (
     ImportIdempotencyRecord,
     ImportRecord,
@@ -69,7 +72,9 @@ def post_import(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[ImportsUnitOfWork, Depends(get_unit_of_work)],
     key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ) -> ImportRecordResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     return _idempotent(
         uow,
         owner_id,
@@ -84,6 +89,8 @@ def post_import(
                 goal_id=body.goal_id,
                 import_type=body.import_type,
                 source_text=body.original_content,
+                max_bytes=settings.import_original_max_bytes,
+                retained_owner_limit=settings.import_retained_owner_limit,
             )
         ),
     )
@@ -110,6 +117,17 @@ def get_import_record(
     return _import_response(get_import(uow, owner_id, import_id))
 
 
+@router.delete("/imports/{import_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_import_record(
+    import_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[ImportsUnitOfWork, Depends(get_unit_of_work)],
+) -> Response:
+    get_import(uow, owner_id, import_id)
+    delete_import_bodies(uow, owner_id, import_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/imports/{import_id}/parse",
     response_model=JobRefResponse,
@@ -121,9 +139,10 @@ def post_import_parse(
     uow: Annotated[ImportsUnitOfWork, Depends(get_unit_of_work)],
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
     return _enqueue_import_job(
-        uow, dispatcher, owner_id, import_id, "parse_import", key
+        uow, dispatcher, owner_id, import_id, "parse_import", key, settings
     )
 
 
@@ -271,9 +290,10 @@ def post_import_reprocess(
     uow: Annotated[ImportsUnitOfWork, Depends(get_unit_of_work)],
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
     return _enqueue_import_job(
-        uow, dispatcher, owner_id, import_id, "reprocess_import", key
+        uow, dispatcher, owner_id, import_id, "reprocess_import", key, settings
     )
 
 
@@ -282,14 +302,35 @@ def run_import_parse_job(request: JobRequest, uow_factory: UnitOfWorkFactory):
     import_id = str(request.payload["import_id"])
     try:
         with uow_factory() as uow:
+            uow.profiles_goals.lock_idempotency_commands(request.owner_id)
             if request.kind == "reprocess_import":
-                reprocess_import(uow, request.owner_id, import_id)
+                reprocess_import(
+                    uow,
+                    request.owner_id,
+                    import_id,
+                    statements_per_import_limit=int(
+                        request.payload["statements_per_import_limit"]
+                    ),
+                    unreviewed_owner_limit=int(
+                        request.payload["unreviewed_owner_limit"]
+                    ),
+                )
             else:
-                parse_import(uow, request.owner_id, import_id)
+                parse_import(
+                    uow,
+                    request.owner_id,
+                    import_id,
+                    statements_per_import_limit=int(
+                        request.payload["statements_per_import_limit"]
+                    ),
+                    unreviewed_owner_limit=int(
+                        request.payload["unreviewed_owner_limit"]
+                    ),
+                )
             record = get_import(uow, request.owner_id, import_id)
             uow.commit()
             return record
-    except Exception:
+    except Exception as exc:
         with uow_factory() as failure_uow:
             record = get_import(failure_uow, request.owner_id, import_id)
             if record.status is ImportStatus.PARSING:
@@ -299,7 +340,7 @@ def run_import_parse_job(request: JobRequest, uow_factory: UnitOfWorkFactory):
                     record.row_version,
                     {
                         "status": ImportStatus.FAILED,
-                        "failure_code": "import_parse_failed",
+                        "failure_code": getattr(exc, "code", "import_parse_failed"),
                         "failure_reference": f"import-job:{import_id}",
                         "updated_at": now_text(SystemClock()),
                     },
@@ -315,9 +356,15 @@ def _enqueue_import_job(
     import_id: str,
     kind: str,
     key: str,
+    settings: Settings,
 ):
     operation = f"{kind}:{import_id}"
-    request_data = {"import_id": import_id, "operation": kind}
+    request_data = {
+        "import_id": import_id,
+        "operation": kind,
+        "statements_per_import_limit": settings.import_statements_per_import_limit,
+        "unreviewed_owner_limit": settings.import_unreviewed_owner_limit,
+    }
     prior = _prior(uow, owner_id, operation, key, request_data, JobRefResponse)
     if prior is not None:
         return accepted_job(_job_ref(prior))

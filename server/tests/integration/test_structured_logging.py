@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from contextlib import contextmanager
+from datetime import timedelta
 from io import StringIO
+from logging.handlers import RotatingFileHandler
 
 from yuno.api.contracts import safe_job_diagnostic
 from yuno.api.routes.jobs import _attempt_response
@@ -23,9 +26,12 @@ from yuno.shared.application.jobs import (
 from yuno.shared.domain.errors import UnavailableError
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.structured_logging import (
+    LOG_FILENAME,
     LOGGER_NAME,
     REDACTED,
+    configure_file_structured_logging,
     configure_structured_logging,
+    expire_structured_log_files,
     log_event,
     redact_log_data,
 )
@@ -75,6 +81,13 @@ def test_recursive_redaction_covers_sensitive_categories_and_paths() -> None:
             "provider_auth_env": {"CODEX_API_TOKEN": "provider-token"},
             "env": {"UNRELATED": "environment-value"},
             "aws_secret_access_key": "aws-secret",
+            "request_body": "private request",
+            "user_agent": "private browser fingerprint",
+            "ip_address": "192.0.2.1",
+            "email": "learner@example.test",
+            "display_name": "Private Learner",
+            "exception_message": "private internal failure",
+            "route": "/api/v1/goals?token=query-secret",
             "workspace": "/Users/example/private/project",
             "nested": [
                 {"raw_prompt": "prompt body"},
@@ -93,6 +106,13 @@ def test_recursive_redaction_covers_sensitive_categories_and_paths() -> None:
         "provider-token",
         "environment-value",
         "aws-secret",
+        "private request",
+        "private browser fingerprint",
+        "192.0.2.1",
+        "learner@example.test",
+        "Private Learner",
+        "private internal failure",
+        "query-secret",
         "/Users/example",
         "prompt body",
         "transcript body",
@@ -312,6 +332,177 @@ def test_app_logging_configuration_emits_info_once_to_local_stream() -> None:
     lines = stream.getvalue().splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0])["event"] == "runtime.output.probe"
+
+
+def test_file_logging_is_owner_only_local_and_replaces_handlers(tmp_path) -> None:
+    logger = logging.getLogger(LOGGER_NAME)
+    original_handlers = list(logger.handlers)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    foreign_handler = logging.NullHandler()
+    logger.addHandler(foreign_handler)
+    log_directory = tmp_path / "private" / "logs"
+    try:
+        configured = configure_file_structured_logging(
+            log_directory,
+            max_bytes=10 * 1024 * 1024,
+            backup_count=4,
+            max_age=timedelta(days=14),
+        )
+        first_handler = configured.handlers[0]
+        configured = configure_file_structured_logging(
+            log_directory,
+            max_bytes=10 * 1024 * 1024,
+            backup_count=4,
+            max_age=timedelta(days=14),
+        )
+        log_event("runtime.file-output.probe", owner_id="owner-safe")
+        handler = configured.handlers[0]
+        handler.flush()
+
+        assert len(configured.handlers) == 1
+        assert isinstance(handler, RotatingFileHandler)
+        assert not isinstance(handler, logging.handlers.SocketHandler)
+        assert first_handler.stream is None
+        assert log_directory.stat().st_mode & 0o777 == 0o700
+        log_path = log_directory / LOG_FILENAME
+        assert log_path.stat().st_mode & 0o777 == 0o600
+        assert len(log_path.read_text(encoding="utf-8").splitlines()) == 1
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers.clear()
+        logger.handlers.extend(original_handlers)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_file_logging_rotates_at_byte_boundary_and_keeps_five_files(
+    tmp_path,
+) -> None:
+    logger = logging.getLogger(LOGGER_NAME)
+    original_handlers = list(logger.handlers)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    try:
+        logger = configure_file_structured_logging(
+            tmp_path,
+            max_bytes=64,
+            backup_count=4,
+            max_age=timedelta(days=14),
+        )
+        logger.info("x" * 63)
+        assert (tmp_path / LOG_FILENAME).stat().st_size == 64
+        for index in range(5):
+            logger.info(f"event-{index}".ljust(63, "x"))
+        logger.handlers[0].flush()
+
+        files = sorted(tmp_path.glob(f"{LOG_FILENAME}*"))
+        assert len(files) == 5
+        assert all(path.stat().st_size <= 64 for path in files)
+        assert all(path.stat().st_mode & 0o777 == 0o600 for path in files)
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers.clear()
+        logger.handlers.extend(original_handlers)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_file_logging_removes_files_older_than_max_age(tmp_path) -> None:
+    stale_active = tmp_path / LOG_FILENAME
+    stale_rotated = tmp_path / f"{LOG_FILENAME}.1"
+    unrelated = tmp_path / "owner-copy.log"
+    for path in (stale_active, stale_rotated, unrelated):
+        path.write_text("old\n", encoding="utf-8")
+    stale_time = time.time() - timedelta(days=15).total_seconds()
+    os.utime(stale_active, (stale_time, stale_time))
+    os.utime(stale_rotated, (stale_time, stale_time))
+    os.utime(unrelated, (stale_time, stale_time))
+
+    logger = logging.getLogger(LOGGER_NAME)
+    original_handlers = list(logger.handlers)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    try:
+        logger = configure_file_structured_logging(
+            tmp_path,
+            max_bytes=10 * 1024 * 1024,
+            backup_count=4,
+            max_age=timedelta(days=14),
+        )
+        log_event(
+            "provider.request.completed",
+            logger=logger,
+            owner_id="owner-safe",
+            provider_request_id="provider-request-safe",
+            diagnostic_classification="provider-timeout",
+            raw_prompt="private prompt",
+            arbitrary_exception_message="private failure",
+        )
+        logger.handlers[0].flush()
+
+        assert not stale_rotated.exists()
+        assert unrelated.exists()
+        events = [
+            json.loads(line)
+            for line in stale_active.read_text(encoding="utf-8").splitlines()
+        ]
+        assert events == [
+            {
+                "diagnostic_classification": "provider-timeout",
+                "event": "provider.request.completed",
+                "level": "info",
+                "owner_id": "owner-safe",
+                "provider_request_id": "provider-request-safe",
+                "timestamp": events[0]["timestamp"],
+            }
+        ]
+        serialized = json.dumps(events)
+        assert "private prompt" not in serialized
+        assert "private failure" not in serialized
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers.clear()
+        logger.handlers.extend(original_handlers)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+
+def test_scheduled_expiry_removes_aged_logs_without_emitting_a_record(
+    tmp_path,
+) -> None:
+    logger = logging.getLogger(LOGGER_NAME)
+    original_handlers = list(logger.handlers)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    try:
+        logger = configure_file_structured_logging(
+            tmp_path,
+            max_bytes=10 * 1024 * 1024,
+            backup_count=4,
+            max_age=timedelta(days=14),
+        )
+        logger.info("existing event")
+        handler = logger.handlers[0]
+        handler.flush()
+        log_path = tmp_path / LOG_FILENAME
+        stale_time = time.time() - timedelta(days=15).total_seconds()
+        os.utime(log_path, (stale_time, stale_time))
+
+        expire_structured_log_files(logger)
+
+        assert not log_path.exists()
+        assert list(tmp_path.glob(f"{LOG_FILENAME}*")) == []
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers.clear()
+        logger.handlers.extend(original_handlers)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
 
 
 def test_learner_job_diagnostic_is_a_safe_classification() -> None:

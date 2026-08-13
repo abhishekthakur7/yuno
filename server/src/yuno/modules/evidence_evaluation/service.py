@@ -41,6 +41,8 @@ from yuno.shared.domain.clock import Clock, SystemClock, now_text
 from yuno.shared.domain.errors import (
     ConflictError,
     DomainValidationError,
+    EvidenceCountLimitError,
+    EvidenceTooLargeError,
     NotFoundError,
 )
 from yuno.shared.domain.hashing import hash_payload
@@ -59,28 +61,49 @@ def get_derived_progress(
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
     now = now_text(clock)
     topic_ids = tuple(
-        sorted(item.stable_id for item in uow.canonical.get_published_topics(goal.graph_version_id))
+        sorted(
+            item.stable_id
+            for item in uow.canonical.get_published_topics(goal.graph_version_id)
+        )
     )
     evidence = tuple(uow.evidence.list_progress_evidence(owner_id, goal_id))
     corrections = tuple(
         ProgressCorrection(
-            f"correction:{item.id}", item.owner_id, item.goal_id, item.topic_stable_id,
-            item.correction_type.value, item.value, item.reason, item.created_at,
+            f"correction:{item.id}",
+            item.owner_id,
+            item.goal_id,
+            item.topic_stable_id,
+            item.correction_type.value,
+            item.value,
+            item.reason,
+            item.created_at,
             f"correction:{item.supersedes_correction_id}"
-            if item.supersedes_correction_id else None,
+            if item.supersedes_correction_id
+            else None,
         )
         for item in uow.roadmap.list_corrections(owner_id, goal_id)
     )
     transfers = tuple(
         ProgressTransfer(
-            item.id, item.owner_id, item.goal_id, item.topic_stable_id,
-            item.source_evidence_id, ProgressClassification(item.classification),
-            item.rationale, item.created_at,
+            item.id,
+            item.owner_id,
+            item.goal_id,
+            item.topic_stable_id,
+            item.source_evidence_id,
+            ProgressClassification(item.classification),
+            item.rationale,
+            item.created_at,
         )
         for item in uow.roadmap.list_progress_transfers(owner_id, goal_id)
     )
     expected_hash = progress_input_hash(
-        goal_id, topic_ids, evidence, corrections, transfers, now, FIXTURE_DERIVATION_VERSION
+        goal_id,
+        topic_ids,
+        evidence,
+        corrections,
+        transfers,
+        now,
+        FIXTURE_DERIVATION_VERSION,
     )
     memo = uow.evidence.get_progress_memo(owner_id, goal_id)
     if memo is not None and memo.input_hash == expected_hash:
@@ -93,40 +116,62 @@ def get_derived_progress(
             def dimension(name: str) -> ProgressDimension:
                 value = data[name]
                 return ProgressDimension(
-                    ProgressClassification(value["classification"]), value["definition"],
-                    tuple(value["supporting_evidence_refs"]), value["uncertainty"],
+                    ProgressClassification(value["classification"]),
+                    value["definition"],
+                    tuple(value["supporting_evidence_refs"]),
+                    value["uncertainty"],
                 )
 
             states = tuple(
                 LearningStateExplanation(
-                    item["topic_stable_id"], ProgressClassification(item["classification"]),
-                    item["definition"], tuple(item["supporting_evidence_refs"]),
-                    item["uncertainty"], item["correction_ref"],
+                    item["topic_stable_id"],
+                    ProgressClassification(item["classification"]),
+                    item["definition"],
+                    tuple(item["supporting_evidence_refs"]),
+                    item["uncertainty"],
+                    item["correction_ref"],
                 )
                 for item in data["learning_states"]
             )
             if tuple(item.topic_stable_id for item in states) != topic_ids:
                 raise ValueError("Progress memo topic spine mismatch.")
             cached = DerivedProgress(
-                dimension("coverage"), dimension("proficiency"), dimension("retention"),
-                dimension("readiness"), states, memo.input_hash, memo.derivation_version,
+                dimension("coverage"),
+                dimension("proficiency"),
+                dimension("retention"),
+                dimension("readiness"),
+                states,
+                memo.input_hash,
+                memo.derivation_version,
                 memo.computed_at,
             )
-            if (
-                cached.rule_version == FIXTURE_DERIVATION_VERSION
-                and (cached.coverage.classification, cached.proficiency.classification,
-                     cached.retention.classification, cached.readiness.classification)
-                == (memo.coverage, memo.proficiency, memo.retention, memo.readiness)
-            ):
+            if cached.rule_version == FIXTURE_DERIVATION_VERSION and (
+                cached.coverage.classification,
+                cached.proficiency.classification,
+                cached.retention.classification,
+                cached.readiness.classification,
+            ) == (memo.coverage, memo.proficiency, memo.retention, memo.readiness):
                 return DerivedProgress(
-                    cached.coverage, cached.proficiency, cached.retention, cached.readiness,
-                    cached.learning_states, cached.input_hash, cached.rule_version, now,
+                    cached.coverage,
+                    cached.proficiency,
+                    cached.retention,
+                    cached.readiness,
+                    cached.learning_states,
+                    cached.input_hash,
+                    cached.rule_version,
+                    now,
                 )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             pass
         memo = None
     result = derive_progress(
-        goal_id, topic_ids, evidence, corrections, transfers, now, FIXTURE_DERIVATION_VERSION
+        goal_id,
+        topic_ids,
+        evidence,
+        corrections,
+        transfers,
+        now,
+        FIXTURE_DERIVATION_VERSION,
     )
     if memo is None or memo.input_hash != result.input_hash:
         explanation = {
@@ -143,10 +188,16 @@ def get_derived_progress(
         )
         uow.evidence.put_progress_memo(
             GoalProgressMemo(
-                goal_id, owner_id, result.coverage.classification,
-                result.proficiency.classification, result.retention.classification,
-                result.readiness.classification, explanation_json, result.input_hash,
-                result.rule_version, result.effective_now,
+                goal_id,
+                owner_id,
+                result.coverage.classification,
+                result.proficiency.classification,
+                result.retention.classification,
+                result.readiness.classification,
+                explanation_json,
+                result.input_hash,
+                result.rule_version,
+                result.effective_now,
             )
         )
     return result
@@ -164,6 +215,8 @@ def create_evidence(
     origin: str,
     content: str,
     content_version: str,
+    max_payload_bytes: int = 10 * 1024 * 1024,
+    retained_owner_limit: int = 10_000,
     clock: Clock | None = None,
 ) -> Evidence:
     goal = uow.profiles_goals.get_goal(owner_id, goal_id)
@@ -171,9 +224,14 @@ def create_evidence(
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
     if getattr(goal.status, "value", goal.status) != "active":
         raise ConflictError("Evidence can only be added to an active goal.")
-    topics = {topic.stable_id for topic in uow.canonical.get_published_topics(goal.graph_version_id)}
+    topics = {
+        topic.stable_id
+        for topic in uow.canonical.get_published_topics(goal.graph_version_id)
+    }
     if topic_stable_id not in topics:
-        raise DomainValidationError("Evidence must reference a topic in the goal's approved graph.")
+        raise DomainValidationError(
+            "Evidence must reference a topic in the goal's approved graph."
+        )
     required = {
         "evidence_type": evidence_type,
         "capability": capability,
@@ -184,17 +242,47 @@ def create_evidence(
     for field, value in required.items():
         if not value.strip():
             raise DomainValidationError(f"{field} must not be blank.")
+    if len(content.encode("utf-8", errors="strict")) > max_payload_bytes:
+        raise EvidenceTooLargeError(
+            f"Evidence may contain at most {max_payload_bytes} UTF-8 bytes.",
+            recovery_action="Reduce the evidence size and try again.",
+        )
+    if uow.evidence.count_live_evidence(owner_id) >= retained_owner_limit:
+        raise EvidenceCountLimitError(
+            f"An owner may retain at most {retained_owner_limit} evidence records.",
+            recovery_action="Delete or export existing evidence before adding another.",
+        )
     timestamp = now_text(clock or SystemClock())
     evidence = Evidence(
-        new_id(), owner_id, goal_id, topic_stable_id, evidence_type.strip(),
-        capability, hash_payload({"content": content, "content_version": content_version}),
-        summary.strip(), origin.strip(), timestamp,
+        new_id(),
+        owner_id,
+        goal_id,
+        topic_stable_id,
+        evidence_type.strip(),
+        capability,
+        hash_payload({"content": content, "content_version": content_version}),
+        summary.strip(),
+        origin.strip(),
+        timestamp,
     )
     uow.evidence.add_evidence(
         evidence,
-        EvidencePayload(evidence.id, owner_id, goal_id, content, content_version.strip()),
+        EvidencePayload(
+            evidence.id, owner_id, goal_id, content, content_version.strip()
+        ),
     )
-    uow.audit.append(_audit(owner_id, goal_id, "evidence", evidence.id, "created", None, hash_payload(evidence), timestamp))
+    uow.audit.append(
+        _audit(
+            owner_id,
+            goal_id,
+            "evidence",
+            evidence.id,
+            "created",
+            None,
+            hash_payload(evidence),
+            timestamp,
+        )
+    )
     return evidence
 
 
@@ -232,11 +320,17 @@ def perform_assessment(
     if request.rubric_version != rubric.version:
         raise ConflictError("The requested rubric version is stale.")
     if request.requested_capability != evidence.capability:
-        raise DomainValidationError("The requested capability must match the evidence capability.")
+        raise DomainValidationError(
+            "The requested capability must match the evidence capability."
+        )
     active = uow.evidence.get_active_assessment_for_evidence(owner_id, evidence.id)
     if predecessor is None and active is not None:
-        raise ConflictError("Evidence already has an active assessment; dispute and re-evaluate it.")
-    if predecessor is not None and (active is None or active.id != predecessor.id or predecessor.derivation_excluded):
+        raise ConflictError(
+            "Evidence already has an active assessment; dispute and re-evaluate it."
+        )
+    if predecessor is not None and (
+        active is None or active.id != predecessor.id or predecessor.derivation_excluded
+    ):
         raise ConflictError("Only the active assessment tip can be re-evaluated.")
 
     result = adapter.evaluate(request)
@@ -245,21 +339,48 @@ def perform_assessment(
     timestamp = now_text(clock or SystemClock())
     assessment_id = new_id()
     assessment = Assessment(
-        assessment_id, owner_id, evidence.goal_id, evidence.id, run_id, rubric.id,
-        rubric.version, result.state, request.task_ref, request.requested_capability,
-        request.role, request.level, request.evaluation_method, request.assumptions,
-        request.source_refs, request.provenance_refs, result.facts, result.trade_offs,
-        result.citations, result.ambiguities, result.feedback,
-        result.cross_question_candidate, result.revision_invitation, result.warnings,
-        result.limitation_labels, predecessor.id if predecessor else None, False,
+        assessment_id,
+        owner_id,
+        evidence.goal_id,
+        evidence.id,
+        run_id,
+        rubric.id,
+        rubric.version,
+        result.state,
+        request.task_ref,
+        request.requested_capability,
+        request.role,
+        request.level,
+        request.evaluation_method,
+        request.assumptions,
+        request.source_refs,
+        request.provenance_refs,
+        result.facts,
+        result.trade_offs,
+        result.citations,
+        result.ambiguities,
+        result.feedback,
+        result.cross_question_candidate,
+        result.revision_invitation,
+        result.warnings,
+        result.limitation_labels,
+        predecessor.id if predecessor else None,
+        False,
         timestamp,
     )
-    dimensions_by_stable_id = {dimension.stable_dimension_id: dimension for dimension in rubric_dimensions}
+    dimensions_by_stable_id = {
+        dimension.stable_dimension_id: dimension for dimension in rubric_dimensions
+    }
     dimension_rows = tuple(
         AssessmentDimensionResult(
-            new_id(), owner_id, evidence.goal_id, assessment_id,
-            dimensions_by_stable_id[item.dimension_id].id, item.outcome,
-            item.rationale, item.evidence_refs,
+            new_id(),
+            owner_id,
+            evidence.goal_id,
+            assessment_id,
+            dimensions_by_stable_id[item.dimension_id].id,
+            item.outcome,
+            item.rationale,
+            item.evidence_refs,
         )
         for item in result.dimensions
     )
@@ -268,7 +389,18 @@ def perform_assessment(
     uow.evidence.add_assessment(assessment, dimension_rows)
     if predecessor is not None:
         uow.evidence.exclude_assessment(owner_id, evidence.goal_id, predecessor.id)
-    uow.audit.append(_audit(owner_id, evidence.goal_id, "assessment", assessment.id, "created", None, hash_payload(assessment), timestamp))
+    uow.audit.append(
+        _audit(
+            owner_id,
+            evidence.goal_id,
+            "assessment",
+            assessment.id,
+            "created",
+            None,
+            hash_payload(assessment),
+            timestamp,
+        )
+    )
     return assessment
 
 
@@ -284,9 +416,30 @@ def create_dispute(
     if not reason.strip():
         raise DomainValidationError("A dispute reason must not be blank.")
     timestamp = now_text(clock or SystemClock())
-    dispute = AssessmentDispute(new_id(), owner_id, assessment.goal_id, assessment.id, reason.strip(), DisputeStatus.REQUESTED, timestamp, None, None)
+    dispute = AssessmentDispute(
+        new_id(),
+        owner_id,
+        assessment.goal_id,
+        assessment.id,
+        reason.strip(),
+        DisputeStatus.REQUESTED,
+        timestamp,
+        None,
+        None,
+    )
     uow.evidence.add_dispute(dispute)
-    uow.audit.append(_audit(owner_id, assessment.goal_id, "assessment_dispute", dispute.id, "created", None, hash_payload(dispute), timestamp))
+    uow.audit.append(
+        _audit(
+            owner_id,
+            assessment.goal_id,
+            "assessment_dispute",
+            dispute.id,
+            "created",
+            None,
+            hash_payload(dispute),
+            timestamp,
+        )
+    )
     return dispute
 
 
@@ -300,7 +453,9 @@ def request_reevaluation(
     clock: Clock | None = None,
 ) -> ReevaluationRequest:
     assessment = get_assessment(uow, owner_id, assessment_id)
-    active = uow.evidence.get_active_assessment_for_evidence(owner_id, assessment.evidence_id)
+    active = uow.evidence.get_active_assessment_for_evidence(
+        owner_id, assessment.evidence_id
+    )
     if assessment.derivation_excluded or active is None or active.id != assessment.id:
         raise ConflictError("Only the active assessment tip can be re-evaluated.")
     dispute = uow.evidence.get_dispute(owner_id, dispute_id)
@@ -309,9 +464,32 @@ def request_reevaluation(
     if uow.evidence.get_reevaluation_for_dispute(owner_id, dispute_id) is not None:
         raise ConflictError("This dispute already has a re-evaluation request.")
     timestamp = now_text(clock or SystemClock())
-    request = ReevaluationRequest(new_id(), owner_id, assessment.goal_id, dispute.id, assessment.id, job_id or new_id(), ReevaluationStatus.REQUESTED, None, timestamp, None, None)
+    request = ReevaluationRequest(
+        new_id(),
+        owner_id,
+        assessment.goal_id,
+        dispute.id,
+        assessment.id,
+        job_id or new_id(),
+        ReevaluationStatus.REQUESTED,
+        None,
+        timestamp,
+        None,
+        None,
+    )
     uow.evidence.add_reevaluation_request(request)
-    uow.audit.append(_audit(owner_id, assessment.goal_id, "reevaluation_request", request.id, "requested", None, hash_payload(request), timestamp))
+    uow.audit.append(
+        _audit(
+            owner_id,
+            assessment.goal_id,
+            "reevaluation_request",
+            request.id,
+            "requested",
+            None,
+            hash_payload(request),
+            timestamp,
+        )
+    )
     return request
 
 
@@ -332,32 +510,83 @@ def complete_reevaluation(
         raise ConflictError("The re-evaluation request is no longer runnable.")
     predecessor = get_assessment(uow, owner_id, request_record.prior_assessment_id)
     evaluation_request = EvaluationRequest(
-        predecessor.evidence_id, predecessor.task_ref, predecessor.rubric_id,
-        predecessor.rubric_version, predecessor.assumptions,
-        predecessor.requested_capability, predecessor.source_refs,
-        predecessor.provenance_refs, predecessor.role, predecessor.level,
+        predecessor.evidence_id,
+        predecessor.task_ref,
+        predecessor.rubric_id,
+        predecessor.rubric_version,
+        predecessor.assumptions,
+        predecessor.requested_capability,
+        predecessor.source_refs,
+        predecessor.provenance_refs,
+        predecessor.role,
+        predecessor.level,
         predecessor.evaluation_method,
     )
-    successor = perform_assessment(uow, adapter, owner_id, evaluation_request, run_id=predecessor.run_id, predecessor=predecessor, clock=clock)
+    successor = perform_assessment(
+        uow,
+        adapter,
+        owner_id,
+        evaluation_request,
+        run_id=predecessor.run_id,
+        predecessor=predecessor,
+        clock=clock,
+    )
     timestamp = now_text(clock or SystemClock())
-    uow.evidence.update_reevaluation_request(owner_id, request_id, {
-        "status": ReevaluationStatus.COMPLETED,
-        "resulting_assessment_id": successor.id,
-        "completed_at": timestamp,
-    })
-    uow.audit.append(_audit(owner_id, predecessor.goal_id, "reevaluation_request", request_id, "completed", hash_payload(request_record), hash_payload({"resulting_assessment_id": successor.id}), timestamp))
+    uow.evidence.update_reevaluation_request(
+        owner_id,
+        request_id,
+        {
+            "status": ReevaluationStatus.COMPLETED,
+            "resulting_assessment_id": successor.id,
+            "completed_at": timestamp,
+        },
+    )
+    uow.audit.append(
+        _audit(
+            owner_id,
+            predecessor.goal_id,
+            "reevaluation_request",
+            request_id,
+            "completed",
+            hash_payload(request_record),
+            hash_payload({"resulting_assessment_id": successor.id}),
+            timestamp,
+        )
+    )
     return successor
 
 
-def fail_reevaluation(uow: EvidenceUnitOfWork, owner_id: str, request_id: str, failure_reference: str) -> None:
+def fail_reevaluation(
+    uow: EvidenceUnitOfWork, owner_id: str, request_id: str, failure_reference: str
+) -> None:
     request = uow.evidence.get_reevaluation_request(owner_id, request_id)
     if request is not None and request.status is ReevaluationStatus.REQUESTED:
-        uow.evidence.update_reevaluation_request(owner_id, request_id, {"status": ReevaluationStatus.FAILED, "failure_reference": failure_reference})
+        uow.evidence.update_reevaluation_request(
+            owner_id,
+            request_id,
+            {
+                "status": ReevaluationStatus.FAILED,
+                "failure_reference": failure_reference,
+            },
+        )
         timestamp = now_text(SystemClock())
-        uow.audit.append(_audit(owner_id, request.goal_id, "reevaluation_request", request_id, "failed", hash_payload(request), hash_payload({"failure_reference": failure_reference}), timestamp))
+        uow.audit.append(
+            _audit(
+                owner_id,
+                request.goal_id,
+                "reevaluation_request",
+                request_id,
+                "failed",
+                hash_payload(request),
+                hash_payload({"failure_reference": failure_reference}),
+                timestamp,
+            )
+        )
 
 
-def get_assessment(uow: EvidenceUnitOfWork, owner_id: str, assessment_id: str) -> Assessment:
+def get_assessment(
+    uow: EvidenceUnitOfWork, owner_id: str, assessment_id: str
+) -> Assessment:
     assessment = uow.evidence.get_assessment(owner_id, assessment_id)
     if assessment is None:
         raise NotFoundError(f"Assessment '{assessment_id}' was not found.")
@@ -368,12 +597,22 @@ def _validate_evaluation_result(result: EvaluationResult, rubric_dimensions) -> 
     expected = {dimension.stable_dimension_id for dimension in rubric_dimensions}
     actual = [dimension.dimension_id for dimension in result.dimensions]
     if not expected or len(actual) != len(set(actual)) or set(actual) != expected:
-        raise DomainValidationError("Evaluation result must contain exactly one result for every rubric dimension.")
-    if not result.feedback.strip() or any(not item.rationale.strip() for item in result.dimensions):
-        raise DomainValidationError("Evaluation feedback and every dimension rationale must be non-blank.")
+        raise DomainValidationError(
+            "Evaluation result must contain exactly one result for every rubric dimension."
+        )
+    if not result.feedback.strip() or any(
+        not item.rationale.strip() for item in result.dimensions
+    ):
+        raise DomainValidationError(
+            "Evaluation feedback and every dimension rationale must be non-blank."
+        )
     all_text_groups = (
-        result.facts, result.trade_offs, result.citations, result.ambiguities,
-        result.warnings, result.limitation_labels,
+        result.facts,
+        result.trade_offs,
+        result.citations,
+        result.ambiguities,
+        result.warnings,
+        result.limitation_labels,
     )
     if any(not value.strip() for group in all_text_groups for value in group):
         raise DomainValidationError("Evaluation result list values must not be blank.")
@@ -381,7 +620,9 @@ def _validate_evaluation_result(result: EvaluationResult, rubric_dimensions) -> 
         item.outcome.value == "ambiguity-unresolved" for item in result.dimensions
     )
     if (result.state is AssessmentState.AMBIGUITY_UNRESOLVED) != has_unresolved:
-        raise DomainValidationError("ambiguity-unresolved state must exactly match unresolved ambiguity content.")
+        raise DomainValidationError(
+            "ambiguity-unresolved state must exactly match unresolved ambiguity content."
+        )
 
 
 def transfer_evidence(
@@ -540,10 +781,11 @@ def delete_goal(
             )
         )
         uow.evidence.remove_payload(owner_id, goal_id, evidence_id)
-    uow.roadmap.downgrade_transfer_dependents(owner_id, goal_id, derived_at=timestamp)
     updated = uow.profiles_goals.tombstone_goal(owner_id, goal_id, goal.row_version)
     if updated is None:
         raise ConflictError("The goal changed during deletion.")
+    uow.roadmap.downgrade_transfer_dependents(owner_id, goal_id, derived_at=timestamp)
+    uow.data_lifecycle.purge_goal_bodies(owner_id, goal_id, timestamp)
     profile = uow.profiles_goals.get_profile(owner_id)
     if (
         profile is not None
@@ -592,9 +834,14 @@ def _current_impact(
     uow: EvidenceUnitOfWork, owner_id: str, goal_id: str
 ) -> dict[str, object]:
     dependents = tuple(uow.roadmap.list_transfer_dependents(owner_id, goal_id))
+    owned_evidence_ids = {
+        evidence.id for evidence in uow.evidence.list_evidence(owner_id, goal_id)
+    }
     return {
         "goal_id": goal_id,
-        "evidence_ids": sorted({evidence_id for evidence_id, _ in dependents}),
+        "evidence_ids": sorted(
+            owned_evidence_ids | {evidence_id for evidence_id, _ in dependents}
+        ),
         "learning_state_ids": sorted({state_id for _, state_id in dependents}),
     }
 

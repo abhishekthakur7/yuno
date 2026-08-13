@@ -40,14 +40,13 @@ def test_exact_original_blob_and_hash_are_immutable_in_sqlite(engine: Engine):
         )
         connection.exec_driver_sql(
             "INSERT INTO import_records "
-            "(id,owner_id,goal_id,type,original_content,original_hash,parser_version,status,row_version,created_at,updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "(id,owner_id,goal_id,type,original_hash,parser_version,status,row_version,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 "import-trigger",
                 "owner-import-trigger",
                 None,
                 "plain_text",
-                b"\xef\xbb\xbfexact\r\nbytes",
                 "original-sha",
                 "imports-v1",
                 "selected",
@@ -57,11 +56,21 @@ def test_exact_original_blob_and_hash_are_immutable_in_sqlite(engine: Engine):
             ),
         )
         connection.exec_driver_sql(
+            "INSERT INTO import_record_bodies "
+            "(import_id,owner_id,original_content) VALUES (?,?,?)",
+            (
+                "import-trigger",
+                "owner-import-trigger",
+                b"\xef\xbb\xbfexact\r\nbytes",
+            ),
+        )
+        connection.exec_driver_sql(
             "UPDATE import_records SET status='parsing', row_version=2 WHERE id='import-trigger'"
         )
         with pytest.raises(IntegrityError, match="import original is immutable"):
             connection.exec_driver_sql(
-                "UPDATE import_records SET original_content=? WHERE id='import-trigger'",
+                "UPDATE import_record_bodies SET original_content=? "
+                "WHERE import_id='import-trigger'",
                 (b"changed",),
             )
         with pytest.raises(IntegrityError, match="DELETE is not permitted"):

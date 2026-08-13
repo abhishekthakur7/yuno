@@ -122,10 +122,10 @@ def test_progress_memo_invalidation_is_scoped_fanned_out_and_atomic(
         connection.execute(
             text(
                 "INSERT INTO learner_corrections "
-                "(id,owner_id,goal_id,topic_stable_id,correction_type,value,"
-                "reason,created_at,supersedes_correction_id) "
+                "(id,owner_id,goal_id,topic_stable_id,correction_type,body_hash,"
+                "created_at,supersedes_correction_id) "
                 "VALUES ('rolled-back-correction',:owner_id,:goal_id,:topic_id,"
-                "'correction','partial','rollback fixture',:created_at,NULL)"
+                "'correction','rollback-hash',:created_at,NULL)"
             ),
             {
                 "owner_id": owner_id,
@@ -133,6 +133,15 @@ def test_progress_memo_invalidation_is_scoped_fanned_out_and_atomic(
                 "topic_id": evidence.topic_stable_id,
                 "created_at": "2026-08-12T12:00:00.000000Z",
             },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO learner_correction_bodies "
+                "(correction_id,owner_id,goal_id,value,reason) VALUES "
+                "('rolled-back-correction',:owner_id,:goal_id,'partial',"
+                "'rollback fixture')"
+            ),
+            {"owner_id": owner_id, "goal_id": source_id},
         )
         assert (
             connection.execute(
@@ -202,7 +211,7 @@ def test_progress_memo_schema_has_closed_states_and_required_triggers(
     ):
         connection.execute(
             text(
-                "UPDATE goal_progress_memos SET coverage='completed' "
+                "UPDATE goal_progress_memo_bodies SET coverage='completed' "
                 "WHERE goal_id=:goal_id"
             ),
             {"goal_id": evidence.goal_id},

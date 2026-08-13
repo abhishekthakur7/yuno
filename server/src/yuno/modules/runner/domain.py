@@ -43,6 +43,9 @@ class ProcessLimits:
     output_bytes: int
     file_bytes: int
     temp_bytes: int
+    stdout_bytes: int | None = None
+    stderr_bytes: int | None = None
+    temp_files: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,3 +68,4 @@ class RunnerProcessOutcome:
     chunks: tuple[OutputChunk, ...]
     duration_ms: int
     cpu_ms: int | None = None
+    limit_classification: str | None = None

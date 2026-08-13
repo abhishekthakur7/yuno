@@ -46,6 +46,7 @@ from yuno.shared.application.jobs import JobRef, JobStatus
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import (
     DomainValidationError,
+    GeneratedContentLimitError,
     IdempotencyConflictError,
     NotFoundError,
 )
@@ -641,7 +642,15 @@ def find_generation_replay(
     return None
 
 
-def run_generation(uow_factory, adapter, owner_id, attempt_id):
+def run_generation(
+    uow_factory,
+    adapter,
+    owner_id,
+    attempt_id,
+    *,
+    max_body_bytes: int = 2 * 1024 * 1024,
+    retained_owner_limit: int = 5_000,
+):
     with uow_factory() as uow:
         attempt = uow.learning_content.get_attempt(owner_id, attempt_id)
         if attempt is None:
@@ -718,6 +727,14 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
             )
         with uow_factory() as uow:
             artifact = uow.learning_content.get_artifact(owner_id, attempt.artifact_id)
+            _validate_generated_content_limits(
+                uow,
+                owner_id,
+                artifact,
+                result.body,
+                max_body_bytes=max_body_bytes,
+                retained_owner_limit=retained_owner_limit,
+            )
             timestamp = result.generated_at
             snapshot_id = new_id()
             snapshot_hash = hash_payload(
@@ -789,7 +806,7 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
                 artifact.id,
                 {
                     "state": ArtifactState.READY,
-                    "body_ref": "inline:" + result.body,
+                    "body": result.body,
                     "body_hash": body_hash,
                     "current_snapshot_id": snapshot_id,
                     "producing_job_id": attempt.job_id,
@@ -838,7 +855,11 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
                 "running",
                 {
                     "status": GenerationAttemptStatus.FAILED,
-                    "failure_classification": type(exc).__name__,
+                    "failure_classification": (
+                        exc.code
+                        if isinstance(exc, GeneratedContentLimitError)
+                        else type(exc).__name__
+                    ),
                     "failure_reference": f"generation:{attempt.id}",
                     "retryable": True,
                     "completed_at": timestamp,
@@ -846,6 +867,30 @@ def run_generation(uow_factory, adapter, owner_id, attempt_id):
             )
             uow.commit()
         raise
+
+
+def _validate_generated_content_limits(
+    uow: LearningContentUnitOfWork,
+    owner_id: str,
+    artifact: GeneratedArtifact,
+    body: str,
+    *,
+    max_body_bytes: int,
+    retained_owner_limit: int,
+) -> None:
+    if len(body.encode("utf-8", errors="strict")) > max_body_bytes:
+        raise GeneratedContentLimitError(
+            f"Generated content may contain at most {max_body_bytes} UTF-8 bytes.",
+            recovery_action="Generate a smaller artifact and try again.",
+        )
+    if (
+        artifact.body is None
+        and uow.learning_content.count_live_artifacts(owner_id) >= retained_owner_limit
+    ):
+        raise GeneratedContentLimitError(
+            f"An owner may retain at most {retained_owner_limit} generated artifacts.",
+            recovery_action="Delete or export an existing artifact before generating another.",
+        )
 
 
 def _job_ref(attempt, deduplicated):

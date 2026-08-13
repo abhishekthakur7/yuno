@@ -26,7 +26,12 @@ from yuno.modules.evidence_evaluation.service import (
 from yuno.shared.application.jobs import JobRef, JobRequest, JobStatus
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
-from yuno.shared.domain.errors import ConflictError, DomainValidationError
+from yuno.shared.domain.errors import (
+    ConflictError,
+    DomainValidationError,
+    EvidenceCountLimitError,
+    EvidenceTooLargeError,
+)
 from yuno.shared.domain.ids import new_id
 
 
@@ -186,6 +191,61 @@ def test_evidence_requires_an_active_goal_and_nonblank_payload(
         )
 
 
+def test_evidence_limits_are_utf8_exact_and_fail_before_append(
+    uow_factory: UnitOfWorkFactory,
+) -> None:
+    _graph_id, topic_id, goal_id = _seed(uow_factory)
+    with uow_factory() as uow:
+        owner = uow.owners.get_local_owner()
+        assert owner is not None
+        exact = create_evidence(
+            uow,
+            owner.id,
+            goal_id,
+            topic_stable_id=topic_id,
+            evidence_type="answer",
+            capability="implement",
+            summary="Exact UTF-8 boundary",
+            origin="learner-submit",
+            content="éé",
+            content_version="v1",
+            max_payload_bytes=4,
+            retained_owner_limit=1,
+        )
+        assert exact.id
+        with pytest.raises(EvidenceCountLimitError):
+            create_evidence(
+                uow,
+                owner.id,
+                goal_id,
+                topic_stable_id=topic_id,
+                evidence_type="answer",
+                capability="implement",
+                summary="Count overflow",
+                origin="learner-submit",
+                content="x",
+                content_version="v1",
+                max_payload_bytes=4,
+                retained_owner_limit=1,
+            )
+        with pytest.raises(EvidenceTooLargeError):
+            create_evidence(
+                uow,
+                owner.id,
+                goal_id,
+                topic_stable_id=topic_id,
+                evidence_type="answer",
+                capability="implement",
+                summary="Byte overflow",
+                origin="learner-submit",
+                content="ééx",
+                content_version="v1",
+                max_payload_bytes=4,
+                retained_owner_limit=2,
+            )
+        assert uow.evidence.count_live_evidence(owner.id) == 1
+
+
 def test_reevaluation_creates_a_linear_successor_and_excludes_only_the_tip_atomically(
     client, uow_factory: UnitOfWorkFactory, engine
 ) -> None:
@@ -224,9 +284,12 @@ def test_reevaluation_creates_a_linear_successor_and_excludes_only_the_tip_atomi
             request_reevaluation(uow, owner_id, first.id, dispute.id)
 
     with engine.begin() as connection:
-        with pytest.raises(Exception, match="successor-backed derivation exclusion"):
+        with pytest.raises(Exception, match="immutable"):
             connection.execute(
-                text("UPDATE assessments SET feedback='rewritten' WHERE id=:id"),
+                text(
+                    "UPDATE assessment_bodies SET feedback='rewritten' "
+                    "WHERE assessment_id=:id"
+                ),
                 {"id": second.id},
             )
         with pytest.raises(Exception, match="immutable"):

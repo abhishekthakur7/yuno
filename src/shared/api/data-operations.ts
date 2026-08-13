@@ -13,7 +13,7 @@ function failure(error: components['schemas']['ErrorResponse'] | undefined, stat
 
 export async function createExport(goalId: string | null, idempotencyKey: string): Promise<JobRef> {
   const { data, error, response } = await client.POST('/api/v1/exports', {
-    params: { header: { 'Idempotency-Key': idempotencyKey } }, body: { goal_id: goalId },
+    params: { header: { 'Idempotency-Key': idempotencyKey } }, body: { goal_id: goalId, version: '1.0' },
   })
   if (error || !data) failure(error, response.status, 'The export could not be started.')
   return data
@@ -56,6 +56,6 @@ export function deleteOperationQueryOptions(operationId: string | null) {
       if (error || !data) failure(error, response.status, 'Delete status could not be loaded.')
       return data
     },
-    refetchInterval: (query) => query.state.data && ['queued', 'running'].includes(query.state.data.status) ? 2_000 : false,
+    refetchInterval: (query) => query.state.data && ['queued', 'running', 'cleanup-pending', 'cleanup-failed'].includes(query.state.data.status) ? 2_000 : false,
   })
 }

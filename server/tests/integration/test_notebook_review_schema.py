@@ -15,6 +15,18 @@ def test_notebook_and_review_composite_ownership_and_queue_index(
         and fk["referred_columns"] == ["id", "owner_id"]
         for fk in entry_fks
     )
+    assert "markdown" not in {
+        column["name"] for column in inspector.get_columns("notebook_entries")
+    }
+    assert {"entry_id", "owner_id", "goal_id", "markdown"} <= {
+        column["name"] for column in inspector.get_columns("notebook_entry_bodies")
+    }
+    assert not {"prompt", "answer", "context"} & {
+        column["name"] for column in inspector.get_columns("review_items")
+    }
+    assert not {"response", "feedback", "correction"} & {
+        column["name"] for column in inspector.get_columns("review_attempts")
+    }
     assert any(
         fk["constrained_columns"] == ["evidence_id", "owner_id", "goal_id"]
         and fk["referred_table"] == "evidence"

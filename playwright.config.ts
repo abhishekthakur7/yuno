@@ -11,7 +11,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'YUNO_DATABASE_URL="sqlite+pysqlite:///./.e2e.db" uv run --directory server alembic upgrade head && YUNO_DATABASE_URL="sqlite+pysqlite:///./.e2e.db" uv run --directory server uvicorn yuno.main:app --host 127.0.0.1 --port 8000',
+      command: 'e2e_database="$(mktemp "${TMPDIR:-/tmp}/yuno-e2e.XXXXXX")"; YUNO_DATABASE_URL="sqlite+pysqlite:///$e2e_database" uv run --directory server alembic upgrade head && YUNO_DATABASE_URL="sqlite+pysqlite:///$e2e_database" uv run --directory server uvicorn yuno.main:app --host 127.0.0.1 --port 8000',
       url: 'http://127.0.0.1:8000/api/v1/health',
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
+from pathlib import Path
+from tempfile import gettempdir
 
 from fastapi import APIRouter, FastAPI
 
@@ -48,6 +52,14 @@ from yuno.api.routes.search import router as search_router
 from yuno.api.routes.settings_data import router as settings_data_router
 from yuno.api.routes.system import router as system_router
 from yuno.config import Settings, get_settings
+from yuno.modules.data_lifecycle.repository import SqlAlchemyDataLifecycleRepository
+from yuno.modules.data_lifecycle.service import (
+    ApprovedCleanupRoots,
+    RetentionPolicy,
+    execute_pending_cleanup,
+    run_retention_cycle,
+    runner_workspace_path_ref,
+)
 from yuno.modules.evidence_evaluation.service import delete_goal
 from yuno.modules.identity.service import ensure_local_owner
 from yuno.modules.jobs_events.service import DurableJobDispatcher
@@ -61,7 +73,11 @@ from yuno.modules.runner.adapters import LocalRunnerProcessPort, LocalTempWorksp
 from yuno.modules.runner.repository import RunnerRepository
 from yuno.modules.runner.service import execute_runner_job
 from yuno.modules.search.service import rebuild_search_projection
-from yuno.modules.settings_data.service import complete_export, ensure_owner_settings
+from yuno.modules.settings_data.service import (
+    build_export_package,
+    ensure_owner_settings,
+    publish_export_package,
+)
 from yuno.shared.application.jobs import (
     JobCompletion,
     JobExecution,
@@ -77,7 +93,11 @@ from yuno.shared.infrastructure.database import (
     create_engine_for,
     create_session_factory,
 )
-from yuno.shared.infrastructure.structured_logging import configure_structured_logging
+from yuno.shared.infrastructure.structured_logging import (
+    configure_file_structured_logging,
+    expire_structured_log_files,
+    log_event,
+)
 from yuno.unit_of_work import (
     create_probe_unit_of_work_factory,
     create_transaction_unit_of_work_factory,
@@ -85,6 +105,7 @@ from yuno.unit_of_work import (
 )
 
 API_PREFIX = "/api/v1"
+RETENTION_INTERVAL_SECONDS = 3600
 
 
 def _rebuild_search(request: JobRequest, uow_factory):
@@ -93,12 +114,21 @@ def _rebuild_search(request: JobRequest, uow_factory):
     )
 
 
-def _complete_export(request: JobRequest, uow_factory):
-    with uow_factory() as uow:
-        operation = complete_export(
-            uow, request.owner_id, str(request.payload["operation_id"])
+def _build_export(request: JobRequest, uow_factory, settings: Settings):
+    with uow_factory() as read_uow:
+        return build_export_package(
+            read_uow,
+            request.owner_id,
+            str(request.payload["operation_id"]),
+            package_retention_seconds=settings.export_package_retention_seconds,
+            metadata_retention_days=settings.export_operation_retention_days,
         )
-        uow.commit()
+
+
+def _publish_export(package, uow_factory):
+    with uow_factory() as write_uow:
+        operation = publish_export_package(write_uow, package)
+        write_uow.commit()
         return operation
 
 
@@ -119,7 +149,6 @@ def _complete_delete(request: JobRequest, uow_factory):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application; tests may inject scratch-database settings."""
-    configure_structured_logging()
     resolved_settings = settings if settings is not None else get_settings()
 
     @asynccontextmanager
@@ -128,6 +157,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_engine_for(resolved_settings.database_url)
         try:
             head_revision = require_single_head(engine)
+            configure_file_structured_logging(
+                resolved_settings.structured_log_directory,
+                max_bytes=resolved_settings.structured_log_file_max_bytes,
+                backup_count=resolved_settings.structured_log_file_count - 1,
+                max_age=timedelta(days=resolved_settings.structured_log_retention_days),
+            )
 
             session_factory = create_session_factory(engine)
             uow_factory = create_unit_of_work_factory(session_factory)
@@ -139,6 +174,83 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ensure_owner_settings(uow, owner.id)
                 uow.commit()
 
+            retention_policy = RetentionPolicy(
+                diagnostic_days=resolved_settings.diagnostic_abandoned_retention_days,
+                interview_days=resolved_settings.interview_inactive_retention_days,
+                terminal_job_days=resolved_settings.terminal_job_retention_days,
+                job_event_days=resolved_settings.job_event_retention_days,
+                job_event_owner_limit=resolved_settings.job_event_owner_limit,
+                runner_output_days=resolved_settings.runner_output_retention_days,
+            )
+            cleanup_roots = ApprovedCleanupRoots(
+                runner=Path(gettempdir()),
+                source=resolved_settings.source_snapshot_root,
+                quarantine=resolved_settings.provider_quarantine_root,
+            )
+
+            def apply_retention() -> None:
+                expire_structured_log_files()
+                try:
+                    retained, cleaned = run_retention_cycle(
+                        uow_factory,
+                        owner.id,
+                        now=SystemClock().now(),
+                        roots=cleanup_roots,
+                        policy=retention_policy,
+                    )
+                except Exception:  # noqa: BLE001 -- safe classification is visible
+                    app.state.retention_failure_classification = (
+                        "retention-cycle-failed"
+                    )
+                    log_event(
+                        "retention.cycle.failed",
+                        owner_id=owner.id,
+                        lifecycle="failed",
+                        diagnostic_classification="retention-cycle-failed",
+                    )
+                    return
+                app.state.retention_failure_classification = (
+                    "external-cleanup-failed" if cleaned.failed else None
+                )
+                app.state.last_retention_result = retained
+                app.state.last_cleanup_result = cleaned
+                log_event(
+                    "retention.cycle.completed",
+                    owner_id=owner.id,
+                    lifecycle="complete" if not cleaned.failed else "failed",
+                    diagnostic_classification=(
+                        "external-cleanup-failed" if cleaned.failed else None
+                    ),
+                )
+
+            def apply_external_cleanup(owner_id: str) -> None:
+                execute_pending_cleanup(
+                    uow_factory,
+                    owner_id,
+                    roots=cleanup_roots,
+                    completed_at=now_text(SystemClock()),
+                )
+
+            def record_workspace_cleanup(
+                session, owner_id: str, goal_id: str | None, raw_path: str
+            ) -> str | None:
+                path_ref = runner_workspace_path_ref(raw_path, cleanup_roots.runner)
+                if path_ref is None:
+                    return "cleanup-reference-invalid"
+                SqlAlchemyDataLifecycleRepository(session).record_workspace(
+                    owner_id=owner_id,
+                    goal_id=goal_id,
+                    path_ref=path_ref,
+                    failure_classification=None,
+                    created_at=now_text(SystemClock()),
+                )
+                return None
+
+            async def periodically_apply_retention() -> None:
+                while True:
+                    await asyncio.sleep(RETENTION_INTERVAL_SECONDS)
+                    await asyncio.to_thread(apply_retention)
+
             dispatcher = DurableJobDispatcher(
                 session_factory,
                 pending_cap=lambda: resolved_settings.pending_job_cap,
@@ -148,6 +260,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 janitor_retention_seconds=lambda: (
                     resolved_settings.job_janitor_retention_seconds
                 ),
+                record_workspace_cleanup=record_workspace_cleanup,
+                execute_external_cleanup=apply_external_cleanup,
             )
 
             def result_for(kind: str, execution: JobExecution) -> JobResult:
@@ -173,6 +287,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
 
                 return handle
+
+            def export_job_handler(execution: JobExecution) -> JobCompletion:
+                execution.checkpoint()
+                package = _build_export(
+                    execution.request, uow_factory, resolved_settings
+                )
+                execution.checkpoint()
+                return JobCompletion(
+                    result_for("export_data", execution),
+                    lambda session: apply_operation(
+                        "export_data",
+                        execution,
+                        session,
+                        lambda _request, completion_uow_factory: _publish_export(
+                            package, completion_uow_factory
+                        ),
+                    ),
+                )
 
             def apply_operation(kind, execution, session, operation, adapter=None):
                 try:
@@ -311,6 +443,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         adapter,
                         request.owner_id,
                         str(request.payload["attempt_id"]),
+                        max_body_bytes=resolved_settings.generated_body_max_bytes,
+                        retained_owner_limit=(
+                            resolved_settings.generated_retained_owner_limit
+                        ),
                     ),
                     lambda execution: ProviderGenerationAdapter(app, execution),
                     "generate",
@@ -447,6 +583,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     resolved_settings,
                     app.state.runner_process_port,
                     app.state.runner_workspace_port,
+                    SqlAlchemyDataLifecycleRepository,
+                    lambda path: runner_workspace_path_ref(path, cleanup_roots.runner),
                 ),
             )
             dispatcher.register(
@@ -458,9 +596,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     ),
                 ),
             )
-            dispatcher.register(
-                "export_data", job_handler("export_data", _complete_export)
-            )
+            dispatcher.register("export_data", export_job_handler)
             dispatcher.register(
                 "delete_goal", job_handler("delete_goal", _complete_delete)
             )
@@ -551,6 +687,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     continue
             dispatcher.start()
 
+            # Startup reconciliation and its one-hour runner janitor run first;
+            # retention still completes before the app accepts traffic.
+            apply_retention()
+            retention_task = asyncio.create_task(periodically_apply_retention())
+
             with uow_factory() as followup_uow:
                 pending_followups = (
                     followup_uow.canonical_merges.list_pending_merge_followups()
@@ -589,6 +730,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             yield
         finally:
+            periodic_retention = locals().get("retention_task")
+            if periodic_retention is not None:
+                periodic_retention.cancel()
+                try:
+                    await periodic_retention
+                except asyncio.CancelledError:
+                    pass
             durable_dispatcher = locals().get("dispatcher")
             if durable_dispatcher is not None:
                 durable_dispatcher.stop()

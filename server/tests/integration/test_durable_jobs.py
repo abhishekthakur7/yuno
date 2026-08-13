@@ -10,10 +10,16 @@ from sqlalchemy import func, select, text
 
 from tests.job_assertions import wait_for_job
 from yuno.modules.audit.models import AuditEventRow
+from yuno.modules.data_lifecycle.domain import CleanupIntentStatus
+from yuno.modules.data_lifecycle.repository import SqlAlchemyDataLifecycleRepository
+from yuno.modules.data_lifecycle.service import (
+    ApprovedCleanupRoots,
+    execute_pending_cleanup,
+    runner_workspace_path_ref,
+)
 from yuno.modules.identity.service import ensure_local_owner
 from yuno.modules.jobs_events import service as job_service
 from yuno.modules.jobs_events.models import (
-    JobAttemptRow,
     JobEventRow,
     JobResultRow,
     JobRow,
@@ -30,9 +36,8 @@ from yuno.shared.application.jobs import (
     JobStatus,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
-from yuno.shared.domain.errors import ConflictError
+from yuno.shared.domain.errors import ConflictError, PendingJobCapError
 from yuno.shared.domain.hashing import hash_payload
-from yuno.shared.domain.ids import new_id
 
 
 def _owner(uow_factory) -> str:
@@ -40,6 +45,23 @@ def _owner(uow_factory) -> str:
         owner = ensure_local_owner(uow, "Job test owner")
         uow.commit()
         return owner.id
+
+
+def _cleanup_recorder(root):
+    def record(session, owner_id, goal_id, raw_path):
+        path_ref = runner_workspace_path_ref(raw_path, root)
+        if path_ref is None:
+            return "cleanup-reference-invalid"
+        SqlAlchemyDataLifecycleRepository(session).record_workspace(
+            owner_id=owner_id,
+            goal_id=goal_id,
+            path_ref=path_ref,
+            failure_classification=None,
+            created_at="2026-08-13T00:00:00.000000Z",
+        )
+        return None
+
+    return record
 
 
 def _dispatcher(session_factory, handlers: dict[str, object]) -> DurableJobDispatcher:
@@ -198,7 +220,7 @@ def test_startup_reconciles_active_states_and_sweeps_temp_path(
     owner = _owner(uow_factory)
     clock = SystemClock()
     timestamp = now_text(clock)
-    temp = tmp_path / "attempt"
+    temp = tmp_path / "yuno-runner-attempt"
     temp.mkdir()
     (temp / "partial").write_text("x")
     with session_factory() as session:
@@ -212,19 +234,13 @@ def test_startup_reconciles_active_states_and_sweeps_temp_path(
         running.attempt = 1
         running.started_at = timestamp
         cancelling.state = "cancel-requested"
-        session.add(
-            JobAttemptRow(
-                id=new_id(),
-                owner_id=owner,
-                job_id=running.id,
-                attempt_number=1,
-                process_identity="999:old",
-                pid=999,
-                pgid=999,
-                temp_path=str(temp),
-                started_at=timestamp,
-            )
+        attempt = repo.add_attempt(
+            running,
+            process_identity="999:old",
+            pid=999,
+            pgid=999,
         )
+        attempt.temp_path = str(temp)
         session.commit()
         ids = running.id, queued.id, cancelling.id
     dispatcher = DurableJobDispatcher(
@@ -232,6 +248,7 @@ def test_startup_reconciles_active_states_and_sweeps_temp_path(
         pending_cap=20,
         background_age_promotion_seconds=1,
         janitor_retention_seconds=1,
+        record_workspace_cleanup=_cleanup_recorder(tmp_path),
     )
     dispatcher.register("bulk_index", lambda _request: None)
     dispatcher.reconcile_startup()
@@ -239,6 +256,19 @@ def test_startup_reconciles_active_states_and_sweeps_temp_path(
     assert dispatcher.get(owner, ids[0]).retryable is True
     assert dispatcher.get(owner, ids[1]).status is JobStatus.QUEUED
     assert dispatcher.get(owner, ids[2]).status is JobStatus.CANCELLED
+    assert temp.exists()
+    with uow_factory() as uow:
+        intents = uow.data_lifecycle.list_pending_cleanup_intents(owner)
+    assert len(intents) == 1
+    assert intents[0].owner_id == owner
+    assert intents[0].path_ref == "runner-workspace:yuno-runner-attempt"
+    assert intents[0].status is CleanupIntentStatus.PENDING
+    execute_pending_cleanup(
+        uow_factory,
+        owner,
+        roots=ApprovedCleanupRoots(tmp_path, tmp_path),
+        completed_at=timestamp,
+    )
     assert not temp.exists()
 
 
@@ -347,8 +377,12 @@ def test_queued_cancel_and_pending_cap_are_durable(
         ),
     )
     queued = dispatcher.enqueue(JobRequest("rebuild_index", owner, {}))
-    with pytest.raises(Exception, match="pending-job cap"):
+    with session_factory() as session:
+        assert JobRepository(session, SystemClock()).pending_count("another-owner") == 0
+    with pytest.raises(PendingJobCapError, match="pending-job cap") as capped:
         dispatcher.enqueue(JobRequest("rebuild_index", owner, {}))
+    assert capped.value.code == "pending-job-cap"
+    assert capped.value.http_status == 429
     cancelled = dispatcher.cancel(owner, queued.job_id)
     assert cancelled.status is JobStatus.CANCELLED
     assert dispatcher.cancel(owner, queued.job_id).status is JobStatus.CANCELLED
@@ -358,7 +392,7 @@ def test_attempt_runtime_result_and_audit_are_persisted(
     session_factory, uow_factory, tmp_path
 ) -> None:
     owner = _owner(uow_factory)
-    runtime_path = tmp_path / "runtime"
+    runtime_path = tmp_path / "yuno-runner-runtime"
     runtime_path.mkdir()
 
     def handler(execution: JobExecution) -> JobCompletion:
@@ -378,6 +412,7 @@ def test_attempt_runtime_result_and_audit_are_persisted(
         pending_cap=10,
         background_age_promotion_seconds=60,
         janitor_retention_seconds=0,
+        record_workspace_cleanup=_cleanup_recorder(tmp_path),
     )
     dispatcher.register("rebuild_index", handler)
     dispatcher.start()
@@ -385,14 +420,19 @@ def test_attempt_runtime_result_and_audit_are_persisted(
     terminal = _wait(dispatcher, owner, ref.job_id, JobStatus.SUCCEEDED)
     assert terminal.result_ref == "index:authoritative"
     attempts = dispatcher.attempts(owner, ref.job_id)
-    assert attempts[0].temp_path == str(runtime_path)
+    assert attempts[0].temp_path is None
+    with uow_factory() as uow:
+        intents = uow.data_lifecycle.list_pending_cleanup_intents(owner)
+    assert [intent.path_ref for intent in intents] == [
+        "runner-workspace:yuno-runner-runtime"
+    ]
     with session_factory() as session:
         audit_actions = session.scalars(
             select(AuditEventRow.action).where(AuditEventRow.entity_id == ref.job_id)
         ).all()
     assert {"enqueued", "succeeded"} <= set(audit_actions)
     dispatcher.stop()
-    assert not runtime_path.exists()
+    assert runtime_path.exists()
 
 
 def test_only_one_worker_process_owner_per_database(session_factory) -> None:
@@ -557,7 +597,7 @@ def test_background_age_promotion_and_fifo(session_factory, uow_factory) -> None
 
 
 def test_startup_cleanup_failure_aborts_and_rolls_back(
-    session_factory, uow_factory, monkeypatch
+    session_factory, uow_factory, tmp_path
 ) -> None:
     owner = _owner(uow_factory)
     clock = SystemClock()
@@ -567,18 +607,16 @@ def test_startup_cleanup_failure_aborts_and_rolls_back(
         row = repo.enqueue(JobRequest("rebuild_index", owner, {}), JobLane.BACKGROUND)
         row.state, row.attempt, row.started_at = "running", 1, timestamp
         repo.add_attempt(row, process_identity="999:old", pid=999, pgid=999)
-        repo.latest_attempt(row.id).temp_path = "/tmp/yuno-unremovable-test"
+        repo.latest_attempt(row.id).temp_path = "/etc/yuno-runner-unapproved"
         session.commit()
     dispatcher = DurableJobDispatcher(
         session_factory,
         pending_cap=10,
         background_age_promotion_seconds=60,
         janitor_retention_seconds=60,
+        record_workspace_cleanup=_cleanup_recorder(tmp_path),
     )
-    monkeypatch.setattr(
-        dispatcher, "_remove_temp_path", lambda _path: "cleanup failed: PermissionError"
-    )
-    with pytest.raises(RuntimeError, match="Startup reconciliation failed"):
+    with pytest.raises(RuntimeError, match="cleanup-reference-invalid"):
         dispatcher.start()
     assert dispatcher.get(owner, row.id).status is JobStatus.RUNNING
 

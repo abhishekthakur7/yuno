@@ -7,6 +7,7 @@ from typing import Protocol
 
 from yuno.modules.audit.ports import AuditRepository
 from yuno.modules.profiles_goals.domain import (
+    GoalLifecycle,
     GoalNavigationEvent,
     GoalWorkspace,
     IdempotencyRecord,
@@ -26,10 +27,10 @@ class ProfilesGoalsRepository(Protocol):
     def get_goal(self, owner_id: str, goal_id: str) -> GoalWorkspace | None: ...
     def get_goal_for_lifecycle(
         self, owner_id: str, goal_id: str
-    ) -> GoalWorkspace | None: ...
+    ) -> GoalLifecycle | None: ...
     def tombstone_goal(
         self, owner_id: str, goal_id: str, expected_version: int
-    ) -> GoalWorkspace | None: ...
+    ) -> GoalLifecycle | None: ...
     def create_goal(self, goal: GoalWorkspace) -> GoalWorkspace: ...
     def update_goal(
         self,

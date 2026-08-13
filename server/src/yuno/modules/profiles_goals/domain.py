@@ -73,6 +73,14 @@ class GoalWorkspace:
 
 
 @dataclass(frozen=True)
+class GoalLifecycle:
+    id: str
+    owner_id: str
+    status: GoalStatus
+    row_version: int
+
+
+@dataclass(frozen=True)
 class GoalNavigationEvent:
     id: str
     owner_id: str

@@ -10,7 +10,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yuno.shared.infrastructure.base import Base, id_column, utc_timestamp_column
 
@@ -21,7 +21,6 @@ class SourceRow(Base):
         UniqueConstraint("id", "owner_id", name="uq_sources_id_owner"),
         CheckConstraint("length(trim(origin)) > 0", name="origin_non_blank"),
         CheckConstraint("length(trim(source_type)) > 0", name="source_type_non_blank"),
-        CheckConstraint("length(trim(title)) > 0", name="title_non_blank"),
         CheckConstraint(
             "length(trim(license_status)) > 0", name="license_status_non_blank"
         ),
@@ -30,10 +29,9 @@ class SourceRow(Base):
             name="availability_status_valid",
         ),
         Index(
-            "ix_sources_owner_availability_title",
+            "ix_sources_owner_availability",
             "owner_id",
             "availability_status",
-            "title",
         ),
     )
 
@@ -41,13 +39,14 @@ class SourceRow(Base):
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     origin: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    publisher: Mapped[str | None] = mapped_column(Text)
-    canonical_url: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     license_status: Mapped[str] = mapped_column(Text, nullable=False)
     availability_status: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()
     updated_at: Mapped[str] = utc_timestamp_column()
+    body: Mapped[SourceBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
 
 
 class SourceSnapshotRow(Base):
@@ -66,7 +65,6 @@ class SourceSnapshotRow(Base):
             "status IN ('available','unavailable','withdrawn','failed')",
             name="status_valid",
         ),
-        CheckConstraint("length(trim(content_ref)) > 0", name="content_ref_non_blank"),
         CheckConstraint(
             "length(trim(content_hash)) > 0", name="content_hash_non_blank"
         ),
@@ -75,11 +73,11 @@ class SourceSnapshotRow(Base):
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     source_id: Mapped[str] = mapped_column(Text, nullable=False)
     retrieved_at: Mapped[str] = utc_timestamp_column()
-    content_ref: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    version_label: Mapped[str | None] = mapped_column(Text)
-    redacted_failure: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[SourceSnapshotBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
 
 
 class SourceRetrievalCommandRow(Base):
@@ -241,7 +239,6 @@ class ClaimRow(Base):
             name="snapshot_generated_only",
         ),
         CheckConstraint("sensitive IN (0,1)", name="sensitive_in_0_1"),
-        CheckConstraint("length(trim(claim_text)) > 0", name="claim_text_non_blank"),
     )
     id: Mapped[str] = id_column()
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
@@ -249,10 +246,13 @@ class ClaimRow(Base):
     content_revision_id: Mapped[str | None] = mapped_column(Text)
     generated_artifact_id: Mapped[str | None] = mapped_column(Text)
     snapshot_id: Mapped[str | None] = mapped_column(Text)
-    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    claim_hash: Mapped[str] = mapped_column(Text, nullable=False)
     claim_type: Mapped[str] = mapped_column(Text, nullable=False)
     sensitive: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[ClaimBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
 
 
 class CitationRow(Base):
@@ -289,10 +289,9 @@ class CitationRow(Base):
             "claim_id",
             "source_id",
             "source_snapshot_id",
-            "locator",
+            "body_hash",
             name="uq_citations_support",
         ),
-        CheckConstraint("length(trim(locator)) > 0", name="locator_non_blank"),
         CheckConstraint(
             "length(trim(support_kind)) > 0", name="support_kind_non_blank"
         ),
@@ -303,6 +302,80 @@ class CitationRow(Base):
     claim_id: Mapped[str] = mapped_column(Text, nullable=False)
     source_id: Mapped[str] = mapped_column(Text, nullable=False)
     source_snapshot_id: Mapped[str | None] = mapped_column(Text)
-    locator: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     support_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[CitationBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
+
+
+class SourceBodyRow(Base):
+    __tablename__ = "source_bodies"
+    source_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    publisher: Mapped[str | None] = mapped_column(Text)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_id", "owner_id"],
+            ["sources.id", "sources.owner_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("length(trim(title)) > 0", name="title_non_blank"),
+    )
+
+
+class SourceSnapshotBodyRow(Base):
+    __tablename__ = "source_snapshot_bodies"
+    snapshot_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    source_id: Mapped[str] = mapped_column(Text, nullable=False)
+    content_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    version_label: Mapped[str | None] = mapped_column(Text)
+    redacted_failure: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["snapshot_id", "owner_id", "source_id"],
+            [
+                "source_snapshots.id",
+                "source_snapshots.owner_id",
+                "source_snapshots.source_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("length(trim(content_ref)) > 0", name="content_ref_non_blank"),
+    )
+
+
+class ClaimBodyRow(Base):
+    __tablename__ = "claim_bodies"
+    claim_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str | None] = mapped_column(Text)
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["claim_id", "owner_id"],
+            ["claims.id", "claims.owner_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("length(trim(claim_text)) > 0", name="claim_text_non_blank"),
+    )
+
+
+class CitationBodyRow(Base):
+    __tablename__ = "citation_bodies"
+    citation_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
+    locator: Mapped[str] = mapped_column(Text, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["citation_id", "owner_id", "goal_id"],
+            ["citations.id", "citations.owner_id", "citations.goal_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("length(trim(locator)) > 0", name="locator_non_blank"),
+    )

@@ -46,15 +46,18 @@ from yuno.modules.canonical.domain import (
 )
 from yuno.modules.canonical.models import (
     CanonicalGraphVersionRow,
+    CanonicalMergeFollowupBodyRow,
     CanonicalMergeFollowupRow,
     CanonicalMergeProposalRow,
     ContentRevisionRow,
     EditorialApprovalRow,
+    MergeItemBodyRow,
     MergeItemRow,
     TopicIdentityRow,
     TopicRelationRow,
     TopicRow,
 )
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.repository import SqlAlchemyRepository
 
 
@@ -289,6 +292,16 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
         )
         self._session.flush()
         for item in items:
+            payload_json = json.dumps(
+                item.payload, sort_keys=True, separators=(",", ":")
+            )
+            body_values = {
+                "title": item.title,
+                "summary": item.summary,
+                "impact": item.impact,
+                "resolution_explanation": item.resolution_explanation,
+                "payload_json": payload_json,
+            }
             self._session.add(
                 MergeItemRow(
                     id=item.id,
@@ -298,19 +311,22 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
                     entity_type=item.entity_type.value,
                     change_type=item.change_type.value,
                     topic_id=item.topic_id,
-                    title=item.title,
-                    summary=item.summary,
-                    impact=item.impact,
+                    body_hash=hash_payload(body_values),
                     conflict_type=item.conflict_type,
                     selected=int(item.selected),
                     recommended_resolution=item.recommended_resolution.value,
                     chosen_resolution=item.chosen_resolution.value
                     if item.chosen_resolution
                     else None,
-                    resolution_explanation=item.resolution_explanation,
-                    payload_json=json.dumps(
-                        item.payload, sort_keys=True, separators=(",", ":")
-                    ),
+                )
+            )
+            self._session.flush()
+            self._session.add(
+                MergeItemBodyRow(
+                    item_id=item.id,
+                    owner_id=proposal.owner_id,
+                    goal_id=proposal.goal_id,
+                    **body_values,
                 )
             )
         self._session.flush()
@@ -344,20 +360,20 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
         ).first()
         return _merge_proposal(row) if row else None
 
-    def list_merge_items(
-        self, owner_id: str, proposal_id: str
-    ) -> Sequence[MergeItem]:
-        return tuple(
-            _merge_item(row)
-            for row in self._session.scalars(
-                select(MergeItemRow)
-                .where(
-                    MergeItemRow.owner_id == owner_id,
-                    MergeItemRow.proposal_id == proposal_id,
-                )
-                .order_by(MergeItemRow.id)
-            ).all()
-        )
+    def list_merge_items(self, owner_id: str, proposal_id: str) -> Sequence[MergeItem]:
+        values: list[MergeItem] = []
+        for row in self._session.scalars(
+            select(MergeItemRow)
+            .where(
+                MergeItemRow.owner_id == owner_id,
+                MergeItemRow.proposal_id == proposal_id,
+            )
+            .order_by(MergeItemRow.id)
+        ).all():
+            body = self._session.get(MergeItemBodyRow, row.id)
+            if body is not None:
+                values.append(_merge_item(row, body))
+        return tuple(values)
 
     def close_merge_proposal(
         self,
@@ -403,8 +419,6 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
         payload_json = json.dumps(
             followup.payload, sort_keys=True, separators=(",", ":")
         )
-        from yuno.shared.domain.hashing import hash_payload
-
         self._session.add(
             CanonicalMergeFollowupRow(
                 id=followup.id,
@@ -412,11 +426,19 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
                 goal_id=followup.goal_id,
                 proposal_id=followup.proposal_id,
                 kind=followup.kind,
-                payload_json=payload_json,
                 payload_hash=hash_payload(followup.payload),
                 status=followup.status,
                 job_id=followup.job_id,
                 created_at=followup.created_at,
+            )
+        )
+        self._session.flush()
+        self._session.add(
+            CanonicalMergeFollowupBodyRow(
+                followup_id=followup.id,
+                owner_id=followup.owner_id,
+                goal_id=followup.goal_id,
+                payload_json=payload_json,
             )
         )
         self._session.flush()
@@ -432,20 +454,25 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
             )
             .order_by(CanonicalMergeFollowupRow.id)
         ).all()
-        return tuple(
-            CanonicalMergeFollowup(
-                row.id,
-                row.owner_id,
-                row.goal_id,
-                row.proposal_id,
-                row.kind,
-                json.loads(row.payload_json),
-                row.status,
-                row.job_id,
-                row.created_at,
+        values: list[CanonicalMergeFollowup] = []
+        for row in rows:
+            body = self._session.get(CanonicalMergeFollowupBodyRow, row.id)
+            if body is None:
+                continue
+            values.append(
+                CanonicalMergeFollowup(
+                    row.id,
+                    row.owner_id,
+                    row.goal_id,
+                    row.proposal_id,
+                    row.kind,
+                    json.loads(body.payload_json),
+                    row.status,
+                    row.job_id,
+                    row.created_at,
+                )
             )
-            for row in rows
-        )
+        return tuple(values)
 
     def mark_followup_dispatched(
         self, owner_id: str, followup_id: str, job_id: str
@@ -469,20 +496,25 @@ class SqlAlchemyCanonicalMergeRepository(SqlAlchemyRepository):
                 CanonicalMergeFollowupRow.created_at, CanonicalMergeFollowupRow.id
             )
         ).all()
-        return tuple(
-            CanonicalMergeFollowup(
-                row.id,
-                row.owner_id,
-                row.goal_id,
-                row.proposal_id,
-                row.kind,
-                json.loads(row.payload_json),
-                row.status,
-                row.job_id,
-                row.created_at,
+        values: list[CanonicalMergeFollowup] = []
+        for row in rows:
+            body = self._session.get(CanonicalMergeFollowupBodyRow, row.id)
+            if body is None:
+                continue
+            values.append(
+                CanonicalMergeFollowup(
+                    row.id,
+                    row.owner_id,
+                    row.goal_id,
+                    row.proposal_id,
+                    row.kind,
+                    json.loads(body.payload_json),
+                    row.status,
+                    row.job_id,
+                    row.created_at,
+                )
             )
-            for row in rows
-        )
+        return tuple(values)
 
 
 def _version_to_domain(row: CanonicalGraphVersionRow) -> CanonicalGraphVersion:
@@ -541,20 +573,20 @@ def _merge_proposal(row: CanonicalMergeProposalRow) -> CanonicalMergeProposal:
     )
 
 
-def _merge_item(row: MergeItemRow) -> MergeItem:
+def _merge_item(row: MergeItemRow, body: MergeItemBodyRow) -> MergeItem:
     return MergeItem(
         row.id,
         row.proposal_id,
         MergeEntityType(row.entity_type),
         MergeChangeType(row.change_type),
         row.topic_id,
-        row.title,
-        row.summary,
-        row.impact,
+        body.title,
+        body.summary,
+        body.impact,
         row.conflict_type,
         bool(row.selected),
         MergeResolution(row.recommended_resolution),
         MergeResolution(row.chosen_resolution) if row.chosen_resolution else None,
-        row.resolution_explanation,
-        json.loads(row.payload_json),
+        body.resolution_explanation,
+        json.loads(body.payload_json),
     )

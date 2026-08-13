@@ -40,6 +40,7 @@ class DiagnosticState(StrEnum):
     ROADMAP_PREVIEW = "roadmap-preview"
     CONFIRMED = "confirmed"
     FAILED = "failed"
+    EXPIRED = "expired"
 
 
 class DiagnosticConfidence(StrEnum):

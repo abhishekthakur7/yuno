@@ -10,7 +10,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yuno.shared.infrastructure.base import Base, id_column, utc_timestamp_column
 
@@ -80,23 +80,20 @@ class ProviderRequestRow(Base):
     contract_version: Mapped[str] = mapped_column(Text, nullable=False)
     context_ref_hash: Mapped[str] = mapped_column(Text, nullable=False)
     disclosure_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pid: Mapped[int | None] = mapped_column(Integer)
-    pgid: Mapped[int | None] = mapped_column(Integer)
-    process_identity: Mapped[str | None] = mapped_column(Text)
-    temp_path: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     lifecycle: Mapped[str] = mapped_column(Text, nullable=False)
     diagnostic_classification: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
     started_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
     completed_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
+    body: Mapped[ProviderRequestBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
 
 
 class SchemaQuarantineRow(Base):
     __tablename__ = "schema_quarantines"
     __table_args__ = (
-        CheckConstraint(
-            "json_valid(validation_errors_json)", name="validation_errors_json_valid"
-        ),
         UniqueConstraint("id", "owner_id", name="uq_schema_quarantines_id_owner"),
         ForeignKeyConstraint(
             ["provider_request_id", "owner_id"],
@@ -115,8 +112,45 @@ class SchemaQuarantineRow(Base):
     )
     provider_request_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     job_id: Mapped[str] = mapped_column(Text, nullable=False)
-    raw_output_ref: Mapped[str] = mapped_column(Text, nullable=False)
     raw_output_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     expected_schema_version: Mapped[str] = mapped_column(Text, nullable=False)
-    validation_errors_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()
+    body: Mapped[SchemaQuarantineBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
+
+
+class ProviderRequestBodyRow(Base):
+    __tablename__ = "provider_request_bodies"
+    request_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    pid: Mapped[int | None] = mapped_column(Integer)
+    pgid: Mapped[int | None] = mapped_column(Integer)
+    process_identity: Mapped[str | None] = mapped_column(Text)
+    temp_path: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["request_id", "owner_id"],
+            ["provider_requests.id", "provider_requests.owner_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class SchemaQuarantineBodyRow(Base):
+    __tablename__ = "schema_quarantine_bodies"
+    quarantine_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    raw_output_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    validation_errors_json: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["quarantine_id", "owner_id"],
+            ["schema_quarantines.id", "schema_quarantines.owner_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "json_valid(validation_errors_json)", name="validation_errors_json_valid"
+        ),
+    )

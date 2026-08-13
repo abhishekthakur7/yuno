@@ -87,6 +87,7 @@ containers = [
     "yuno.modules.hands_on",
     "yuno.modules.runner",
     "yuno.modules.search",
+    "yuno.modules.data_lifecycle",
 ]
 layers = [
     "(service)",
@@ -149,6 +150,9 @@ source_modules = [
     "yuno.modules.runner.ports",
     "yuno.modules.search.domain",
     "yuno.modules.search.ports",
+    "yuno.modules.data_lifecycle.domain",
+    "yuno.modules.data_lifecycle.ports",
+    "yuno.modules.data_lifecycle.service",
 ]
 forbidden_modules = [
     "fastapi",
@@ -194,6 +198,7 @@ modules = [
     "yuno.modules.hands_on",
     "yuno.modules.runner",
     "yuno.modules.search",
+    "yuno.modules.data_lifecycle",
 ]
 ignore_imports = [
     "yuno.modules.jobs_events.service -> yuno.modules.audit.**",
@@ -219,4 +224,23 @@ ignore_imports = [
     # immutable evidence/evaluation contract; it never mutates those tables
     # outside that module's public service and repository ports.
     "yuno.modules.hands_on.service -> yuno.modules.evidence_evaluation.**",
+    # Lifecycle governance owns purgeable body tables and the cross-context
+    # retention coordinator. These explicit edges are its only exception to
+    # ordinary bounded-context independence; APIs still use module ports.
+    "yuno.modules.profiles_goals.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.diagnostics.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.learning_content.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.roadmap.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.imports.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.interview.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.notebook_review.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.evidence_evaluation.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.jobs_events.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.jobs_events.models -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.settings_data.repository -> yuno.modules.data_lifecycle.**",
+    "yuno.modules.data_lifecycle.repository -> yuno.modules.diagnostics.**",
+    "yuno.modules.data_lifecycle.repository -> yuno.modules.interview.**",
+    "yuno.modules.data_lifecycle.repository -> yuno.modules.jobs_events.**",
+    "yuno.modules.data_lifecycle.repository -> yuno.modules.runner.**",
+    "yuno.modules.data_lifecycle.repository -> yuno.modules.settings_data.**",
 ]

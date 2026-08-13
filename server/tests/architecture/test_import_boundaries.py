@@ -68,6 +68,7 @@ EXPECTED_MODULE_CONTAINERS = [
     "yuno.modules.hands_on",
     "yuno.modules.runner",
     "yuno.modules.search",
+    "yuno.modules.data_lifecycle",
 ]
 EXPECTED_MODULE_LAYERS = ["(service)", "(repository)", "models", "ports", "domain"]
 EXPECTED_FORBIDDEN_MODULES = {
@@ -128,6 +129,9 @@ EXPECTED_FORBIDDEN_SOURCE_MODULES = {
     "yuno.modules.runner.ports",
     "yuno.modules.search.domain",
     "yuno.modules.search.ports",
+    "yuno.modules.data_lifecycle.domain",
+    "yuno.modules.data_lifecycle.ports",
+    "yuno.modules.data_lifecycle.service",
 }
 EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.identity",
@@ -148,6 +152,7 @@ EXPECTED_INDEPENDENCE_MODULES = {
     "yuno.modules.hands_on",
     "yuno.modules.runner",
     "yuno.modules.search",
+    "yuno.modules.data_lifecycle",
 }
 
 # Using import-linter's Python API directly (rather than the `lint-imports`
@@ -236,6 +241,22 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.settings_data.service -> yuno.modules.audit.**",
         "yuno.modules.provider.service -> yuno.modules.audit.**",
         "yuno.modules.hands_on.service -> yuno.modules.evidence_evaluation.**",
+        "yuno.modules.profiles_goals.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.diagnostics.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.learning_content.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.roadmap.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.imports.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.interview.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.notebook_review.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.evidence_evaluation.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.jobs_events.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.jobs_events.models -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.settings_data.repository -> yuno.modules.data_lifecycle.**",
+        "yuno.modules.data_lifecycle.repository -> yuno.modules.diagnostics.**",
+        "yuno.modules.data_lifecycle.repository -> yuno.modules.interview.**",
+        "yuno.modules.data_lifecycle.repository -> yuno.modules.jobs_events.**",
+        "yuno.modules.data_lifecycle.repository -> yuno.modules.runner.**",
+        "yuno.modules.data_lifecycle.repository -> yuno.modules.settings_data.**",
     }
 
 

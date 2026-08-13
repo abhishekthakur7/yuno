@@ -19,7 +19,7 @@ export function useDataOperations(goalId: string | null) {
   const exportStatus = useQuery(exportOperationQueryOptions(exportId))
   const deleteStatus = useQuery(deleteOperationQueryOptions(deleteId))
   useEffect(() => {
-    if (deleteStatus.data?.status !== 'complete') return
+    if (!deleteStatus.data || !['cleanup-pending', 'cleanup-failed', 'complete'].includes(deleteStatus.data.status)) return
     void Promise.all([
       queryClient.invalidateQueries({ queryKey: ['profile'] }),
       queryClient.invalidateQueries({ queryKey: ['goals'] }),

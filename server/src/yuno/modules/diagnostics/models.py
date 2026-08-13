@@ -31,23 +31,12 @@ class DiagnosticSessionRow(Base):
             name="fk_diagnostic_sessions_confirmed_goal_owner",
         ),
         CheckConstraint(
-            "state IN ('not-started','in-progress','paused','resumed','skipped','roadmap-preview','failed','confirmed')",
+            "state IN ('not-started','in-progress','paused','resumed','skipped','roadmap-preview','failed','confirmed','expired')",
             name="state_valid",
         ),
         CheckConstraint(
             "untrusted_seed_kind IS NULL OR untrusted_seed_kind IN ('notes','questions')",
             name="untrusted_seed_kind_valid",
-        ),
-        CheckConstraint(
-            "(untrusted_seed_kind IS NULL) = (untrusted_seed_text IS NULL)",
-            name="untrusted_seed_kind_and_text_together",
-        ),
-        CheckConstraint(
-            "json_valid(setup_inputs_json)", name="setup_inputs_json_valid"
-        ),
-        CheckConstraint(
-            "json_type(setup_inputs_json) = 'object'",
-            name="setup_inputs_json_object",
         ),
         CheckConstraint(
             "length(trim(question_set_version)) > 0",
@@ -70,9 +59,9 @@ class DiagnosticSessionRow(Base):
         nullable=False,
     )
     question_set_version: Mapped[str] = mapped_column(Text, nullable=False)
-    setup_inputs_json: Mapped[str] = mapped_column(Text, nullable=False)
+    setup_inputs_hash: Mapped[str | None] = mapped_column(Text)
     untrusted_seed_kind: Mapped[str | None] = mapped_column(Text)
-    untrusted_seed_text: Mapped[str | None] = mapped_column(Text)
+    untrusted_seed_hash: Mapped[str | None] = mapped_column(Text)
     seed_skipped: Mapped[int] = boolean_column("seed_skipped", default=False)
     diagnostic_skipped: Mapped[int] = boolean_column(
         "diagnostic_skipped", default=False
@@ -125,7 +114,7 @@ class DiagnosticAnswerRow(Base):
     session_id: Mapped[str] = mapped_column(Text, nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     question_ref: Mapped[str] = mapped_column(Text, nullable=False)
-    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_hash: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[str] = mapped_column(Text, nullable=False)
     adaptive_context_version: Mapped[str] = mapped_column(Text, nullable=False)
     answered_at: Mapped[str] = utc_timestamp_column()
@@ -144,8 +133,6 @@ class DiagnosticPreviewEditRow(Base):
             "entry_type IN ('order_constraint','skip','depth','correction')",
             name="entry_type_valid",
         ),
-        CheckConstraint("json_valid(value_json)", name="value_json_valid"),
-        CheckConstraint("json_type(value_json) = 'object'", name="value_json_object"),
         UniqueConstraint("id", "owner_id", name="uq_diagnostic_preview_edits_id_owner"),
         UniqueConstraint(
             "session_id", "sequence", name="uq_diagnostic_preview_edits_sequence"
@@ -164,8 +151,7 @@ class DiagnosticPreviewEditRow(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     topic_stable_id: Mapped[str | None] = mapped_column(Text)
     entry_type: Mapped[str] = mapped_column(Text, nullable=False)
-    value_json: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[str] = utc_timestamp_column()
 
 
@@ -205,5 +191,5 @@ class DiagnosticsIdempotencyRow(Base):
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
     session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()

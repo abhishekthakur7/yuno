@@ -272,8 +272,9 @@ def test_notebook_crud_links_labels_versions_idempotency_and_soft_tombstone(
     with engine.connect() as connection:
         stored = connection.execute(
             text(
-                "SELECT entry_kind, markdown, tombstoned_at "
-                "FROM notebook_entries WHERE id = :id"
+                "SELECT n.entry_kind, b.markdown, n.tombstoned_at "
+                "FROM notebook_entries n JOIN notebook_entry_bodies b "
+                "ON b.entry_id=n.id WHERE n.id = :id"
             ),
             {"id": entry["id"]},
         ).one()
@@ -556,21 +557,25 @@ def test_every_retrieval_prompt_redacts_answer_until_a_nonblank_attempt_commits(
     with engine.connect() as connection:
         persisted = connection.execute(
             text(
-                "SELECT id, response FROM review_attempts "
-                "WHERE review_item_id = :review_id ORDER BY created_at"
+                "SELECT a.id, b.response FROM review_attempts a "
+                "JOIN review_attempt_bodies b ON b.attempt_id=a.id "
+                "WHERE a.review_item_id = :review_id ORDER BY a.created_at"
             ),
             {"review_id": items[0].id},
         ).one()
     with (
-        pytest.raises(IntegrityError, match="review_attempts is immutable"),
+        pytest.raises(IntegrityError, match="review_attempts header is immutable"),
         engine.begin() as connection,
     ):
         connection.execute(
-            text("UPDATE review_attempts SET response = 'rewritten' WHERE id = :id"),
+            text(
+                "UPDATE review_attempts SET scheduling_version = 'rewritten' "
+                "WHERE id = :id"
+            ),
             {"id": persisted.id},
         )
     with (
-        pytest.raises(IntegrityError, match="review_attempts is immutable"),
+        pytest.raises(IntegrityError, match="review_attempts header is immutable"),
         engine.begin() as connection,
     ):
         connection.execute(

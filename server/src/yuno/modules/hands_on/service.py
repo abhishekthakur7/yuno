@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from yuno.modules.evidence_evaluation.domain import EvaluationRequest, RubricStatus
 from yuno.modules.evidence_evaluation.service import create_evidence, perform_assessment
 from yuno.modules.hands_on.domain import (
@@ -13,6 +15,7 @@ from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import (
     ConflictError,
     DomainValidationError,
+    EvidenceTooLargeError,
     NotFoundError,
 )
 from yuno.shared.domain.hashing import hash_payload
@@ -50,16 +53,25 @@ def get_lifecycle(uow, owner_id: str, goal_id: str, topic_id: str):
     work = uow.hands_on.get_work(owner_id, goal_id, topic_id)
     if work is None:
         return None, topic, role, level, constraints, (), (), ()
+    artifacts = tuple(
+        _with_artifact_content(uow, owner_id, artifact)
+        for artifact in uow.hands_on.list_artifacts(owner_id, work.id)
+    )
     return (
         work,
         topic,
         role,
         level,
         constraints,
-        uow.hands_on.list_artifacts(owner_id, work.id),
+        artifacts,
         uow.hands_on.list_reviews(owner_id, work.id),
         uow.hands_on.list_questions(owner_id, work.id),
     )
+
+
+def _with_artifact_content(uow, owner_id: str, artifact: HandsOnArtifact):
+    payload = uow.evidence.get_payload(owner_id, artifact.goal_id, artifact.evidence_id)
+    return replace(artifact, content=payload.content if payload is not None else "")
 
 
 def prepare_submission(
@@ -70,6 +82,9 @@ def prepare_submission(
     artifact_content: str,
     question_id: str | None,
     question_response: str | None,
+    *,
+    max_payload_bytes: int,
+    retained_owner_limit: int,
 ):
     content = artifact_content.strip()
     if not content:
@@ -80,6 +95,15 @@ def prepare_submission(
         )
     if question_response is not None and not question_response.strip():
         raise DomainValidationError("cross-question response must not be blank.")
+    response = question_response.strip() if question_response is not None else ""
+    retained_bytes = len(content.encode("utf-8", errors="strict")) + len(
+        response.encode("utf-8", errors="strict")
+    )
+    if retained_bytes > max_payload_bytes:
+        raise EvidenceTooLargeError(
+            "A hands-on revision and its cross-question response may contain at most "
+            f"{max_payload_bytes} UTF-8 bytes in total."
+        )
     _goal, topic, role, level, constraints = scenario_for(
         uow, owner_id, goal_id, topic_id
     )
@@ -140,6 +164,8 @@ def prepare_submission(
         origin="hands-on-submit",
         content=content,
         content_version=f"revision-{revision}",
+        max_payload_bytes=max_payload_bytes,
+        retained_owner_limit=retained_owner_limit,
     )
     artifact = HandsOnArtifact(
         new_id(),
@@ -150,7 +176,7 @@ def prepare_submission(
         content,
         hash_payload(content),
         question_id,
-        question_response.strip() if question_response else None,
+        response if question_response is not None else None,
         evidence.id,
         timestamp,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Sequence
 
@@ -10,7 +11,9 @@ from sqlalchemy import select
 from yuno.modules.provider.domain import NetworkDisclosure, SchemaQuarantine
 from yuno.modules.provider.models import (
     NetworkDisclosureRow,
+    ProviderRequestBodyRow,
     ProviderRequestRow,
+    SchemaQuarantineBodyRow,
     SchemaQuarantineRow,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
@@ -103,9 +106,23 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
         return _disclosure(row)
 
     def create_request(self, **values: object) -> str:
+        body = {
+            "pid": values.pop("pid", None),
+            "pgid": values.pop("pgid", None),
+            "process_identity": values.pop("process_identity", None),
+            "temp_path": values.pop("temp_path", None),
+        }
+        values["body_hash"] = _body_hash(**body)
         row = ProviderRequestRow(**values)
         self._session.add(row)
         self._session.flush()
+        self._session.add(
+            ProviderRequestBodyRow(
+                request_id=row.id,
+                owner_id=row.owner_id,
+                **body,
+            )
+        )
         return row.id
 
     def mark_spawned(
@@ -116,9 +133,18 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
             raise RuntimeError(
                 "Provider request disappeared before spawn was recorded."
             )
-        row.pid = pid
-        row.pgid = pgid
-        row.process_identity = process_identity
+        body = row.body
+        if body is None:
+            raise RuntimeError("Provider request body is unavailable.")
+        body.pid = pid
+        body.pgid = pgid
+        body.process_identity = process_identity
+        row.body_hash = _body_hash(
+            pid=pid,
+            pgid=pgid,
+            process_identity=process_identity,
+            temp_path=body.temp_path,
+        )
         row.lifecycle = "running"
         row.started_at = now_text(SystemClock())
         self._session.flush()
@@ -135,20 +161,33 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
         self._session.flush()
 
     def add_quarantine(self, quarantine: SchemaQuarantine) -> SchemaQuarantine:
+        validation_errors_json = json.dumps(
+            quarantine.validation_errors, separators=(",", ":")
+        )
         self._session.add(
             SchemaQuarantineRow(
                 id=quarantine.id,
                 owner_id=quarantine.owner_id,
                 provider_request_id=quarantine.provider_request_id,
                 job_id=quarantine.job_id,
-                raw_output_ref=quarantine.raw_output_ref,
                 raw_output_hash=quarantine.raw_output_hash,
+                body_hash=_body_hash(
+                    raw_output_ref=quarantine.raw_output_ref,
+                    validation_errors_json=validation_errors_json,
+                ),
                 expected_schema_version=quarantine.expected_schema_version,
-                validation_errors_json=json.dumps(quarantine.validation_errors),
                 created_at=quarantine.created_at,
             )
         )
         self._session.flush()
+        self._session.add(
+            SchemaQuarantineBodyRow(
+                quarantine_id=quarantine.id,
+                owner_id=quarantine.owner_id,
+                raw_output_ref=quarantine.raw_output_ref,
+                validation_errors_json=validation_errors_json,
+            )
+        )
         return quarantine
 
     def get_quarantine(
@@ -160,7 +199,7 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
                 SchemaQuarantineRow.id == quarantine_id,
             )
         ).one_or_none()
-        return _quarantine(row) if row else None
+        return _quarantine(row) if row and row.body else None
 
 
 def _disclosure(row: NetworkDisclosureRow) -> NetworkDisclosure:
@@ -183,9 +222,16 @@ def _quarantine(row: SchemaQuarantineRow) -> SchemaQuarantine:
         owner_id=row.owner_id,
         provider_request_id=row.provider_request_id,
         job_id=row.job_id,
-        raw_output_ref=row.raw_output_ref,
+        raw_output_ref=row.body.raw_output_ref,
         raw_output_hash=row.raw_output_hash,
         expected_schema_version=row.expected_schema_version,
-        validation_errors=tuple(json.loads(row.validation_errors_json)),
+        validation_errors=tuple(json.loads(row.body.validation_errors_json)),
         created_at=row.created_at,
     )
+
+
+def _body_hash(**values: object) -> str:
+    encoded = json.dumps(
+        values, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

@@ -181,7 +181,10 @@ def test_answer_rows_are_database_enforced_append_only(
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(
-            text("UPDATE diagnostic_answers SET answer = 'changed' WHERE id = :id"),
+            text(
+                "UPDATE diagnostic_answer_bodies "
+                "SET answer = 'changed' WHERE answer_id = :id"
+            ),
             {"id": answer.id},
         )
     with pytest.raises(IntegrityError), engine.begin() as connection:

@@ -31,20 +31,6 @@ class GoalWorkspaceRow(Base):
         CheckConstraint(
             "status IN ('active','archived','tombstoned')", name="status_valid"
         ),
-        CheckConstraint("length(trim(name)) > 0", name="name_non_blank"),
-        CheckConstraint(
-            "path != 'learn' OR length(trim(subject)) > 0",
-            name="learn_subject_required",
-        ),
-        CheckConstraint(
-            "path != 'interview_prep' OR length(trim(role)) > 0",
-            name="interview_role_required",
-        ),
-        CheckConstraint("path != 'learn' OR role IS NULL", name="learn_role_absent"),
-        CheckConstraint(
-            "path != 'interview_prep' OR subject IS NULL",
-            name="interview_subject_absent",
-        ),
         UniqueConstraint("id", "owner_id", name="uq_goal_workspaces_id_owner"),
         Index(
             "ix_goal_workspaces_owner_status_recent",
@@ -56,17 +42,14 @@ class GoalWorkspaceRow(Base):
 
     id: Mapped[str] = id_column()
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
-    name: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     path: Mapped[str] = mapped_column(Text, nullable=False)
-    subject: Mapped[str | None] = mapped_column(Text)
-    role: Mapped[str | None] = mapped_column(Text)
     target_level: Mapped[str] = mapped_column(Text, nullable=False)
     target_capability: Mapped[str] = mapped_column(Text, nullable=False)
     graph_version_id: Mapped[str] = mapped_column(
         Text, ForeignKey("canonical_graph_versions.id"), nullable=False
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    resume_position: Mapped[str | None] = mapped_column(Text)
     last_accessed_at: Mapped[str | None] = mapped_column(Text)
     row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("1")
@@ -88,9 +71,7 @@ class LearnerProfileRow(Base):
     owner_id: Mapped[str] = mapped_column(
         Text, ForeignKey("owners.id"), primary_key=True
     )
-    experience: Mapped[str | None] = mapped_column(Text)
-    strengths: Mapped[str | None] = mapped_column(Text)
-    weaknesses: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     current_goal_id: Mapped[str | None] = mapped_column(Text)
     profile_revision: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("1")
@@ -184,5 +165,5 @@ class ProfilesGoalsIdempotencyRow(Base):
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
-    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()

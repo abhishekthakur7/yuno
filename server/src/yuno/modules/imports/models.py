@@ -8,7 +8,6 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
-    LargeBinary,
     Text,
     UniqueConstraint,
     text,
@@ -45,7 +44,6 @@ class ImportRecordRow(Base):
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     goal_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str] = mapped_column(Text, nullable=False)
-    original_content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     original_hash: Mapped[str] = mapped_column(Text, nullable=False)
     parser_version: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
@@ -107,15 +105,13 @@ class ImportStatementRow(Base):
     import_id: Mapped[str] = mapped_column(Text, nullable=False)
     sequence: Mapped[int] = mapped_column(nullable=False)
     parser_version: Mapped[str] = mapped_column(Text, nullable=False)
-    original_text: Mapped[str] = mapped_column(Text, nullable=False)
     original_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_hash: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     duplicate_of_statement_id: Mapped[str | None] = mapped_column(Text)
     trust_state: Mapped[str] = mapped_column(Text, nullable=False)
     mapping_state: Mapped[str] = mapped_column(Text, nullable=False)
-    corrected_text: Mapped[str | None] = mapped_column(Text)
+    corrected_hash: Mapped[str | None] = mapped_column(Text)
     row_version: Mapped[int] = row_version_column()
     created_at: Mapped[str] = utc_timestamp_column()
     updated_at: Mapped[str] = utc_timestamp_column()
@@ -141,7 +137,7 @@ class ImportStatementDecisionRow(Base):
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     statement_id: Mapped[str] = mapped_column(Text, nullable=False)
     decision_type: Mapped[str] = mapped_column(Text, nullable=False)
-    value: Mapped[str | None] = mapped_column(Text)
+    value_hash: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[str] = utc_timestamp_column()
 
 
@@ -234,5 +230,5 @@ class ImportsIdempotencyRow(Base):
     operation: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()

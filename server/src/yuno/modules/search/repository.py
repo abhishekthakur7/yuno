@@ -101,8 +101,10 @@ class SearchRepository(SqlAlchemyRepository):
             # A raw FTS row is never returned: rowid is joined to the ACL source.
             statement = text(f"""
                 SELECT d.entity_type, d.entity_id, d.goal_id, d.topic_stable_id,
-                       d.title, d.body, d.tags
-                FROM search_fts JOIN search_documents d ON d.rowid = search_fts.rowid
+                       b.title, b.body, b.tags
+                FROM search_fts
+                JOIN search_document_bodies b ON b.rowid = search_fts.rowid
+                JOIN search_documents d ON d.id = b.document_id
                 WHERE search_fts MATCH :query AND d.owner_id=:owner_id
                   AND d.goal_id=:goal_id AND d.generation=:generation {type_sql}
                 ORDER BY bm25(search_fts), d.entity_type, d.entity_id
@@ -110,18 +112,19 @@ class SearchRepository(SqlAlchemyRepository):
         else:
             statement = text(f"""
                 SELECT d.entity_type, d.entity_id, d.goal_id, d.topic_stable_id,
-                       d.title, d.body, d.tags
+                       b.title, b.body, b.tags
                 FROM search_documents d
+                JOIN search_document_bodies b ON b.document_id=d.id
                 WHERE d.owner_id=:owner_id AND d.goal_id=:goal_id
                   AND d.generation=(
                     SELECT generation FROM search_documents
                     WHERE owner_id=:owner_id AND goal_id=:goal_id
                     ORDER BY updated_at DESC, generation DESC LIMIT 1
                   )
-                  AND (lower(d.title) LIKE '%' || lower(:query) || '%'
-                    OR lower(d.body) LIKE '%' || lower(:query) || '%'
-                    OR lower(d.tags) LIKE '%' || lower(:query) || '%') {type_sql}
-                ORDER BY d.entity_type, d.title COLLATE NOCASE, d.entity_id
+                  AND (lower(b.title) LIKE '%' || lower(:query) || '%'
+                    OR lower(b.body) LIKE '%' || lower(:query) || '%'
+                    OR lower(b.tags) LIKE '%' || lower(:query) || '%') {type_sql}
+                ORDER BY d.entity_type, b.title COLLATE NOCASE, d.entity_id
             """)
         return tuple(
             SearchResult(**dict(row), degraded=not use_index)
@@ -214,14 +217,29 @@ class SearchRepository(SqlAlchemyRepository):
         self._session.execute(
             text("""
             INSERT INTO search_documents
-              (id,owner_id,goal_id,generation,entity_type,entity_id,topic_stable_id,version,title,body,tags,projection_version,updated_at)
-            VALUES (:id,:owner_id,:goal_id,:generation,:entity_type,:entity_id,:topic_stable_id,NULL,:title,:body,:tags,:projection_version,:updated_at)
+              (id,owner_id,goal_id,generation,entity_type,entity_id,topic_stable_id,version,body_hash,projection_version,updated_at)
+            VALUES (:id,:owner_id,:goal_id,:generation,:entity_type,:entity_id,:topic_stable_id,NULL,:body_hash,:projection_version,:updated_at)
             ON CONFLICT(owner_id,goal_id,generation,entity_type,entity_id) DO UPDATE SET
-              topic_stable_id=excluded.topic_stable_id,title=excluded.title,body=excluded.body,
-              tags=excluded.tags,projection_version=excluded.projection_version,updated_at=excluded.updated_at
-            RETURNING rowid
+              topic_stable_id=excluded.topic_stable_id,body_hash=excluded.body_hash,
+              projection_version=excluded.projection_version,updated_at=excluded.updated_at
+            RETURNING id
         """),
-            {**document.__dict__, "owner_id": owner_id, "generation": generation},
+            {
+                **document.__dict__,
+                "owner_id": owner_id,
+                "generation": generation,
+                "body_hash": _body_hash(document.title, document.body, document.tags),
+            },
+        ).scalar_one()
+        self._session.execute(
+            text("""
+            INSERT INTO search_document_bodies
+              (document_id,owner_id,goal_id,title,body,tags)
+            VALUES (:id,:owner_id,:goal_id,:title,:body,:tags)
+            ON CONFLICT(document_id) DO UPDATE SET
+              title=excluded.title,body=excluded.body,tags=excluded.tags
+            """),
+            {**document.__dict__, "owner_id": owner_id},
         )
 
     def _source_documents(
@@ -243,16 +261,18 @@ class SearchRepository(SqlAlchemyRepository):
             JOIN topics t ON t.graph_version_id=c.graph_version_id AND t.stable_id=c.topic_stable_id
           WHERE g.owner_id=:owner_id AND g.status!='tombstoned' AND c.status='published'
           UNION ALL
-          SELECT goal_id, 'generated-artifact', id, topic_stable_id, topic_stable_id || ' · ' || layer,
-            CASE WHEN body_ref LIKE 'inline:%' THEN substr(body_ref,8) ELSE body_ref END, layer
-          FROM generated_artifacts WHERE owner_id=:owner_id AND state='ready' AND body_ref IS NOT NULL
+          SELECT a.goal_id, 'generated-artifact', a.id, a.topic_stable_id, a.topic_stable_id || ' · ' || a.layer,
+            CASE WHEN b.body_ref LIKE 'inline:%' THEN substr(b.body_ref,8) ELSE b.body_ref END, a.layer
+          FROM generated_artifacts a JOIN generated_artifact_bodies b ON b.artifact_id=a.id AND b.owner_id=a.owner_id WHERE a.owner_id=:owner_id AND a.state='ready'
           UNION ALL
-          SELECT goal_id, 'notebook-entry', id, topic_stable_id, 'Notebook entry', markdown, entry_kind
-          FROM notebook_entries WHERE owner_id=:owner_id AND tombstoned_at IS NULL
+          SELECT n.goal_id, 'notebook-entry', n.id, n.topic_stable_id, 'Notebook entry', b.markdown, n.entry_kind
+          FROM notebook_entries n JOIN notebook_entry_bodies b ON b.entry_id=n.id
+          WHERE n.owner_id=:owner_id AND n.tombstoned_at IS NULL
           UNION ALL
-          SELECT e.goal_id, 'evidence', e.id, e.topic_stable_id, e.summary, e.summary,
+          SELECT e.goal_id, 'evidence', e.id, e.topic_stable_id, b.summary, b.summary,
             e.evidence_type || ' ' || e.capability || ' ' || e.origin
-          FROM evidence e WHERE e.owner_id=:owner_id
+          FROM evidence e JOIN evidence_summary_bodies b ON b.evidence_id=e.id
+          WHERE e.owner_id=:owner_id
             AND NOT EXISTS (SELECT 1 FROM evidence_tombstones x WHERE x.evidence_id=e.id AND x.owner_id=e.owner_id)
           ORDER BY goal_id, entity_type, entity_id
         """),
@@ -270,6 +290,16 @@ class SearchRepository(SqlAlchemyRepository):
 
 def _digest(*values: str) -> str:
     return hashlib.sha256(":".join(values).encode()).hexdigest()
+
+
+def _body_hash(title: str, body: str, tags: str) -> str:
+    canonical = json.dumps(
+        {"body": body, "tags": tags, "title": title},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _fts_query(raw: str) -> str:

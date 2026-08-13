@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   correctImportStatement,
   createImport,
+  deleteImportBody,
   dismissImportStatement,
   importQueryOptions,
   importsQueryOptions,
@@ -42,5 +43,12 @@ export function useImports(goalId: string | null, selectedImportId: string | nul
   const map = useMutation({ mutationFn: ({ statement, body }: { statement: ImportStatement; body: ImportMapping }) => mapImportStatement(statement, body), onSuccess: refreshStatements })
   const verify = useMutation({ mutationFn: verifyImportStatement, onSuccess: refreshStatements })
   const dismiss = useMutation({ mutationFn: dismissImportStatement, onSuccess: refreshStatements })
-  return { imports, selectedImport, statements, create, parse, reprocess, correct, map, verify, dismiss, refreshSelected }
+  const removeBody = useMutation({
+    mutationFn: deleteImportBody,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['imports', { goalId }] })
+      await refreshSelected()
+    },
+  })
+  return { imports, selectedImport, statements, create, parse, reprocess, correct, map, verify, dismiss, removeBody, refreshSelected }
 }

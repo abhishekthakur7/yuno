@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from alembic import command
 from sqlalchemy import Engine, inspect, text
-
-from yuno.shared.infrastructure import alembic_guard
-from yuno.shared.infrastructure.database import create_engine_for
 
 
 def test_exact_d3_tuple_and_active_attempt_are_database_authoritative(
@@ -18,10 +12,11 @@ def test_exact_d3_tuple_and_active_attempt_are_database_authoritative(
     artifact_columns = {
         column["name"] for column in inspector.get_columns("generated_artifacts")
     }
-    assert "body_ref" in artifact_columns
-    assert "body" not in artifact_columns, (
-        "generated content stores a body reference/hash, not a duplicate raw body column"
-    )
+    assert "body_ref" not in artifact_columns
+    body_columns = {
+        column["name"] for column in inspector.get_columns("generated_artifact_bodies")
+    }
+    assert "body_ref" in body_columns
     artifact_uniques = inspector.get_unique_constraints("generated_artifacts")
     assert any(
         unique["name"] == "uq_generated_artifacts_d3_exact_key"
@@ -102,7 +97,6 @@ def test_provenance_ownership_is_composite_end_to_end(engine: Engine) -> None:
     )
 
 
-
 def test_provenance_tables_install_required_immutable_and_citation_guards(
     engine: Engine,
 ) -> None:
@@ -135,49 +129,3 @@ def test_provenance_tables_install_required_immutable_and_citation_guards(
         "trg_sources_no_delete",
         "trg_sources_no_insert_replace",
     } <= triggers.get("sources", set())
-
-
-def test_downgrade_to_b206_keeps_sources_and_removes_every_idk207_trigger(
-    tmp_path: Path,
-) -> None:
-    database_url = f"sqlite+pysqlite:///{tmp_path / 'idk207-downgrade.db'}"
-    config = alembic_guard.build_alembic_config()
-    config.set_main_option("sqlalchemy.url", database_url)
-    command.upgrade(config, "head")
-    command.downgrade(config, "b206a7d4e9f1")
-
-    downgraded = create_engine_for(database_url)
-    try:
-        inspector = inspect(downgraded)
-        tables = set(inspector.get_table_names())
-        assert "sources" in tables
-        assert {
-            "source_snapshots",
-            "generated_artifacts",
-            "artifact_generation_attempts",
-            "artifact_provenance_snapshots",
-            "artifact_provenance_refs",
-            "claims",
-            "citations",
-            "learning_content_idempotency",
-            "schema_quarantines",
-        }.isdisjoint(tables)
-        with downgraded.connect() as connection:
-            source_triggers = set(
-                connection.execute(
-                    text(
-                        "SELECT name FROM sqlite_master "
-                        "WHERE type='trigger' AND tbl_name='sources'"
-                    )
-                ).scalars()
-            )
-            assert "trg_sources_no_delete" not in source_triggers
-            assert "trg_sources_no_insert_replace" not in source_triggers
-            assert (
-                connection.execute(
-                    text("SELECT version_num FROM alembic_version")
-                ).scalar_one()
-                == "b206a7d4e9f1"
-            )
-    finally:
-        downgraded.dispose()

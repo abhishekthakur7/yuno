@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from yuno.modules.data_lifecycle.models import (
+    GoalWorkspaceBodyRow,
+    LearnerProfileBodyRow,
+    ProfilesGoalsIdempotencyBodyRow,
+)
 from yuno.modules.profiles_goals.domain import (
+    GoalLifecycle,
     GoalNavigationEvent,
     GoalPath,
     GoalStatus,
@@ -27,6 +33,7 @@ from yuno.modules.profiles_goals.models import (
     RecommendationDismissalRow,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
     owner_scoped_select,
@@ -41,21 +48,57 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         self._clock = SystemClock()
 
     def get_profile(self, owner_id: str) -> LearnerProfile | None:
-        row = self._session.scalars(
-            owner_scoped_select(LearnerProfileRow, owner_id)
+        pair = self._session.execute(
+            select(LearnerProfileRow, LearnerProfileBodyRow)
+            .join(
+                LearnerProfileBodyRow,
+                LearnerProfileBodyRow.owner_id == LearnerProfileRow.owner_id,
+            )
+            .where(LearnerProfileRow.owner_id == owner_id)
         ).one_or_none()
-        return _profile(row) if row is not None else None
+        return _profile(*pair) if pair is not None else None
 
     def create_profile(self, owner_id: str) -> LearnerProfile:
-        row = LearnerProfileRow(owner_id=owner_id, updated_at=now_text(self._clock))
+        body = LearnerProfileBodyRow(
+            owner_id=owner_id, experience=None, strengths=None, weaknesses=None
+        )
+        row = LearnerProfileRow(
+            owner_id=owner_id,
+            body_hash=hash_payload(
+                {"experience": None, "strengths": None, "weaknesses": None}
+            ),
+            updated_at=now_text(self._clock),
+        )
         self._session.add(row)
         self._session.flush()
-        return _profile(row)
+        self._session.add(body)
+        self._session.flush()
+        return _profile(row, body)
 
     def update_profile(
         self, owner_id: str, expected_revision: int, changes: Mapping[str, object]
     ) -> LearnerProfile | None:
-        values = dict(changes)
+        body_changes = {
+            key: value
+            for key, value in changes.items()
+            if key in {"experience", "strengths", "weaknesses"}
+        }
+        values = {
+            key: value for key, value in changes.items() if key not in body_changes
+        }
+        if body_changes:
+            body = self._session.get(LearnerProfileBodyRow, owner_id)
+            if body is None:
+                return None
+            for key, value in body_changes.items():
+                setattr(body, key, value)
+            values["body_hash"] = hash_payload(
+                {
+                    "experience": body.experience,
+                    "strengths": body.strengths,
+                    "weaknesses": body.weaknesses,
+                }
+            )
         values.update(
             profile_revision=expected_revision + 1, updated_at=now_text(self._clock)
         )
@@ -70,10 +113,7 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         if result.rowcount != 1:
             return None
         self._session.flush()
-        row = self._session.scalars(
-            owner_scoped_select(LearnerProfileRow, owner_id)
-        ).one()
-        return _profile(row)
+        return self.get_profile(owner_id)
 
     def list_goals(self, owner_id: str) -> Sequence[GoalWorkspace]:
         stmt = (
@@ -81,38 +121,57 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
             .where(GoalWorkspaceRow.status != "tombstoned")
             .order_by(GoalWorkspaceRow.updated_at.desc())
         )
-        return tuple(_goal(row) for row in self._session.scalars(stmt).all())
+        rows = self._session.execute(
+            stmt.join(
+                GoalWorkspaceBodyRow,
+                GoalWorkspaceBodyRow.goal_id == GoalWorkspaceRow.id,
+            ).add_columns(GoalWorkspaceBodyRow)
+        ).all()
+        return tuple(_goal(row, body) for row, body in rows)
 
     def get_goal(self, owner_id: str, goal_id: str) -> GoalWorkspace | None:
         stmt = owner_scoped_select(GoalWorkspaceRow, owner_id).where(
             GoalWorkspaceRow.id == goal_id, GoalWorkspaceRow.status != "tombstoned"
         )
-        row = self._session.scalars(stmt).one_or_none()
-        return _goal(row) if row is not None else None
+        pair = self._session.execute(
+            stmt.join(
+                GoalWorkspaceBodyRow,
+                GoalWorkspaceBodyRow.goal_id == GoalWorkspaceRow.id,
+            ).add_columns(GoalWorkspaceBodyRow)
+        ).one_or_none()
+        return _goal(*pair) if pair is not None else None
 
     def get_goal_for_lifecycle(
         self, owner_id: str, goal_id: str
-    ) -> GoalWorkspace | None:
+    ) -> GoalLifecycle | None:
         row = self._session.scalars(
             owner_scoped_select(GoalWorkspaceRow, owner_id).where(
                 GoalWorkspaceRow.id == goal_id
             )
         ).one_or_none()
-        return _goal(row) if row is not None else None
+        return (
+            GoalLifecycle(row.id, row.owner_id, GoalStatus(row.status), row.row_version)
+            if row
+            else None
+        )
 
     def create_goal(self, goal: GoalWorkspace) -> GoalWorkspace:
         row = GoalWorkspaceRow(
             id=goal.id,
             owner_id=goal.owner_id,
-            name=goal.name,
+            body_hash=hash_payload(
+                {
+                    "name": goal.name,
+                    "subject": goal.subject,
+                    "role": goal.role,
+                    "resume_position": goal.resume_position,
+                }
+            ),
             path=goal.path.value,
-            subject=goal.subject,
-            role=goal.role,
             target_level=goal.target_level.value,
             target_capability=goal.target_capability,
             graph_version_id=goal.graph_version_id,
             status=goal.status.value,
-            resume_position=goal.resume_position,
             last_accessed_at=goal.last_accessed_at,
             row_version=goal.row_version,
             created_at=goal.created_at,
@@ -120,11 +179,21 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         )
         self._session.add(row)
         self._session.flush()
-        return _goal(row)
+        body = GoalWorkspaceBodyRow(
+            goal_id=goal.id,
+            owner_id=goal.owner_id,
+            name=goal.name,
+            subject=goal.subject,
+            role=goal.role,
+            resume_position=goal.resume_position,
+        )
+        self._session.add(body)
+        self._session.flush()
+        return _goal(row, body)
 
     def tombstone_goal(
         self, owner_id: str, goal_id: str, expected_version: int
-    ) -> GoalWorkspace | None:
+    ) -> GoalLifecycle | None:
         result = self._session.execute(
             update(GoalWorkspaceRow)
             .where(
@@ -151,7 +220,28 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         expected_version: int,
         changes: Mapping[str, object],
     ) -> GoalWorkspace | None:
-        values = dict(changes)
+        body_changes = {
+            key: value
+            for key, value in changes.items()
+            if key in {"name", "subject", "role", "resume_position"}
+        }
+        values = {
+            key: value for key, value in changes.items() if key not in body_changes
+        }
+        if body_changes:
+            body = self._session.get(GoalWorkspaceBodyRow, goal_id)
+            if body is None:
+                return None
+            for key, value in body_changes.items():
+                setattr(body, key, value)
+            values["body_hash"] = hash_payload(
+                {
+                    "name": body.name,
+                    "subject": body.subject,
+                    "role": body.role,
+                    "resume_position": body.resume_position,
+                }
+            )
         values.update(
             row_version=expected_version + 1, updated_at=now_text(self._clock)
         )
@@ -240,6 +330,9 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         ).one_or_none()
         if row is None:
             return None
+        body = self._session.get(ProfilesGoalsIdempotencyBodyRow, row.id)
+        if body is None:
+            return None
         return IdempotencyRecord(
             id=row.id,
             owner_id=row.owner_id,
@@ -247,7 +340,7 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
             idempotency_key=row.idempotency_key,
             request_hash=row.request_hash,
             goal_id=row.goal_id,
-            response_json=row.response_json,
+            response_json=body.response_json,
             created_at=row.created_at,
         )
 
@@ -266,35 +359,46 @@ class SqlAlchemyProfilesGoalsRepository(SqlAlchemyRepository):
         )
 
     def add_idempotency(self, record: IdempotencyRecord) -> None:
-        self._session.add(ProfilesGoalsIdempotencyRow(**record.__dict__))
+        values = record.__dict__.copy()
+        response_json = values.pop("response_json")
+        values["response_hash"] = hash_payload(response_json)
+        self._session.add(ProfilesGoalsIdempotencyRow(**values))
+        self._session.flush()
+        self._session.add(
+            ProfilesGoalsIdempotencyBodyRow(
+                idempotency_id=record.id,
+                owner_id=record.owner_id,
+                response_json=response_json,
+            )
+        )
         self._session.flush()
 
 
-def _profile(row: LearnerProfileRow) -> LearnerProfile:
+def _profile(row: LearnerProfileRow, body: LearnerProfileBodyRow) -> LearnerProfile:
     return LearnerProfile(
         owner_id=row.owner_id,
-        experience=row.experience,
-        strengths=row.strengths,
-        weaknesses=row.weaknesses,
+        experience=body.experience,
+        strengths=body.strengths,
+        weaknesses=body.weaknesses,
         current_goal_id=row.current_goal_id,
         profile_revision=row.profile_revision,
         updated_at=row.updated_at,
     )
 
 
-def _goal(row: GoalWorkspaceRow) -> GoalWorkspace:
+def _goal(row: GoalWorkspaceRow, body: GoalWorkspaceBodyRow) -> GoalWorkspace:
     return GoalWorkspace(
         id=row.id,
         owner_id=row.owner_id,
-        name=row.name,
+        name=body.name,
         path=GoalPath(row.path),
-        subject=row.subject,
-        role=row.role,
+        subject=body.subject,
+        role=body.role,
         target_level=TargetLevel(row.target_level),
         target_capability=TargetCapability(row.target_capability),
         graph_version_id=row.graph_version_id,
         status=GoalStatus(row.status),
-        resume_position=row.resume_position,
+        resume_position=body.resume_position,
         last_accessed_at=row.last_accessed_at,
         row_version=row.row_version,
         created_at=row.created_at,

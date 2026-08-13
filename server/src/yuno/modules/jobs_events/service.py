@@ -5,7 +5,6 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import shutil
 import signal
 import threading
 from collections.abc import Callable
@@ -36,7 +35,7 @@ from yuno.shared.domain.errors import (
     DomainValidationError,
     IdempotencyConflictError,
     NotFoundError,
-    PendingCapError,
+    PendingJobCapError,
 )
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
@@ -80,12 +79,18 @@ class DurableJobDispatcher:
         pending_cap: int | Callable[[], int],
         background_age_promotion_seconds: int | Callable[[], int],
         janitor_retention_seconds: int | Callable[[], int],
+        record_workspace_cleanup: (
+            Callable[[Session, str, str | None, str], str | None] | None
+        ) = None,
+        execute_external_cleanup: Callable[[str], None] | None = None,
         clock: Clock | None = None,
     ) -> None:
         self._sessions = session_factory
         self._pending_cap = _provider(pending_cap)
         self._promotion_seconds = _provider(background_age_promotion_seconds)
         self._retention_seconds = _provider(janitor_retention_seconds)
+        self._record_cleanup = record_workspace_cleanup
+        self._execute_external_cleanup = execute_external_cleanup
         self._clock = clock or SystemClock()
         self._handlers: dict[str, JobHandler] = {}
         self._wake = threading.Condition()
@@ -193,8 +198,8 @@ class DurableJobDispatcher:
                 if existing:
                     return as_ref(existing, deduplicated=True)
             pending_cap = self._pending_cap()
-            if repo.pending_count() >= pending_cap:
-                raise PendingCapError(
+            if repo.pending_count(request.owner_id) >= pending_cap:
+                raise PendingJobCapError(
                     f"The configured pending-job cap ({pending_cap}) has been reached.",
                     recovery_action="Wait for a pending job to finish or cancel one.",
                 )
@@ -515,6 +520,11 @@ class DurableJobDispatcher:
                 self._run_janitor()
             except Exception as exc:  # noqa: BLE001 -- janitor failure must not stop dispatch
                 self._janitor_diagnostic = f"janitor failed: {type(exc).__name__}"
+            if self._execute_external_cleanup is not None:
+                try:
+                    self._execute_external_cleanup(row.owner_id)
+                except Exception:  # noqa: BLE001 -- durable intents remain retryable
+                    self._janitor_diagnostic = "external cleanup failed"
 
     def _claim(self, lane: JobLane):
         with self._transition_lock, self._sessions() as session:
@@ -645,7 +655,7 @@ class DurableJobDispatcher:
                 except OSError as exc:
                     diagnostics.append(f"cleanup failed: {type(exc).__name__}")
         if attempt.temp_path:
-            failure = self._remove_temp_path(attempt.temp_path)
+            failure = self._record_workspace_cleanup(repo, attempt)
             if failure:
                 diagnostics.append(failure)
         return "; ".join(diagnostics) or None
@@ -659,7 +669,7 @@ class DurableJobDispatcher:
             for attempt in repo.cleanup_candidates(cutoff):
                 if not attempt.temp_path:
                     continue
-                failure = self._remove_temp_path(attempt.temp_path)
+                failure = self._record_workspace_cleanup(repo, attempt)
                 if failure:
                     row = repo.get(attempt.owner_id, attempt.job_id)
                     if row is not None:
@@ -668,15 +678,23 @@ class DurableJobDispatcher:
                         repo.add_event(row, "cleanup-failed")
             session.commit()
 
-    @staticmethod
-    def _remove_temp_path(raw_path: str) -> str | None:
-        path = Path(raw_path)
-        try:
-            if path.exists():
-                shutil.rmtree(path)
-        except OSError as exc:
-            return f"cleanup failed: {type(exc).__name__}"
-        return None
+    def _record_workspace_cleanup(self, repo: JobRepository, attempt) -> str | None:
+        """Persist a safe logical cleanup reference; never perform file I/O here."""
+        raw_path = attempt.temp_path
+        if raw_path is None:
+            return None
+        job = repo.get(attempt.owner_id, attempt.job_id)
+        if job is None:
+            attempt.temp_path = None
+            return "cleanup failed: cleanup-owner-invalid"
+        if self._record_cleanup is None:
+            attempt.temp_path = None
+            return "cleanup failed: cleanup-recorder-unavailable"
+        failure = self._record_cleanup(
+            repo.session, attempt.owner_id, job.goal_id, raw_path
+        )
+        attempt.temp_path = None
+        return f"cleanup failed: {failure}" if failure is not None else None
 
 
 def _retry_policy(kind: str) -> str:

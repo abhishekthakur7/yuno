@@ -27,9 +27,11 @@ from yuno.api.dependencies import (
     get_clock,
     get_job_dispatcher,
     get_owner_id,
+    get_settings_dependency,
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.config import Settings
 from yuno.modules.evidence_evaluation.domain import (
     EvaluationRequest,
     EvidenceEvaluationIdempotencyRecord,
@@ -131,13 +133,22 @@ def post_evidence(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[EvidenceUnitOfWork, Depends(get_unit_of_work)],
     key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ) -> EvidenceResponse:
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     request_data = body.model_dump(mode="json")
     operation = f"create_evidence:{goal_id}"
     prior = _prior(uow, owner_id, operation, key, request_data, EvidenceResponse)
     if prior is not None:
         return prior
-    evidence = create_evidence(uow, owner_id, goal_id, **body.model_dump())
+    evidence = create_evidence(
+        uow,
+        owner_id,
+        goal_id,
+        **body.model_dump(),
+        max_payload_bytes=settings.evidence_payload_max_bytes,
+        retained_owner_limit=settings.evidence_retained_owner_limit,
+    )
     response = _evidence_response(uow, owner_id, evidence)
     _store(uow, owner_id, operation, key, request_data, response)
     uow.commit()

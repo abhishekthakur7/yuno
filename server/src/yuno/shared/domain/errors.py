@@ -112,10 +112,53 @@ class LockedError(YunoError):
     retryable = False
 
 
-class PendingCapError(YunoError):
-    """429 — a configured pending-item cap was exceeded."""
+class PayloadTooLargeError(YunoError):
+    http_status = 413
+    retryable = False
 
-    code = "pending_cap_exceeded"
+
+class ImportTooLargeError(PayloadTooLargeError):
+    code = "import-too-large"
+
+
+class ImportCountLimitError(ConflictError):
+    code = "import-count-limit"
+
+
+class ImportStatementLimitError(ConflictError):
+    code = "import-statement-limit"
+
+
+class EvidenceTooLargeError(PayloadTooLargeError):
+    code = "evidence-too-large"
+
+
+class EvidenceCountLimitError(ConflictError):
+    code = "evidence-count-limit"
+
+
+class GeneratedContentLimitError(DomainValidationError):
+    code = "generated-content-limit"
+
+
+class InterviewTranscriptLimitError(ConflictError):
+    code = "interview-transcript-limit"
+
+
+class RunnerInputLimitError(DomainValidationError):
+    code = "runner-input-limit"
+
+
+class UnsupportedExportVersionError(DomainValidationError):
+    code = "unsupported-export-version"
+
+
+class OverlayPendingCapError(ConflictError):
+    code = "pending-cap-exceeded"
+
+
+class PendingJobCapError(YunoError):
+    code = "pending-job-cap"
     http_status = 429
     retryable = False
 

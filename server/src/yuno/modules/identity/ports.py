@@ -20,7 +20,9 @@ class OwnerRepository(Protocol):
 
     def grants(self, owner_id: str) -> frozenset[Role]: ...
 
-    def grant_role(self, owner_id: str, role: Role, assigned_by_owner_id: str) -> None: ...
+    def grant_role(
+        self, owner_id: str, role: Role, assigned_by_owner_id: str
+    ) -> None: ...
 
 
 class IdentityUnitOfWork(UnitOfWork, Protocol):

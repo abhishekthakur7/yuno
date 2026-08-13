@@ -176,8 +176,9 @@ def test_invalid_provider_output_is_quarantined_and_never_published(
         quarantine = (
             connection.execute(
                 text(
-                    "SELECT raw_output_ref, raw_output_hash, expected_schema_version "
-                    "FROM schema_quarantines WHERE id = :id"
+                    "SELECT b.raw_output_ref, q.raw_output_hash, q.expected_schema_version "
+                    "FROM schema_quarantines q JOIN schema_quarantine_bodies b "
+                    "ON b.quarantine_id=q.id WHERE q.id = :id"
                 ),
                 {"id": result.quarantine_id},
             )

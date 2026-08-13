@@ -27,12 +27,28 @@ class ExportOperation:
     goal_id: str | None
     status: str
     format_version: str
-    package_json: str | None
+    filename: str | None
+    package_hash: str | None
     job_id: str | None
     result_ref: str | None
     failure_reference: str | None
+    completed_at: str | None
+    package_expires_at: str | None
+    metadata_expires_at: str | None
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class BuiltExportPackage:
+    operation_id: str
+    owner_id: str
+    document: str
+    filename: str
+    package_hash: str
+    completed_at: str
+    package_expires_at: str
+    metadata_expires_at: str
 
 
 @dataclass(frozen=True)

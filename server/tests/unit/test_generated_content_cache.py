@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,7 +17,8 @@ from yuno.modules.learning_content.domain import (
     d3_cache_key_hash,
     evaluate_artifact_staleness,
 )
-from yuno.shared.domain.errors import DomainValidationError
+from yuno.modules.learning_content.service import _validate_generated_content_limits
+from yuno.shared.domain.errors import DomainValidationError, GeneratedContentLimitError
 
 
 def _key() -> D3CacheKey:
@@ -28,6 +30,68 @@ def _key() -> D3CacheKey:
         topic_mapped_approved_imports_hash="imports-v1",
         prompt_template_version="prompt-v1",
     )
+
+
+def test_generated_content_limits_are_utf8_exact_counted_and_owner_scoped() -> None:
+    artifact = GeneratedArtifact(
+        "artifact-1",
+        "owner-1",
+        "goal-1",
+        "graph-v1",
+        "topic-1",
+        TopicLayer.ESSENTIAL,
+        "lesson-layer",
+        "imports-v1",
+        "prompt-v1",
+        "key-v1",
+        ArtifactState.GENERATING,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        False,
+        1,
+        "now",
+        "now",
+        None,
+    )
+    counts = {"owner-1": 0, "owner-2": 9}
+    uow = SimpleNamespace(
+        learning_content=SimpleNamespace(
+            count_live_artifacts=lambda owner_id: counts.get(owner_id, 0)
+        )
+    )
+    _validate_generated_content_limits(
+        uow,
+        "owner-1",
+        artifact,
+        "éé",
+        max_body_bytes=4,
+        retained_owner_limit=1,
+    )
+    with pytest.raises(GeneratedContentLimitError):
+        _validate_generated_content_limits(
+            uow,
+            "owner-1",
+            artifact,
+            "ééx",
+            max_body_bytes=4,
+            retained_owner_limit=1,
+        )
+    counts["owner-1"] = 1
+    with pytest.raises(GeneratedContentLimitError):
+        _validate_generated_content_limits(
+            uow,
+            "owner-1",
+            artifact,
+            "x",
+            max_body_bytes=4,
+            retained_owner_limit=1,
+        )
 
 
 def test_d3_cache_key_is_exactly_the_six_required_components() -> None:

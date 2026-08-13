@@ -29,10 +29,16 @@ class OwnerRoleGrantRow(Base):
 
     __tablename__ = "owner_role_grants"
     __table_args__ = (
-        CheckConstraint("role IN ('learner','designated_editorial_approver')", name="role_valid"),
+        CheckConstraint(
+            "role IN ('learner','designated_editorial_approver')", name="role_valid"
+        ),
     )
 
-    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), primary_key=True
+    )
     role: Mapped[str] = mapped_column(Text, primary_key=True)
     assigned_at: Mapped[str] = utc_timestamp_column()
-    assigned_by_owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    assigned_by_owner_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("owners.id"), nullable=False
+    )

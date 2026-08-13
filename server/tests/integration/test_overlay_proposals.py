@@ -134,17 +134,24 @@ def test_pending_cap_rejects_next_proposal_with_visible_feedback(
     client: TestClient, uow_factory: UnitOfWorkFactory
 ) -> None:
     _owner_id, goal_id, graph_id = _setup(uow_factory)
-    client.app.state.settings.overlay_proposal_pending_cap = 1
-    assert _create(client, goal_id, graph_id, key="cap-1").status_code == 201
+    for index in range(25):
+        created = _create(
+            client,
+            goal_id,
+            graph_id,
+            key=f"cap-{index}",
+            payload={"message": f"Recommendation {index}."},
+        )
+        assert created.status_code == 201
     capped = _create(
         client,
         goal_id,
         graph_id,
-        key="cap-2",
+        key="cap-overflow",
         payload={"message": "Different recommendation."},
     )
-    assert capped.status_code == 429
-    assert capped.json()["code"] == "pending_cap_exceeded"
+    assert capped.status_code == 409
+    assert capped.json()["code"] == "pending-cap-exceeded"
     assert capped.json()["recovery_action"] == "Review existing pending proposals."
 
 
@@ -258,7 +265,9 @@ def test_bridge_requires_explanation_and_only_add_applies_overlay(
         pytest.raises(IntegrityError, match="append-only"),
     ):
         connection.execute(
-            text("UPDATE overlay_proposal_decisions SET reason='changed' WHERE id=:id"),
+            text(
+                "UPDATE overlay_proposal_decision_bodies SET reason='changed' WHERE decision_id=:id"
+            ),
             {"id": decision_id},
         )
 

@@ -55,6 +55,11 @@ export async function resumeMockRun(runId: string) {
   return data
 }
 
+export async function deleteInterviewSessionBody(runId: string) {
+  const { error, response } = await client.DELETE('/api/v1/interview-runs/{run_id}', { params: { path: { run_id: runId } } })
+  if (error) failure(error, response.status, 'The interview session body could not be deleted.')
+}
+
 export async function submitMockAnswer(runId: string, answer: string) {
   const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/answers', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } }, body: { answer } })
   if (error || !data) failure(error, response.status, 'The Mock answer could not be submitted.')

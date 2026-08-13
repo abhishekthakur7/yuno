@@ -13,9 +13,11 @@ from yuno.api.contracts import (
 from yuno.api.dependencies import (
     get_job_dispatcher,
     get_owner_id,
+    get_settings_dependency,
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.config import Settings
 from yuno.modules.evidence_evaluation.domain import EvidenceEvaluationIdempotencyRecord
 from yuno.modules.hands_on.ports import HandsOnUnitOfWork
 from yuno.modules.hands_on.service import (
@@ -109,6 +111,7 @@ def submit_hands_on(
     uow: Annotated[HandsOnUnitOfWork, Depends(get_unit_of_work)],
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
     operation = f"submit_hands_on:{goal_id}:{topic_id}"
     request_data = body.model_dump(mode="json")
@@ -131,15 +134,11 @@ def submit_hands_on(
                     owner_id,
                     operation,
                     key,
-                    saved.model_copy(
-                        update={"deduplicated": True}
-                    ).model_dump_json(),
+                    saved.model_copy(update={"deduplicated": True}).model_dump_json(),
                 )
                 uow.commit()
             return accepted_job(current)
-        artifact = uow.hands_on.get_artifact_by_evidence(
-            owner_id, prior.request_ref
-        )
+        artifact = uow.hands_on.get_artifact_by_evidence(owner_id, prior.request_ref)
         if artifact is None:
             raise RuntimeError("The reserved hands-on artifact is unavailable.")
         if saved.result_ref is None:
@@ -158,6 +157,8 @@ def submit_hands_on(
             body.artifact,
             answer.question_id if answer else None,
             answer.response if answer else None,
+            max_payload_bytes=settings.evidence_payload_max_bytes,
+            retained_owner_limit=settings.evidence_retained_owner_limit,
         )
         rubric_id = rubric.id
         job_id = new_id()

@@ -11,6 +11,11 @@ from yuno.modules.canonical.domain import (
     Topic,
     TopicIdentity,
 )
+from yuno.modules.data_lifecycle.domain import (
+    CleanupIntent,
+    CleanupIntentKind,
+    CleanupIntentStatus,
+)
 from yuno.modules.evidence_evaluation.domain import (
     Evidence,
     EvidencePayload,
@@ -26,6 +31,7 @@ from yuno.modules.profiles_goals.service import create_goal
 from yuno.modules.roadmap.repository import SqlAlchemyRoadmapRepository
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
 
 
@@ -162,6 +168,7 @@ def test_transfer_and_delete_are_conservative_exact_and_atomic(
 
     with uow_factory() as uow:
         before_evidence = uow.evidence.get_evidence(owner_id, source_id, evidence_id)
+        assert before_evidence is not None
         impact = create_delete_preflight(uow, owner_id, source_id)
         uow.commit()
     assert impact.evidence_ids == (evidence_id,)
@@ -173,10 +180,11 @@ def test_transfer_and_delete_are_conservative_exact_and_atomic(
     assert realized == impact
 
     with uow_factory() as uow:
-        assert (
-            uow.evidence.get_evidence(owner_id, source_id, evidence_id)
-            == before_evidence
-        )
+        retained_evidence = uow.evidence.get_evidence(owner_id, source_id, evidence_id)
+        assert retained_evidence is not None
+        assert retained_evidence.id == before_evidence.id
+        assert retained_evidence.payload_hash == before_evidence.payload_hash
+        assert retained_evidence.summary == ""
         assert uow.evidence.get_payload(owner_id, source_id, evidence_id) is None
         assert [
             item.evidence_id
@@ -196,6 +204,17 @@ def test_transfer_and_delete_are_conservative_exact_and_atomic(
             if event.action == "deleted" and event.entity_id == source_id
         ]
         assert len(delete_audits) == 1
+
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM evidence_summary_bodies WHERE evidence_id=:id"
+                ),
+                {"id": evidence_id},
+            )
+            == 0
+        )
 
 
 def test_delete_failure_rolls_back_tombstone_payload_and_downgrade(
@@ -328,6 +347,51 @@ def test_delete_api_replays_the_same_snapshot_and_effect(
     operation = client.get(f"/api/v1/delete-operations/{body['operation_id']}")
     assert operation.status_code == 200
     assert operation.json()["status"] == "complete"
+    assert operation.json()["cleanup_pending_count"] == 0
+    assert operation.json()["cleanup_failure_classifications"] == []
+
+    timestamp = now_text(SystemClock())
+    path_ref = "runner-workspace:yuno-runner-delete-retry"
+    with uow_factory() as uow:
+        intent_id = new_id()
+        uow.data_lifecycle.add_cleanup_intent(
+            CleanupIntent(
+                intent_id,
+                owner_id,
+                source_id,
+                CleanupIntentKind.RUNNER_WORKSPACE,
+                path_ref,
+                hash_payload(path_ref),
+                CleanupIntentStatus.PENDING,
+                None,
+                0,
+                timestamp,
+                timestamp,
+                None,
+            )
+        )
+        uow.commit()
+    pending_cleanup = client.get(
+        f"/api/v1/delete-operations/{body['operation_id']}"
+    ).json()
+    assert pending_cleanup["status"] == "cleanup-pending"
+    assert pending_cleanup["cleanup_pending_count"] == 1
+
+    with uow_factory() as uow:
+        assert uow.data_lifecycle.fail_cleanup_intent(
+            owner_id,
+            intent_id,
+            "cleanup-permission-denied",
+            timestamp,
+        )
+        uow.commit()
+    failed_cleanup = client.get(
+        f"/api/v1/delete-operations/{body['operation_id']}"
+    ).json()
+    assert failed_cleanup["status"] == "cleanup-failed"
+    assert failed_cleanup["cleanup_failure_classifications"] == [
+        "cleanup-permission-denied"
+    ]
 
     with uow_factory() as uow:
         delete_audits = [

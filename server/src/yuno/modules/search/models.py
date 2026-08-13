@@ -8,7 +8,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yuno.shared.infrastructure.base import Base, id_column, utc_timestamp_column
 
@@ -53,11 +53,33 @@ class SearchDocumentRow(Base):
     entity_id: Mapped[str] = mapped_column(Text, nullable=False)
     topic_stable_id: Mapped[str | None] = mapped_column(Text)
     version: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    projection_version: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = utc_timestamp_column()
+    body: Mapped[SearchDocumentBodyRow | None] = relationship(
+        cascade="all, delete-orphan", lazy="joined", uselist=False
+    )
+
+
+class SearchDocumentBodyRow(Base):
+    __tablename__ = "search_document_bodies"
+    document_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
+    goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[str] = mapped_column(Text, nullable=False)
-    projection_version: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[str] = utc_timestamp_column()
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "owner_id", "goal_id"],
+            [
+                "search_documents.id",
+                "search_documents.owner_id",
+                "search_documents.goal_id",
+            ],
+            ondelete="CASCADE",
+        ),
+    )
 
 
 class SearchIndexStateRow(Base):

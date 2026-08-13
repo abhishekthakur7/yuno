@@ -588,6 +588,49 @@ class OwnerSettingsResponse(BaseModel):
     row_version: int
 
 
+class DataLifecyclePolicyResponse(BaseModel):
+    policy_version: Literal["1.0"]
+    import_original_max_bytes: int
+    import_retained_owner_limit: int
+    import_statements_per_import_limit: int
+    import_unreviewed_owner_limit: int
+    evidence_payload_max_bytes: int
+    evidence_retained_owner_limit: int
+    generated_body_max_bytes: int
+    generated_retained_owner_limit: int
+    interview_turns_per_session_limit: int
+    interview_bytes_per_session_limit: int
+    interview_sessions_owner_limit: int
+    runner_input_files_limit: int
+    runner_input_bytes_limit: int
+    runner_stdout_bytes_limit: int
+    runner_stderr_bytes_limit: int
+    runner_output_bytes_limit: int
+    runner_temp_bytes_limit: int
+    runner_temp_files_limit: int
+    overlay_proposal_pending_cap: int
+    pending_job_cap: int
+    diagnostic_abandoned_retention_days: int
+    interview_inactive_retention_days: int
+    terminal_job_retention_days: int
+    job_event_retention_days: int
+    job_event_owner_limit: int
+    runner_output_retention_days: int
+    runner_workspace_retention_seconds: int
+    export_package_retention_seconds: int
+    export_operation_retention_days: int
+    structured_log_file_count: int
+    structured_log_file_max_bytes: int
+    structured_log_total_max_bytes: int
+    structured_log_retention_days: int
+    export_format: Literal["yuno-portable-export"]
+    export_version: Literal["1.0"]
+    export_available: bool
+    recovery_window_days: Literal[0]
+    yuno_managed_backups: Literal[False]
+    remote_support_access: Literal[False]
+
+
 class NotebookEntryCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     entry_kind: NotebookEntryKind
@@ -864,14 +907,21 @@ class GoalDeleteImpactResponse(BaseModel):
 class ExportCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     goal_id: str | None = None
+    version: str = "1.0"
 
 
 class ExportOperationResponse(BaseModel):
     id: str
     goal_id: str | None
-    status: Literal["queued", "running", "complete", "failed"]
-    format_version: str
-    package: dict | None
+    status: Literal["queued", "running", "complete", "failed", "expired"]
+    format: Literal["yuno-portable-export"]
+    version: Literal["1.0"]
+    filename: str | None
+    package_hash: str | None
+    completed_at: str | None
+    package_expires_at: str | None
+    metadata_expires_at: str | None
+    download_available: bool
     job_id: str | None
     result_ref: str | None
     failure_reference: str | None
@@ -886,7 +936,17 @@ class DeleteOperationResponse(BaseModel):
     scope: str
     evidence_ids: list[str]
     learning_state_ids: list[str]
-    status: Literal["preflight", "queued", "running", "complete", "failed"]
+    status: Literal[
+        "preflight",
+        "queued",
+        "running",
+        "cleanup-pending",
+        "cleanup-failed",
+        "complete",
+        "failed",
+    ]
+    cleanup_pending_count: int
+    cleanup_failure_classifications: list[str]
     job_id: str | None
     result_ref: str | None
     confirmed_at: str | None

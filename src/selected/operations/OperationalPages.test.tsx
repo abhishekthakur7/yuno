@@ -40,6 +40,26 @@ function renderSettings(navigate = vi.fn()) {
 }
 
 const settings = { progress_display: 'detailed', accessibility: { reduced_motion: false }, provider_selection: null, row_version: 1 }
+const lifecyclePolicy = {
+  policy_version: '1.0', import_original_max_bytes: 10485760, import_retained_owner_limit: 100,
+  import_statements_per_import_limit: 10000, import_unreviewed_owner_limit: 50000,
+  evidence_payload_max_bytes: 10485760, evidence_retained_owner_limit: 10000,
+  generated_body_max_bytes: 2097152, generated_retained_owner_limit: 5000,
+  interview_turns_per_session_limit: 1000, interview_bytes_per_session_limit: 10485760,
+  interview_sessions_owner_limit: 200, runner_input_files_limit: 100,
+  runner_input_bytes_limit: 10485760, runner_stdout_bytes_limit: 1048576,
+  runner_stderr_bytes_limit: 1048576, runner_output_bytes_limit: 2097152,
+  runner_temp_bytes_limit: 268435456, runner_temp_files_limit: 10000,
+  overlay_proposal_pending_cap: 25, pending_job_cap: 100,
+  diagnostic_abandoned_retention_days: 30, interview_inactive_retention_days: 30,
+  terminal_job_retention_days: 30, job_event_retention_days: 7, job_event_owner_limit: 10000,
+  runner_output_retention_days: 7, runner_workspace_retention_seconds: 3600,
+  export_package_retention_seconds: 86400, export_operation_retention_days: 30,
+  structured_log_file_count: 5, structured_log_file_max_bytes: 10485760,
+  structured_log_total_max_bytes: 52428800, structured_log_retention_days: 14,
+  export_format: 'yuno-portable-export', export_version: '1.0', export_available: true, recovery_window_days: 0,
+  yuno_managed_backups: false, remote_support_access: false,
+}
 const reviewPreferences = { goal_id: 'goal-1', enabled: true, duration_minutes: 15, cadence: 'twice-weekly', retrieval_enabled: true, varied_context_enabled: true, scheduling_version: 'review-v1', row_version: 1, updated_at: '2026-08-13T00:00:00Z' }
 
 function settingsRead(request: Request) {
@@ -47,6 +67,7 @@ function settingsRead(request: Request) {
   if (request.url.endsWith('/goals')) return json([goal])
   if (request.url.includes('/imports?')) return json([])
   if (request.url.endsWith('/goals/goal-1/review-preferences')) return json(reviewPreferences)
+  if (request.url.endsWith('/settings/data-lifecycle-policy')) return json(lifecyclePolicy)
   if (request.url.endsWith('/settings') && request.method === 'GET') return json(settings)
   if (request.url.endsWith('/provider-capabilities')) return json([{ provider: 'codex', state: 'configured', reason: null, adapter_version: '1', contract_version: '1' }, { provider: 'claude', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null }])
   if (request.url.endsWith('/disclosures')) return json([{ id: null, category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: null, revoked_at: null }])
@@ -188,21 +209,72 @@ describe('server-backed settings and data lifecycle', () => {
     expect(screen.queryByRole('button', { name: /Reset local pages/i })).not.toBeInTheDocument()
   })
 
-  it('exposes a completed versioned export package without inventing a download', async () => {
+  it('exposes the approved limits, lifecycle guarantees, and local export download', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestFrom(input, init)
       const read = settingsRead(request)
       if (read) return read
       if (request.url.endsWith('/exports') && request.method === 'POST') return json({ job_id: 'export-1', kind: 'export_data', status: 'queued', enqueued_at: '2026-08-13T00:01:00Z', deduplicated: false, attempt: 0 }, 202)
-      if (request.url.endsWith('/exports/export-1')) return json({ id: 'export-1', goal_id: 'goal-1', status: 'complete', format_version: 'yuno-export-v1', package: { evidence: [{ id: 'evidence-1', availability: 'unavailable' }] }, job_id: 'export-1', failure_reference: null, created_at: '2026-08-13T00:01:00Z', updated_at: '2026-08-13T00:02:00Z' })
+      if (request.url.endsWith('/exports/export-1')) return json({ id: 'export-1', goal_id: 'goal-1', status: 'complete', format: 'yuno-portable-export', version: '1.0', filename: 'yuno-export-v1-20260813T000200Z.json', package_hash: 'package-sha256', package_expires_at: '2026-08-14T00:02:00Z', metadata_expires_at: '2026-09-12T00:02:00Z', completed_at: '2026-08-13T00:02:00Z', download_available: true, job_id: 'export-1', result_ref: 'ExportOperation:export-1', failure_reference: null, created_at: '2026-08-13T00:01:00Z', updated_at: '2026-08-13T00:02:00Z' })
       return json({}, 404)
     }))
     renderSettings()
     await userEvent.click(await screen.findByRole('button', { name: 'Create export' }))
-    expect(await screen.findByText(/Export complete · format yuno-export-v1/)).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Inspect export package'))
-    expect(screen.getByText(/"availability": "unavailable"/)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /download/i })).not.toBeInTheDocument()
+    expect(await screen.findByText(/Export complete · yuno-portable-export 1.0/)).toBeInTheDocument()
+    const download = screen.getByRole('link', { name: /Download yuno-export-v1-20260813T000200Z.json/ })
+    expect(download).toHaveAttribute('href', '/api/v1/exports/export-1/download')
+    await userEvent.click(screen.getByText(/Data limits and retention/))
+    expect(screen.getByText(/10 MiB each, 100 retained per owner/)).toBeInTheDocument()
+    expect(screen.getByText(/5 local files of at most 10 MiB each \(50 MiB total\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Deletion is irreversible/)).toBeInTheDocument()
+    expect(screen.getAllByText(/no Yuno-managed backup/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/no remote support access/i)).toBeInTheDocument()
+  })
+
+  it('keeps export disabled until the privacy review passes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/settings/data-lifecycle-policy')) return json({ ...lifecyclePolicy, export_available: false })
+      const read = settingsRead(request)
+      if (read) return read
+      return json({}, 404)
+    }))
+    renderSettings()
+    expect(await screen.findByText(/Portable export is disabled until the required privacy review passes/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create export' })).toBeDisabled()
+  })
+
+  it('requires irreversible confirmation before deleting import and interview bodies', async () => {
+    const deleted: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.includes('/imports?')) return json([record])
+      if (request.method === 'DELETE' && request.url.endsWith('/imports/import-1')) {
+        deleted.push('import-1')
+        return new Response(null, { status: 204 })
+      }
+      if (request.method === 'DELETE' && request.url.endsWith('/interview-runs/run-1')) {
+        deleted.push('run-1')
+        return new Response(null, { status: 204 })
+      }
+      const read = settingsRead(request)
+      if (read) return read
+      return json({}, 404)
+    }))
+    renderSettings()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete import import-1' }))
+    const importDialog = screen.getByRole('alertdialog', { name: 'Delete this import body?' })
+    expect(within(importDialog).getByText(/no undelete, recovery window, or Yuno-managed backup/i)).toBeInTheDocument()
+    await userEvent.click(within(importDialog).getByRole('button', { name: 'Confirm import body deletion' }))
+    await waitFor(() => expect(deleted).toContain('import-1'))
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Interview session ID' }), 'run-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete session body' }))
+    const sessionDialog = screen.getByRole('alertdialog', { name: 'Delete this interview session body?' })
+    expect(within(sessionDialog).getByText(/transcript turns, drafts, answers, and feedback/i)).toBeInTheDocument()
+    await userEvent.click(within(sessionDialog).getByRole('button', { name: 'Confirm session body deletion' }))
+    await waitFor(() => expect(deleted).toEqual(['import-1', 'run-1']))
   })
 
   it('requires a refreshed impact after stale delete confirmation and restores trigger focus on cancel', async () => {
@@ -242,14 +314,14 @@ describe('server-backed settings and data lifecycle', () => {
       if (read) return read
       if (request.url.endsWith('/goals/goal-1/delete-preflight')) return json({ operation_id: 'delete-complete', snapshot_id: 'snapshot-complete', goal_id: 'goal-1', evidence_ids: [], learning_state_ids: [], status: 'preflight', created_at: '2026-08-13T00:01:00Z' })
       if (request.url.endsWith('/goals/goal-1/delete')) return json({ job_id: 'delete-complete', kind: 'delete_goal', status: 'queued', enqueued_at: '2026-08-13T00:01:00Z', deduplicated: false, attempt: 0 }, 202)
-      if (request.url.endsWith('/delete-operations/delete-complete')) return json({ id: 'delete-complete', goal_id: 'goal-1', snapshot_id: 'snapshot-complete', evidence_ids: [], learning_state_ids: [], status: 'complete', job_id: 'delete-complete', failure_reference: null, created_at: '2026-08-13T00:01:00Z', updated_at: '2026-08-13T00:02:00Z' })
+      if (request.url.endsWith('/delete-operations/delete-complete')) return json({ id: 'delete-complete', goal_id: 'goal-1', snapshot_id: 'snapshot-complete', evidence_ids: [], learning_state_ids: [], status: 'cleanup-failed', cleanup_pending_count: 1, cleanup_failure_classifications: ['cleanup-permission-denied'], job_id: 'delete-complete', failure_reference: null, created_at: '2026-08-13T00:01:00Z', updated_at: '2026-08-13T00:02:00Z' })
       return json({}, 404)
     }))
     renderSettings()
     const trigger = await screen.findByRole('button', { name: 'Preview deletion' })
     await userEvent.click(trigger)
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm deletion' }))
-    expect(await screen.findByText('Delete complete')).toBeInTheDocument()
+    expect(await screen.findByText(/Delete cleanup-failed · cleanup-permission-denied/)).toBeInTheDocument()
     await waitFor(() => {
       expect(profileReads).toBeGreaterThan(1)
       expect(goalReads).toBeGreaterThan(1)

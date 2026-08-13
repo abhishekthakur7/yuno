@@ -23,7 +23,12 @@ from yuno.modules.imports.service import (
     reprocess_import,
     verify_statement,
 )
-from yuno.shared.domain.errors import DomainValidationError
+from yuno.shared.domain.errors import (
+    DomainValidationError,
+    ImportCountLimitError,
+    ImportStatementLimitError,
+    ImportTooLargeError,
+)
 
 
 class FakeImports:
@@ -33,6 +38,15 @@ class FakeImports:
         self.mappings = []
         self.topic_hashes = {}
         self.decisions = []
+
+    def count_live_imports(self, owner_id):
+        return sum(row.owner_id == owner_id for row in self.records.values())
+
+    def count_unreviewed_statements(self, owner_id):
+        return sum(
+            row.owner_id == owner_id and row.trust_state.value == "untrusted"
+            for row in self.statements.values()
+        )
 
     def add_import(self, record):
         self.records[record.id] = record
@@ -215,6 +229,62 @@ def test_parser_is_deterministic_and_preserves_order():
         "sqs may redeliver.",
         "ack after commit.",
     ]
+
+
+def test_import_byte_and_owner_limits_are_utf8_exact_and_owner_scoped():
+    uow = FakeUow()
+    exact = create_import(
+        uow,
+        "owner",
+        goal_id="goal",
+        import_type=ImportType.PLAIN_TEXT,
+        source_text="éé",
+        max_bytes=4,
+        retained_owner_limit=1,
+    )
+    assert exact.original_content == "éé".encode()
+
+    with pytest.raises(ImportCountLimitError):
+        create_import(
+            uow,
+            "owner",
+            goal_id="goal",
+            import_type=ImportType.PLAIN_TEXT,
+            source_text="x",
+            max_bytes=4,
+            retained_owner_limit=1,
+        )
+    assert len(uow.imports.records) == 1
+
+    with pytest.raises(ImportTooLargeError):
+        create_import(
+            uow,
+            "other",
+            goal_id=None,
+            import_type=ImportType.PLAIN_TEXT,
+            source_text="ééx",
+            max_bytes=4,
+            retained_owner_limit=1,
+        )
+    assert all(row.owner_id == "owner" for row in uow.imports.records.values())
+
+
+def test_statement_limits_reject_the_parsed_set_before_any_statement_write():
+    uow = FakeUow()
+    record = create_import(
+        uow,
+        "owner",
+        goal_id="goal",
+        import_type=ImportType.PLAIN_TEXT,
+        source_text="one\ntwo",
+    )
+    mark_import_parsing(uow, "owner", record.id)
+    with pytest.raises(ImportStatementLimitError):
+        parse_import(uow, "owner", record.id, statements_per_import_limit=1)
+    assert uow.imports.statements == {}
+
+    result = parse_import(uow, "owner", record.id, statements_per_import_limit=2)
+    assert len(result.statements) == 2
 
 
 def test_duplicate_occurrences_remain_inspectable_but_only_one_is_unmapped():

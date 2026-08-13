@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from yuno.modules.data_lifecycle.models import (
+    GeneratedArtifactBodyRow,
+    LearningContentIdempotencyBodyRow,
+    TopicConversationTurnBodyRow,
+)
 from yuno.modules.learning_content.domain import (
     ArtifactState,
     ConversationRole,
@@ -21,6 +26,7 @@ from yuno.modules.learning_content.models import (
     LearningContentIdempotencyRow,
     TopicConversationTurnRow,
 )
+from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.infrastructure.repository import (
     SqlAlchemyRepository,
     owner_scoped_select,
@@ -28,6 +34,16 @@ from yuno.shared.infrastructure.repository import (
 
 
 class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
+    def count_live_artifacts(self, owner_id: str) -> int:
+        return int(
+            self._session.scalar(
+                select(func.count())
+                .select_from(GeneratedArtifactBodyRow)
+                .where(GeneratedArtifactBodyRow.owner_id == owner_id)
+            )
+            or 0
+        )
+
     def get_artifact_by_key(
         self,
         owner_id,
@@ -48,7 +64,7 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 GeneratedArtifactRow.prompt_template_version == template_version,
             )
         ).one_or_none()
-        return _artifact(row) if row else None
+        return self._artifact(row) if row else None
 
     def get_artifact(self, owner_id, artifact_id):
         row = self._session.scalars(
@@ -56,7 +72,7 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 GeneratedArtifactRow.id == artifact_id
             )
         ).one_or_none()
-        return _artifact(row) if row else None
+        return self._artifact(row) if row else None
 
     def get_latest_artifact(self, owner_id, goal_id, topic_id, layer):
         row = self._session.scalars(
@@ -65,12 +81,14 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 GeneratedArtifactRow.goal_id == goal_id,
                 GeneratedArtifactRow.topic_stable_id == topic_id,
                 GeneratedArtifactRow.layer == layer,
-                GeneratedArtifactRow.body_ref.is_not(None),
+                GeneratedArtifactRow.id.in_(
+                    select(GeneratedArtifactBodyRow.artifact_id)
+                ),
             )
             .order_by(GeneratedArtifactRow.generated_at.desc())
             .limit(1)
         ).first()
-        return _artifact(row) if row else None
+        return self._artifact(row) if row else None
 
     def list_artifacts(self, owner_id, goal_id, layer):
         rows = self._session.scalars(
@@ -78,7 +96,9 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
             .where(
                 GeneratedArtifactRow.goal_id == goal_id,
                 GeneratedArtifactRow.layer == layer,
-                GeneratedArtifactRow.body_ref.is_not(None),
+                GeneratedArtifactRow.id.in_(
+                    select(GeneratedArtifactBodyRow.artifact_id)
+                ),
             )
             .order_by(
                 GeneratedArtifactRow.topic_stable_id,
@@ -86,12 +106,11 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 GeneratedArtifactRow.id.desc(),
             )
         ).all()
-        return tuple(_artifact(row) for row in rows)
+        return tuple(self._artifact(row) for row in rows)
 
     def add_artifact(self, artifact):
         values = artifact.__dict__.copy()
         body = values.pop("body")
-        values["body_ref"] = "inline:" + body if body is not None else None
         values.update(
             layer=artifact.layer.value,
             state=artifact.state.value,
@@ -105,6 +124,17 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
             .values(**values)
             .on_conflict_do_nothing()
         )
+        if body is not None:
+            self._session.execute(
+                sqlite_insert(GeneratedArtifactBodyRow)
+                .values(
+                    artifact_id=artifact.id,
+                    owner_id=artifact.owner_id,
+                    goal_id=artifact.goal_id,
+                    body_ref="inline:" + body,
+                )
+                .on_conflict_do_nothing()
+            )
         self._session.flush()
         return self.get_artifact_by_key(
             artifact.owner_id,
@@ -120,7 +150,31 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
         changes = dict(changes)
         if "body" in changes:
             body = changes.pop("body")
-            changes["body_ref"] = "inline:" + body if body is not None else None
+            if body is None:
+                self._session.execute(
+                    GeneratedArtifactBodyRow.__table__.delete().where(
+                        GeneratedArtifactBodyRow.owner_id == owner_id,
+                        GeneratedArtifactBodyRow.artifact_id == artifact_id,
+                    )
+                )
+            else:
+                self._session.execute(
+                    sqlite_insert(GeneratedArtifactBodyRow)
+                    .values(
+                        artifact_id=artifact_id,
+                        owner_id=owner_id,
+                        goal_id=self._session.scalar(
+                            select(GeneratedArtifactRow.goal_id).where(
+                                GeneratedArtifactRow.id == artifact_id
+                            )
+                        ),
+                        body_ref="inline:" + body,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["artifact_id"],
+                        set_={"body_ref": "inline:" + body},
+                    )
+                )
         values = {
             k: (
                 v.value if hasattr(v, "value") else int(v) if isinstance(v, bool) else v
@@ -195,14 +249,30 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 LearningContentIdempotencyRow.idempotency_key == key,
             )
         ).one_or_none()
-        return _idempotency(r) if r else None
+        body = self._session.get(LearningContentIdempotencyBodyRow, r.id) if r else None
+        return _idempotency(r, body) if r and body else None
 
     def add_idempotency(self, record):
-        self._session.execute(
+        result = self._session.execute(
             sqlite_insert(LearningContentIdempotencyRow)
-            .values(**record.__dict__)
+            .values(
+                **{
+                    **{
+                        k: v for k, v in record.__dict__.items() if k != "response_json"
+                    },
+                    "response_hash": hash_payload(record.response_json),
+                }
+            )
             .on_conflict_do_nothing()
         )
+        if result.rowcount:
+            self._session.add(
+                LearningContentIdempotencyBodyRow(
+                    idempotency_id=record.id,
+                    owner_id=record.owner_id,
+                    response_json=record.response_json,
+                )
+            )
         self._session.flush()
         return self.get_idempotency_by_key(record.owner_id, record.idempotency_key)
 
@@ -212,12 +282,24 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
             .where(LearningContentIdempotencyRow.idempotency_key == key)
             .limit(1)
         ).first()
-        return _idempotency(r) if r else None
+        body = self._session.get(LearningContentIdempotencyBodyRow, r.id) if r else None
+        return _idempotency(r, body) if r and body else None
 
     def add_conversation_turn(self, turn):
         values = turn.__dict__.copy()
+        body = values.pop("body")
         values["role"] = turn.role.value
+        values["body_hash"] = hash_payload(body)
         self._session.add(TopicConversationTurnRow(**values))
+        self._session.flush()
+        self._session.add(
+            TopicConversationTurnBodyRow(
+                turn_id=turn.id,
+                owner_id=turn.owner_id,
+                goal_id=turn.goal_id,
+                body=body,
+            )
+        )
         self._session.flush()
         return turn
 
@@ -227,7 +309,7 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 TopicConversationTurnRow.id == turn_id
             )
         ).one_or_none()
-        return _conversation_turn(row) if row else None
+        return self._conversation_turn(row) if row else None
 
     def get_conversation_turn_by_idempotency(self, owner_id, key):
         row = self._session.scalars(
@@ -235,7 +317,7 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 TopicConversationTurnRow.idempotency_key == key
             )
         ).one_or_none()
-        return _conversation_turn(row) if row else None
+        return self._conversation_turn(row) if row else None
 
     def list_conversation_turns(self, owner_id, goal_id, topic_id):
         rows = self._session.scalars(
@@ -249,10 +331,20 @@ class SqlAlchemyLearningContentRepository(SqlAlchemyRepository):
                 TopicConversationTurnRow.id,
             )
         ).all()
-        return tuple(_conversation_turn(row) for row in rows)
+        return tuple(
+            value for row in rows if (value := self._conversation_turn(row)) is not None
+        )
+
+    def _artifact(self, row):
+        body = self._session.get(GeneratedArtifactBodyRow, row.id)
+        return _artifact(row, body)
+
+    def _conversation_turn(self, row):
+        body = self._session.get(TopicConversationTurnBodyRow, row.id)
+        return _conversation_turn(row, body.body) if body is not None else None
 
 
-def _artifact(r):
+def _artifact(r, stored_body):
     return GeneratedArtifact(
         r.id,
         r.owner_id,
@@ -265,8 +357,8 @@ def _artifact(r):
         r.prompt_template_version,
         r.cache_key_hash,
         ArtifactState(r.state),
-        r.body_ref.removeprefix("inline:")
-        if r.body_ref and r.body_ref.startswith("inline:")
+        stored_body.body_ref.removeprefix("inline:")
+        if stored_body and stored_body.body_ref.startswith("inline:")
         else None,
         r.body_hash,
         r.current_snapshot_id,
@@ -306,7 +398,7 @@ def _attempt(r):
     )
 
 
-def _idempotency(r):
+def _idempotency(r, body):
     return GenerationIdempotencyRecord(
         r.id,
         r.owner_id,
@@ -315,12 +407,12 @@ def _idempotency(r):
         r.request_hash,
         r.attempt_id,
         r.job_id,
-        r.response_json,
+        body.response_json,
         r.created_at,
     )
 
 
-def _conversation_turn(r):
+def _conversation_turn(r, body):
     return TopicConversationTurn(
         r.id,
         r.owner_id,
@@ -328,7 +420,7 @@ def _conversation_turn(r):
         r.graph_version_id,
         r.topic_stable_id,
         ConversationRole(r.role),
-        r.body,
+        body,
         r.response_to_id,
         r.job_id,
         r.idempotency_key,

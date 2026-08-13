@@ -13,11 +13,16 @@ from yuno.modules.hands_on.domain import (
     ReviewMode,
 )
 from yuno.modules.hands_on.models import (
+    HandsOnArtifactBodyRow,
     HandsOnArtifactRow,
+    HandsOnCrossQuestionBodyRow,
     HandsOnCrossQuestionRow,
+    HandsOnReviewBodyRow,
     HandsOnReviewRow,
+    HandsOnWorkBodyRow,
     HandsOnWorkRow,
 )
+from yuno.shared.domain.hashing import hash_payload
 
 
 class SqlAlchemyHandsOnRepository:
@@ -32,12 +37,34 @@ class SqlAlchemyHandsOnRepository:
                 HandsOnWorkRow.topic_stable_id == topic_id,
             )
         )
-        return _work(row) if row else None
+        return (
+            _work(row, self._session.get(HandsOnWorkBodyRow, row.id)) if row else None
+        )
 
     def add_work(self, work):
         values = work.__dict__.copy()
-        values["constraints_json"] = json.dumps(values.pop("constraints"))
+        body = {
+            key: values.pop(key)
+            for key in (
+                "scenario_title",
+                "scenario_prompt",
+                "role",
+                "level",
+                "scenario_source",
+            )
+        }
+        body["constraints_json"] = json.dumps(values.pop("constraints"))
+        values["body_hash"] = hash_payload(body)
         self._session.add(HandsOnWorkRow(**values))
+        self._session.flush()
+        self._session.add(
+            HandsOnWorkBodyRow(
+                work_id=work.id,
+                owner_id=work.owner_id,
+                goal_id=work.goal_id,
+                **body,
+            )
+        )
         self._session.flush()
         return work
 
@@ -50,7 +77,7 @@ class SqlAlchemyHandsOnRepository:
             )
             .order_by(HandsOnArtifactRow.revision_number)
         ).all()
-        return tuple(_artifact(row) for row in rows)
+        return tuple(self._artifact(row) for row in rows)
 
     def get_artifact(self, owner_id, artifact_id):
         row = self._session.scalar(
@@ -59,7 +86,7 @@ class SqlAlchemyHandsOnRepository:
                 HandsOnArtifactRow.id == artifact_id,
             )
         )
-        return _artifact(row) if row else None
+        return self._artifact(row) if row else None
 
     def get_artifact_by_evidence(self, owner_id, evidence_id):
         row = self._session.scalar(
@@ -68,10 +95,23 @@ class SqlAlchemyHandsOnRepository:
                 HandsOnArtifactRow.evidence_id == evidence_id,
             )
         )
-        return _artifact(row) if row else None
+        return self._artifact(row) if row else None
 
     def add_artifact(self, artifact):
-        self._session.add(HandsOnArtifactRow(**artifact.__dict__))
+        values = artifact.__dict__.copy()
+        values.pop("content")
+        response = values.pop("cross_question_response")
+        values["body_hash"] = hash_payload(response)
+        self._session.add(HandsOnArtifactRow(**values))
+        self._session.flush()
+        self._session.add(
+            HandsOnArtifactBodyRow(
+                artifact_id=artifact.id,
+                owner_id=artifact.owner_id,
+                goal_id=artifact.goal_id,
+                cross_question_response=response,
+            )
+        )
         self._session.flush()
         return artifact
 
@@ -82,7 +122,11 @@ class SqlAlchemyHandsOnRepository:
                 HandsOnCrossQuestionRow.id == question_id,
             )
         )
-        return _question(row) if row else None
+        return (
+            _question(row, self._session.get(HandsOnCrossQuestionBodyRow, row.id))
+            if row
+            else None
+        )
 
     def list_reviews(self, owner_id, work_id):
         rows = self._session.scalars(
@@ -93,12 +137,28 @@ class SqlAlchemyHandsOnRepository:
             )
             .order_by(HandsOnReviewRow.created_at)
         ).all()
-        return tuple(_review(row) for row in rows)
+        return tuple(
+            review
+            for row in rows
+            if (review := _review(row, self._session.get(HandsOnReviewBodyRow, row.id)))
+            is not None
+        )
 
     def add_review(self, review):
         values = review.__dict__.copy()
         values["review_mode"] = review.review_mode.value
+        limitation = values.pop("required_limitation_label")
+        values["body_hash"] = hash_payload(limitation)
         self._session.add(HandsOnReviewRow(**values))
+        self._session.flush()
+        self._session.add(
+            HandsOnReviewBodyRow(
+                review_id=review.id,
+                owner_id=review.owner_id,
+                goal_id=review.goal_id,
+                required_limitation_label=limitation,
+            )
+        )
         self._session.flush()
         return review
 
@@ -111,48 +171,76 @@ class SqlAlchemyHandsOnRepository:
             )
             .order_by(HandsOnCrossQuestionRow.created_at)
         ).all()
-        return tuple(_question(row) for row in rows)
+        return tuple(
+            question
+            for row in rows
+            if (
+                question := _question(
+                    row, self._session.get(HandsOnCrossQuestionBodyRow, row.id)
+                )
+            )
+            is not None
+        )
 
     def add_question(self, question):
-        self._session.add(HandsOnCrossQuestionRow(**question.__dict__))
+        values = question.__dict__.copy()
+        body = {
+            "question": values.pop("question"),
+            "target_gap": values.pop("target_gap"),
+        }
+        values["body_hash"] = hash_payload(body)
+        self._session.add(HandsOnCrossQuestionRow(**values))
+        self._session.flush()
+        self._session.add(
+            HandsOnCrossQuestionBodyRow(
+                question_id=question.id,
+                owner_id=question.owner_id,
+                goal_id=question.goal_id,
+                **body,
+            )
+        )
         self._session.flush()
         return question
 
+    def _artifact(self, row):
+        body = self._session.get(HandsOnArtifactBodyRow, row.id)
+        return HandsOnArtifact(
+            row.id,
+            row.owner_id,
+            row.goal_id,
+            row.work_id,
+            row.revision_number,
+            "",
+            row.content_hash,
+            row.response_to_question_id,
+            body.cross_question_response if body else None,
+            row.evidence_id,
+            row.created_at,
+        )
 
-def _work(r):
+
+def _work(r, body):
+    if body is None:
+        return None
     return HandsOnWork(
         r.id,
         r.owner_id,
         r.goal_id,
         r.topic_stable_id,
-        r.scenario_title,
-        r.scenario_prompt,
-        r.role,
-        r.level,
-        tuple(json.loads(r.constraints_json)),
+        body.scenario_title,
+        body.scenario_prompt,
+        body.role,
+        body.level,
+        tuple(json.loads(body.constraints_json)),
         r.scenario_status,
-        r.scenario_source,
+        body.scenario_source,
         r.created_at,
     )
 
 
-def _artifact(r):
-    return HandsOnArtifact(
-        r.id,
-        r.owner_id,
-        r.goal_id,
-        r.work_id,
-        r.revision_number,
-        r.content,
-        r.content_hash,
-        r.response_to_question_id,
-        r.cross_question_response,
-        r.evidence_id,
-        r.created_at,
-    )
-
-
-def _review(r):
+def _review(r, body):
+    if body is None:
+        return None
     return HandsOnReview(
         r.id,
         r.owner_id,
@@ -161,12 +249,14 @@ def _review(r):
         r.artifact_id,
         r.assessment_id,
         ReviewMode(r.review_mode),
-        r.required_limitation_label,
+        body.required_limitation_label,
         r.created_at,
     )
 
 
-def _question(r):
+def _question(r, body):
+    if body is None:
+        return None
     return HandsOnCrossQuestion(
         r.id,
         r.owner_id,
@@ -174,7 +264,7 @@ def _question(r):
         r.work_id,
         r.review_id,
         r.artifact_id,
-        r.question,
-        r.target_gap,
+        body.question,
+        body.target_gap,
         r.created_at,
     )

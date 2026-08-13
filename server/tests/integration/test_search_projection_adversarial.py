@@ -61,11 +61,11 @@ def _insert_document(
             text("""
                 INSERT INTO search_documents
                   (id, owner_id, goal_id, generation, entity_type, entity_id,
-                   topic_stable_id, version, title, body, tags,
+                   topic_stable_id, version, body_hash,
                    projection_version, updated_at)
                 VALUES
                   (:id, :owner_id, :goal_id, :generation, :entity_type,
-                   :entity_id, NULL, NULL, :title, :body, :tags,
+                   :entity_id, NULL, NULL, :body_hash,
                    'search-v1', :updated_at)
             """),
             {
@@ -78,7 +78,23 @@ def _insert_document(
                 "title": title,
                 "body": f"{title} shared-match",
                 "tags": "shared-match",
+                "body_hash": f"hash-{document_id}",
                 "updated_at": updated_at,
+            },
+        )
+        connection.execute(
+            text("""
+                INSERT INTO search_document_bodies
+                  (document_id, owner_id, goal_id, title, body, tags)
+                VALUES (:id, :owner_id, :goal_id, :title, :body, :tags)
+            """),
+            {
+                "id": document_id,
+                "owner_id": owner_id,
+                "goal_id": goal_id,
+                "title": title,
+                "body": f"{title} shared-match",
+                "tags": "shared-match",
             },
         )
 
@@ -181,6 +197,53 @@ def test_ready_fts_joins_acl_source_and_uses_only_active_generation(
     assert [item["entity_id"] for item in response.json()["results"]] == [
         "active-owned"
     ]
+
+
+def test_removing_projection_body_immediately_removes_active_search_result(
+    client: TestClient,
+    engine: Engine,
+    uow_factory: UnitOfWorkFactory,
+    search_scope: tuple[str, str, str],
+) -> None:
+    owner_id, goal_id, _ = search_scope
+    _insert_document(
+        engine,
+        document_id="deleted-body",
+        owner_id=owner_id,
+        goal_id=goal_id,
+        generation="active-generation",
+        entity_id="deleted-body",
+        title="Sensitive projection",
+    )
+    _set_index_state(
+        engine,
+        owner_id=owner_id,
+        status="ready",
+        source_watermark=_watermark(uow_factory, owner_id),
+        active_generation="active-generation",
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM search_document_bodies "
+                "WHERE document_id='deleted-body' AND owner_id=:owner_id"
+            ),
+            {"owner_id": owner_id},
+        )
+
+    response = client.get(
+        "/api/v1/search", params={"q": "shared-match", "goal_id": goal_id}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"] == []
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM search_documents WHERE id='deleted-body'")
+            )
+            == 1
+        )
 
 
 @pytest.mark.parametrize("status", ["stale", "unavailable"])
@@ -387,11 +450,10 @@ def test_failed_partial_rebuild_preserves_previous_generation_and_results(
             text("""
                 INSERT INTO search_documents
                   (id, owner_id, goal_id, generation, entity_type, entity_id,
-                   title, body, tags, projection_version, updated_at)
+                   body_hash, projection_version, updated_at)
                 VALUES
                   ('partial', :owner_id, :goal_id, 'candidate-generation',
-                   'notebook-entry', 'partial', 'Partial result',
-                   'shared-match', 'shared-match', 'search-v1',
+                   'notebook-entry', 'partial', 'partial-hash', 'search-v1',
                    '2026-08-13T02:00:00Z')
             """),
             {"owner_id": owner_id, "goal_id": goal_id},

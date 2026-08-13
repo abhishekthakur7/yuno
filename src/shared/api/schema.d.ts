@@ -466,6 +466,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exports/{operation_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Export */
+        get: operations["download_export_api_v1_exports__operation_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals": {
         parameters: {
             query?: never;
@@ -1051,7 +1068,8 @@ export interface paths {
         get: operations["get_import_record_api_v1_imports__import_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Import Record */
+        delete: operations["delete_import_record_api_v1_imports__import_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1190,7 +1208,8 @@ export interface paths {
         get: operations["read_interview_run_api_v1_interview_runs__run_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Interview Run */
+        delete: operations["delete_interview_run_api_v1_interview_runs__run_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1690,6 +1709,23 @@ export interface paths {
         head?: never;
         /** Update Settings */
         patch: operations["update_settings_api_v1_settings_patch"];
+        trace?: never;
+    };
+    "/api/v1/settings/data-lifecycle-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Data Lifecycle Policy */
+        get: operations["get_data_lifecycle_policy_api_v1_settings_data_lifecycle_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/sources": {
@@ -2248,8 +2284,113 @@ export interface components {
          * @enum {string}
          */
         CorrectionType: "correction" | "confirmation" | "gap" | "transfer-confirmation";
+        /** DataLifecyclePolicyResponse */
+        DataLifecyclePolicyResponse: {
+            /** Diagnostic Abandoned Retention Days */
+            diagnostic_abandoned_retention_days: number;
+            /** Evidence Payload Max Bytes */
+            evidence_payload_max_bytes: number;
+            /** Evidence Retained Owner Limit */
+            evidence_retained_owner_limit: number;
+            /** Export Available */
+            export_available: boolean;
+            /**
+             * Export Format
+             * @constant
+             */
+            export_format: "yuno-portable-export";
+            /** Export Operation Retention Days */
+            export_operation_retention_days: number;
+            /** Export Package Retention Seconds */
+            export_package_retention_seconds: number;
+            /**
+             * Export Version
+             * @constant
+             */
+            export_version: "1.0";
+            /** Generated Body Max Bytes */
+            generated_body_max_bytes: number;
+            /** Generated Retained Owner Limit */
+            generated_retained_owner_limit: number;
+            /** Import Original Max Bytes */
+            import_original_max_bytes: number;
+            /** Import Retained Owner Limit */
+            import_retained_owner_limit: number;
+            /** Import Statements Per Import Limit */
+            import_statements_per_import_limit: number;
+            /** Import Unreviewed Owner Limit */
+            import_unreviewed_owner_limit: number;
+            /** Interview Bytes Per Session Limit */
+            interview_bytes_per_session_limit: number;
+            /** Interview Inactive Retention Days */
+            interview_inactive_retention_days: number;
+            /** Interview Sessions Owner Limit */
+            interview_sessions_owner_limit: number;
+            /** Interview Turns Per Session Limit */
+            interview_turns_per_session_limit: number;
+            /** Job Event Owner Limit */
+            job_event_owner_limit: number;
+            /** Job Event Retention Days */
+            job_event_retention_days: number;
+            /** Overlay Proposal Pending Cap */
+            overlay_proposal_pending_cap: number;
+            /** Pending Job Cap */
+            pending_job_cap: number;
+            /**
+             * Policy Version
+             * @constant
+             */
+            policy_version: "1.0";
+            /**
+             * Recovery Window Days
+             * @constant
+             */
+            recovery_window_days: 0;
+            /**
+             * Remote Support Access
+             * @constant
+             */
+            remote_support_access: false;
+            /** Runner Input Bytes Limit */
+            runner_input_bytes_limit: number;
+            /** Runner Input Files Limit */
+            runner_input_files_limit: number;
+            /** Runner Output Bytes Limit */
+            runner_output_bytes_limit: number;
+            /** Runner Output Retention Days */
+            runner_output_retention_days: number;
+            /** Runner Stderr Bytes Limit */
+            runner_stderr_bytes_limit: number;
+            /** Runner Stdout Bytes Limit */
+            runner_stdout_bytes_limit: number;
+            /** Runner Temp Bytes Limit */
+            runner_temp_bytes_limit: number;
+            /** Runner Temp Files Limit */
+            runner_temp_files_limit: number;
+            /** Runner Workspace Retention Seconds */
+            runner_workspace_retention_seconds: number;
+            /** Structured Log File Count */
+            structured_log_file_count: number;
+            /** Structured Log File Max Bytes */
+            structured_log_file_max_bytes: number;
+            /** Structured Log Retention Days */
+            structured_log_retention_days: number;
+            /** Structured Log Total Max Bytes */
+            structured_log_total_max_bytes: number;
+            /** Terminal Job Retention Days */
+            terminal_job_retention_days: number;
+            /**
+             * Yuno Managed Backups
+             * @constant
+             */
+            yuno_managed_backups: false;
+        };
         /** DeleteOperationResponse */
         DeleteOperationResponse: {
+            /** Cleanup Failure Classifications */
+            cleanup_failure_classifications: string[];
+            /** Cleanup Pending Count */
+            cleanup_pending_count: number;
             /** Confirmed At */
             confirmed_at: string | null;
             /** Created At */
@@ -2276,7 +2417,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "preflight" | "queued" | "running" | "complete" | "failed";
+            status: "preflight" | "queued" | "running" | "cleanup-pending" | "cleanup-failed" | "complete" | "failed";
             /** Updated At */
             updated_at: string;
         };
@@ -2447,7 +2588,7 @@ export interface components {
          * DiagnosticState
          * @enum {string}
          */
-        DiagnosticState: "not-started" | "in-progress" | "paused" | "skipped" | "resumed" | "roadmap-preview" | "confirmed" | "failed";
+        DiagnosticState: "not-started" | "in-progress" | "paused" | "skipped" | "resumed" | "roadmap-preview" | "confirmed" | "failed" | "expired";
         /**
          * DiagnosticTargetCapability
          * @enum {string}
@@ -2605,34 +2746,55 @@ export interface components {
         ExportCreateRequest: {
             /** Goal Id */
             goal_id?: string | null;
+            /**
+             * Version
+             * @default 1.0
+             */
+            version: string;
         };
         /** ExportOperationResponse */
         ExportOperationResponse: {
+            /** Completed At */
+            completed_at: string | null;
             /** Created At */
             created_at: string;
+            /** Download Available */
+            download_available: boolean;
             /** Failure Reference */
             failure_reference: string | null;
-            /** Format Version */
-            format_version: string;
+            /** Filename */
+            filename: string | null;
+            /**
+             * Format
+             * @constant
+             */
+            format: "yuno-portable-export";
             /** Goal Id */
             goal_id: string | null;
             /** Id */
             id: string;
             /** Job Id */
             job_id: string | null;
-            /** Package */
-            package: {
-                [key: string]: unknown;
-            } | null;
+            /** Metadata Expires At */
+            metadata_expires_at: string | null;
+            /** Package Expires At */
+            package_expires_at: string | null;
+            /** Package Hash */
+            package_hash: string | null;
             /** Result Ref */
             result_ref: string | null;
             /**
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "complete" | "failed";
+            status: "queued" | "running" | "complete" | "failed" | "expired";
             /** Updated At */
             updated_at: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: "1.0";
         };
         /**
          * FieldError
@@ -5272,6 +5434,37 @@ export interface operations {
             };
         };
     };
+    download_export_api_v1_exports__operation_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_goals_api_v1_goals_get: {
         parameters: {
             query?: never;
@@ -6696,6 +6889,35 @@ export interface operations {
             };
         };
     };
+    delete_import_record_api_v1_imports__import_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     post_import_parse_api_v1_imports__import_id__parse_post: {
         parameters: {
             query?: never;
@@ -7045,6 +7267,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PracticeRunResponse"] | components["schemas"]["MockRunResponse"];
                 };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_interview_run_api_v1_interview_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Default Response */
             default: {
@@ -8094,6 +8345,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnerSettingsResponse"];
+                };
+            };
+            /** @description Default Response */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_data_lifecycle_policy_api_v1_settings_data_lifecycle_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataLifecyclePolicyResponse"];
                 };
             };
             /** @description Default Response */

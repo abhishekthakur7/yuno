@@ -59,7 +59,6 @@ class OverlayEntryRow(Base):
             "source IN ('learner','diagnostic_confirmation','overlay_proposal','canonical_merge')",
             name="source_valid",
         ),
-        CheckConstraint("json_valid(value_json)", name="value_json_valid"),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"],
             ["goal_workspaces.id", "goal_workspaces.owner_id"],
@@ -99,8 +98,6 @@ class OverlayEntryRow(Base):
     )
     topic_stable_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     entry_type: Mapped[str] = mapped_column(Text, nullable=False)
-    value_json: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str] = mapped_column(Text, nullable=False)
     approved_at: Mapped[str] = utc_timestamp_column()
     supersedes_entry_id: Mapped[str | None] = mapped_column(
@@ -119,10 +116,6 @@ class OverlayProposalRow(Base):
         CheckConstraint(
             "state IN ('awaiting-learner-decision','accepted','postponed','dismissed','rejected-stale')",
             name="state_valid",
-        ),
-        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
-        CheckConstraint(
-            "json_type(payload_json) = 'object'", name="payload_json_object"
         ),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"],
@@ -155,10 +148,8 @@ class OverlayProposalRow(Base):
     )
     topic_stable_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     proposal_type: Mapped[str] = mapped_column(Text, nullable=False)
-    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
     state: Mapped[str] = mapped_column(Text, nullable=False)
-    state_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
     decided_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
 
@@ -201,7 +192,7 @@ class OverlayProposalDecisionRow(Base):
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     proposal_id: Mapped[str] = mapped_column(Text, nullable=False)
     decision: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[str] = utc_timestamp_column()
 
 
@@ -238,7 +229,7 @@ class LearningStateRow(Base):
     classification: Mapped[str] = mapped_column(Text, nullable=False)
     origin: Mapped[str] = mapped_column(Text, nullable=False)
     recommended_depth: Mapped[str] = mapped_column(Text, nullable=False)
-    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     derivation_version: Mapped[str] = mapped_column(Text, nullable=False)
     input_hash: Mapped[str] = mapped_column(Text, nullable=False)
     derived_at: Mapped[str] = utc_timestamp_column()
@@ -250,9 +241,6 @@ class LearnerCorrectionRow(Base):
         CheckConstraint(
             "correction_type IN ('correction','confirmation','gap','transfer-confirmation')",
             name="correction_type_valid",
-        ),
-        CheckConstraint(
-            "value IN ('likely-known','partial','unverified','new')", name="value_valid"
         ),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"],
@@ -281,8 +269,7 @@ class LearnerCorrectionRow(Base):
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     topic_stable_id: Mapped[str] = mapped_column(Text, nullable=False)
     correction_type: Mapped[str] = mapped_column(Text, nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str | None] = mapped_column(Text)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
     supersedes_correction_id: Mapped[str | None] = mapped_column(
         Text, ForeignKey("learner_corrections.id")
@@ -339,7 +326,7 @@ class TransferredEvidenceRefRow(Base):
     source_goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     source_evidence_id: Mapped[str] = mapped_column(Text, nullable=False)
     classification: Mapped[str] = mapped_column(Text, nullable=False)
-    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
 
 
@@ -371,5 +358,5 @@ class RoadmapIdempotencyRow(Base):
     operation: Mapped[str] = mapped_column(Text, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     request_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    response_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()

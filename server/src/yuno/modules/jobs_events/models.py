@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     CheckConstraint,
     Computed,
@@ -13,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from yuno.shared.infrastructure.base import (
     Base,
@@ -21,6 +23,13 @@ from yuno.shared.infrastructure.base import (
     id_column,
     utc_timestamp_column,
 )
+
+if TYPE_CHECKING:
+    from yuno.modules.data_lifecycle.models import (
+        JobAttemptBodyRow,
+        JobBodyRow,
+        JobResultBodyRow,
+    )
 
 _ACTIVE = "state IN ('queued','running','cancel-requested')"
 
@@ -37,7 +46,6 @@ class JobRow(Base):
         CheckConstraint("retryable IN (0,1)", name="retryable_valid"),
         CheckConstraint("attempt >= 0", name="attempt_nonnegative"),
         CheckConstraint("priority >= 0", name="priority_nonnegative"),
-        CheckConstraint("json_valid(payload_json)", name="payload_json_valid"),
         UniqueConstraint("id", "owner_id", name="uq_jobs_id_owner"),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"],
@@ -67,7 +75,6 @@ class JobRow(Base):
     retryable: Mapped[int] = boolean_column("retryable", default=False)
     dedupe_key: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str | None] = mapped_column(Text)
-    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
     request_ref: Mapped[str | None] = mapped_column(Text)
     disclosure_ref: Mapped[str | None] = mapped_column(Text)
@@ -78,7 +85,6 @@ class JobRow(Base):
     substitution_ref: Mapped[str | None] = mapped_column(Text)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
-    diagnostic: Mapped[str | None] = mapped_column(Text)
     result_ref: Mapped[str | None] = mapped_column(Text)
     result_hash: Mapped[str | None] = mapped_column(Text)
     worker_id: Mapped[str | None] = mapped_column(Text)
@@ -86,6 +92,22 @@ class JobRow(Base):
     started_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
     terminal_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
     updated_at: Mapped[str] = utc_timestamp_column()
+    body: Mapped["JobBodyRow | None"] = relationship(  # noqa: UP037
+        "JobBodyRow", uselist=False, cascade="all, delete-orphan", lazy="joined"
+    )
+
+    @property
+    def payload_json(self) -> str:
+        return self.body.payload_json if self.body else "{}"
+
+    @property
+    def diagnostic(self) -> str | None:
+        return self.body.diagnostic if self.body else None
+
+    @diagnostic.setter
+    def diagnostic(self, value: str | None) -> None:
+        if self.body:
+            self.body.diagnostic = value
 
 
 class JobAttemptRow(Base):
@@ -113,16 +135,59 @@ class JobAttemptRow(Base):
     )
     job_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    process_identity: Mapped[str | None] = mapped_column(Text)
-    pid: Mapped[int | None] = mapped_column(Integer)
-    pgid: Mapped[int | None] = mapped_column(Integer)
-    temp_path: Mapped[str | None] = mapped_column(Text)
     substitution_ref: Mapped[str | None] = mapped_column(Text)
     confirmation_ref: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[str] = utc_timestamp_column()
     ended_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
     outcome: Mapped[str | None] = mapped_column(Text)
-    diagnostic: Mapped[str | None] = mapped_column(Text)
+    body: Mapped["JobAttemptBodyRow | None"] = relationship(  # noqa: UP037
+        "JobAttemptBodyRow", uselist=False, cascade="all, delete-orphan", lazy="joined"
+    )
+
+    @property
+    def process_identity(self) -> str | None:
+        return self.body.process_identity if self.body else None
+
+    @process_identity.setter
+    def process_identity(self, value: str | None) -> None:
+        if self.body:
+            self.body.process_identity = value
+
+    @property
+    def pid(self) -> int | None:
+        return self.body.pid if self.body else None
+
+    @pid.setter
+    def pid(self, value: int | None) -> None:
+        if self.body:
+            self.body.pid = value
+
+    @property
+    def pgid(self) -> int | None:
+        return self.body.pgid if self.body else None
+
+    @pgid.setter
+    def pgid(self, value: int | None) -> None:
+        if self.body:
+            self.body.pgid = value
+
+    @property
+    def temp_path(self) -> str | None:
+        return self.body.temp_path if self.body else None
+
+    @temp_path.setter
+    def temp_path(self, value: str | None) -> None:
+        if self.body:
+            self.body.temp_path = value
+
+    @property
+    def diagnostic(self) -> str | None:
+        return self.body.diagnostic if self.body else None
+
+    @diagnostic.setter
+    def diagnostic(self, value: str | None) -> None:
+        if self.body:
+            self.body.diagnostic = value
 
 
 class JobEventRow(Base):
@@ -148,9 +213,7 @@ class JobEventRow(Base):
         Index("ix_job_events_owner_event", "owner_id", "event_id"),
         Index("ix_job_events_job_event", "job_id", "event_id"),
     )
-    sequence: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
-    )
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(
         Text,
         Computed("printf('%020d', sequence)", persisted=True),
@@ -176,7 +239,6 @@ class JobResultRow(Base):
     __tablename__ = "job_results"
     __table_args__ = (
         CheckConstraint("length(trim(kind)) > 0", name="kind_valid"),
-        CheckConstraint("json_valid(warnings_json)", name="warnings_json_valid"),
         UniqueConstraint("id", "owner_id", name="uq_job_results_id_owner"),
         UniqueConstraint("job_id", name="uq_job_results_job"),
         ForeignKeyConstraint(
@@ -195,6 +257,15 @@ class JobResultRow(Base):
     schema_version: Mapped[str] = mapped_column(Text, nullable=False, default="1")
     result_ref: Mapped[str] = mapped_column(Text, nullable=False)
     result_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    warnings_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    diagnostic_ref: Mapped[str | None] = mapped_column(Text)
     committed_at: Mapped[str] = utc_timestamp_column()
+    body: Mapped["JobResultBodyRow | None"] = relationship(  # noqa: UP037
+        "JobResultBodyRow", uselist=False, cascade="all, delete-orphan", lazy="joined"
+    )
+
+    @property
+    def warnings_json(self) -> str:
+        return self.body.warnings_json if self.body else "[]"
+
+    @property
+    def diagnostic_ref(self) -> str | None:
+        return self.body.diagnostic_ref if self.body else None

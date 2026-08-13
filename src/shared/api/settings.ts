@@ -7,6 +7,7 @@ import type { components } from './schema'
 export type OwnerSettings = components['schemas']['OwnerSettingsResponse']
 export type ProgressDisplay = OwnerSettings['progress_display']
 export type OwnerSettingsPatch = components['schemas']['OwnerSettingsPatchRequest']
+export type DataLifecyclePolicy = components['schemas']['DataLifecyclePolicyResponse']
 
 function failure(error: components['schemas']['ErrorResponse'] | undefined, status: number, message: string): never {
   throw new ApiError(error?.message ?? message, status)
@@ -20,6 +21,18 @@ export function settingsQueryOptions() {
       if (error || !data) failure(error, response.status, 'Settings could not be loaded.')
       return data
     },
+  })
+}
+
+export function dataLifecyclePolicyQueryOptions() {
+  return queryOptions({
+    queryKey: ['settings', 'data-lifecycle-policy'],
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/settings/data-lifecycle-policy')
+      if (error || !data) failure(error, response.status, 'Data lifecycle policy could not be loaded.')
+      return data
+    },
+    staleTime: Number.POSITIVE_INFINITY,
   })
 }
 

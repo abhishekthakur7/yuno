@@ -55,14 +55,11 @@ class ExportOperationRow(Base):
     __table_args__ = (
         UniqueConstraint("id", "owner_id", name="uq_export_operations_id_owner"),
         CheckConstraint(
-            "status IN ('queued','running','complete','failed')", name="status_valid"
+            "status IN ('queued','running','complete','failed','expired')",
+            name="status_valid",
         ),
         CheckConstraint(
             "length(trim(format_version)) > 0", name="format_version_non_blank"
-        ),
-        CheckConstraint(
-            "package_json IS NULL OR json_valid(package_json)",
-            name="package_json_valid",
         ),
         ForeignKeyConstraint(
             ["goal_id", "owner_id"], ["goal_workspaces.id", "goal_workspaces.owner_id"]
@@ -73,10 +70,14 @@ class ExportOperationRow(Base):
     goal_id: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     format_version: Mapped[str] = mapped_column(Text, nullable=False)
-    package_json: Mapped[str | None] = mapped_column(Text)
+    filename: Mapped[str | None] = mapped_column(Text)
+    package_hash: Mapped[str | None] = mapped_column(Text)
     job_id: Mapped[str | None] = mapped_column(Text)
     result_ref: Mapped[str | None] = mapped_column(Text)
     failure_reference: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
+    package_expires_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
+    metadata_expires_at: Mapped[str | None] = utc_timestamp_column(nullable=True)
     created_at: Mapped[str] = utc_timestamp_column()
     updated_at: Mapped[str] = utc_timestamp_column()
 

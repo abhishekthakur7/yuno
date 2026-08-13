@@ -60,8 +60,12 @@ def migrated_database_url(database_url: str) -> str:
 
 
 @pytest.fixture
-def settings(migrated_database_url: str) -> Settings:
-    return Settings(database_url=migrated_database_url)
+def settings(migrated_database_url: str, tmp_path) -> Settings:
+    return Settings(
+        database_url=migrated_database_url,
+        structured_log_directory=tmp_path / "logs",
+        export_privacy_review_approved=True,
+    )
 
 
 @pytest.fixture

@@ -30,3 +30,18 @@ class ProcessPort(Protocol):
 class TempWorkspacePort(Protocol):
     def create(self) -> Path: ...
     def cleanup(self, path: Path) -> None: ...
+
+
+class WorkspaceCleanupIntentPort(Protocol):
+    def record_workspace(
+        self,
+        *,
+        owner_id: str,
+        goal_id: str | None,
+        path_ref: str,
+        failure_classification: str | None,
+        created_at: str,
+    ) -> None: ...
+
+
+WorkspaceCleanupIntentFactory = Callable[[object], WorkspaceCleanupIntentPort]

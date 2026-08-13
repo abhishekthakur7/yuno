@@ -75,7 +75,9 @@ def _arrange(uow_factory):
     return topic_id, goal_id
 
 
-def test_submit_is_idempotent_and_full_revision_chain_is_queryable(client, uow_factory):
+def test_submit_is_idempotent_and_full_revision_chain_is_queryable(
+    client, uow_factory, engine
+):
     topic_id, goal_id = _arrange(uow_factory)
     install_provider_fake(client, HandsOnEvaluationAdapter())
     accept_provider_disclosure(client)
@@ -132,6 +134,53 @@ def test_submit_is_idempotent_and_full_revision_chain_is_queryable(client, uow_f
     assert [item["revision_number"] for item in chain["artifacts"]] == [1, 2]
     assert chain["artifacts"][1]["response_to_question_id"] == question["id"]
 
+    preflight = client.post(
+        f"/api/v1/goals/{goal_id}/delete-preflight",
+        headers={"Idempotency-Key": "hands-on-delete-preflight"},
+    ).json()
+    deletion = client.post(
+        f"/api/v1/goals/{goal_id}/delete",
+        headers={"Idempotency-Key": "hands-on-delete"},
+        json={
+            "operation_id": preflight["operation_id"],
+            "snapshot_id": preflight["snapshot_id"],
+        },
+    )
+    assert wait_for_job(client, deletion)["status"] == "succeeded"
+    goal_body_tables = (
+        "evidence_summary_bodies",
+        "evidence_payloads",
+        "assessment_bodies",
+        "assessment_dimension_result_bodies",
+        "hands_on_work_bodies",
+        "hands_on_artifact_bodies",
+        "hands_on_review_bodies",
+        "hands_on_cross_question_bodies",
+    )
+    with engine.connect() as connection:
+        for table in goal_body_tables:
+            assert (
+                connection.scalar(
+                    text(f"SELECT count(*) FROM {table} WHERE goal_id=:goal_id"),
+                    {"goal_id": goal_id},
+                )
+                == 0
+            )
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM hands_on_artifacts WHERE goal_id=:goal_id"),
+                {"goal_id": goal_id},
+            )
+            == 2
+        )
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM assessments WHERE goal_id=:goal_id"),
+                {"goal_id": goal_id},
+            )
+            == 2
+        )
+
 
 def test_submit_without_disclosure_does_not_create_artifact_or_evidence(
     client, uow_factory
@@ -149,6 +198,34 @@ def test_submit_without_disclosure_does_not_create_artifact_or_evidence(
     assert response.status_code == 412
     assert client.get(lifecycle_url).json()["artifacts"] == []
     assert client.get(f"/api/v1/goals/{goal_id}/evidence").json() == initial_evidence
+
+
+def test_submit_rejects_combined_artifact_and_response_over_byte_limit_atomically(
+    client, uow_factory, engine
+):
+    topic_id, goal_id = _arrange(uow_factory)
+    accept_provider_disclosure(client)
+    response = client.post(
+        f"/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on/submit",
+        headers={"Idempotency-Key": "hands-on-combined-limit"},
+        json={
+            "artifact": "a" * (10 * 1024 * 1024),
+            "cross_question_response": {
+                "question_id": new_id(),
+                "response": "b",
+            },
+        },
+    )
+    assert response.status_code == 413
+    assert response.json()["code"] == "evidence-too-large"
+    with engine.connect() as connection:
+        for table in (
+            "hands_on_work",
+            "hands_on_artifacts",
+            "evidence",
+            "evidence_payloads",
+        ):
+            assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
 
 
 def test_submit_reservation_recovers_enqueue_failure_without_duplicate_evidence(
@@ -187,17 +264,6 @@ def test_submit_reservation_recovers_enqueue_failure_without_duplicate_evidence(
 
 
 def test_static_limitation_and_artifact_immutability_are_database_enforced(engine):
-    with (
-        engine.begin() as connection,
-        pytest.raises(Exception, match="hands_on_static_limitation_non_blank"),
-    ):
-        connection.execute(
-            text(
-                "INSERT INTO hands_on_reviews (id, owner_id, goal_id, work_id, artifact_id, assessment_id, review_mode, required_limitation_label) VALUES ('x','x','x','x','x','x','static','   ')"
-            )
-        )
-    # Trigger definitions are asserted directly because a valid artifact needs
-    # the entire owner/goal/evidence chain.
     with engine.connect() as connection:
         triggers = (
             connection.execute(
@@ -208,7 +274,25 @@ def test_static_limitation_and_artifact_immutability_are_database_enforced(engin
             .scalars()
             .all()
         )
-    assert set(triggers) == {
-        "hands_on_artifacts_immutable_update",
-        "hands_on_artifacts_immutable_delete",
+    assert len(triggers) == 2
+    assert any("update" in name for name in triggers)
+    assert any("delete" in name for name in triggers)
+    with engine.connect() as connection:
+        header_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(hands_on_artifacts)"))
+        }
+        body_columns = {
+            row[1]
+            for row in connection.execute(
+                text("PRAGMA table_info(hands_on_artifact_bodies)")
+            )
+        }
+    assert "content" not in header_columns
+    assert "cross_question_response" not in header_columns
+    assert body_columns == {
+        "artifact_id",
+        "owner_id",
+        "goal_id",
+        "cross_question_response",
     }

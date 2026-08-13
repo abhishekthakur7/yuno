@@ -28,11 +28,14 @@ from yuno.api.dependencies import (
     get_clock,
     get_job_dispatcher,
     get_owner_id,
+    get_settings_dependency,
     get_unit_of_work,
     idempotency_key,
     if_match,
     parse_if_match,
 )
+from yuno.config import Settings
+from yuno.modules.data_lifecycle.service import delete_interview_bodies
 from yuno.modules.evidence_evaluation.domain import EvaluationRequest, RubricStatus
 from yuno.modules.evidence_evaluation.ports import EvaluationAdapter
 from yuno.modules.evidence_evaluation.service import create_evidence, perform_assessment
@@ -106,7 +109,9 @@ def post_interview_run(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     if body.mode == "Mock":
         rubric_id = body.rubric_id
         rubric_version = body.rubric_version
@@ -135,6 +140,9 @@ def post_interview_run(
             rubric_id,
             rubric_version,
             body.requested_capability,
+            session_owner_limit=settings.interview_sessions_owner_limit,
+            turns_per_session_limit=settings.interview_turns_per_session_limit,
+            bytes_per_session_limit=settings.interview_bytes_per_session_limit,
             clock=clock,
         )
         uow.commit()
@@ -160,6 +168,9 @@ def post_interview_run(
         body.rubric_version,
         body.requested_capability,
         hint_text=body.hint,
+        session_owner_limit=settings.interview_sessions_owner_limit,
+        turns_per_session_limit=settings.interview_turns_per_session_limit,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
         clock=clock,
     )
     uow.commit()
@@ -175,8 +186,20 @@ def read_interview_run(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     run = get_interview_run(uow, owner_id, run_id)
     return _run_response(run) if run.mode == "Practice" else _mock_run_response(run)
+
+
+@router.delete("/interview-runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_interview_run(
+    run_id: str,
+    owner_id: Annotated[str, Depends(get_owner_id)],
+    uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
+) -> Response:
+    get_interview_run(uow, owner_id, run_id)
+    delete_interview_bodies(uow, owner_id, run_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/interview-runs/{run_id}/hints", response_model=PracticeRunResponse)
@@ -185,13 +208,22 @@ def post_interview_hint(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     run = get_interview_run(uow, owner_id, run_id)
     if run.mode == "Mock" and run.state.value != "completed":
         raise MockFeedbackWithheldError(
             "Hints are withheld until the Mock interview is complete."
         )
-    run = request_hint(uow, owner_id, run_id, clock=clock)
+    run = request_hint(
+        uow,
+        owner_id,
+        run_id,
+        turns_per_session_limit=settings.interview_turns_per_session_limit,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
+        clock=clock,
+    )
     uow.commit()
     return _run_response(run)
 
@@ -210,12 +242,15 @@ def post_interview_answer(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
     run = get_interview_run(uow, owner_id, run_id)
     if not body.answer.strip():
         raise DomainValidationError("An answer must not be blank.")
     if run.mode == "Mock":
-        return _post_mock_answer(run, body, owner_id, uow, dispatcher, key, clock)
+        return _post_mock_answer(
+            run, body, owner_id, uow, dispatcher, key, clock, settings
+        )
     operation = f"practice_answer:{run_id}"
     request_data = body.model_dump(mode="json")
     prior = uow.interview.get_idempotency(owner_id, operation, key)
@@ -252,7 +287,13 @@ def post_interview_answer(
         disclosure = require_disclosure(uow, owner_id)
         return accepted_job(
             _dispatch_practice(
-                dispatcher, owner_id, run, key, reserved.job_id, disclosure.id
+                dispatcher,
+                owner_id,
+                run,
+                key,
+                reserved.job_id,
+                disclosure.id,
+                settings,
             )
         )
 
@@ -273,9 +314,19 @@ def post_interview_answer(
         origin="practice-submit",
         content=body.answer,
         content_version=run.rubric_version,
+        max_payload_bytes=settings.evidence_payload_max_bytes,
+        retained_owner_limit=settings.evidence_retained_owner_limit,
     )
     answer_turn = submit_answer(
-        uow, owner_id, run.id, body.answer, evidence.id, job_id, clock=clock
+        uow,
+        owner_id,
+        run.id,
+        body.answer,
+        evidence.id,
+        job_id,
+        turns_per_session_limit=settings.interview_turns_per_session_limit,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
+        clock=clock,
     )
     reserved = JobRefResponse(
         job_id=job_id,
@@ -301,7 +352,9 @@ def post_interview_answer(
     run = get_practice_run(uow, owner_id, run.id)
     assert run.active_answer_turn_id == answer_turn.id
     return accepted_job(
-        _dispatch_practice(dispatcher, owner_id, run, key, job_id, disclosure.id)
+        _dispatch_practice(
+            dispatcher, owner_id, run, key, job_id, disclosure.id, settings
+        )
     )
 
 
@@ -312,8 +365,17 @@ def post_mock_pause(
     owner_id: Annotated[str, Depends(get_owner_id)],
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
-    run = pause_mock(uow, owner_id, run_id, body.draft, clock=clock)
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
+    run = pause_mock(
+        uow,
+        owner_id,
+        run_id,
+        body.draft,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
+        clock=clock,
+    )
     uow.commit()
     return _mock_run_response(run)
 
@@ -325,6 +387,7 @@ def post_mock_resume(
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
     clock: Annotated[Clock, Depends(get_clock)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     run = resume_mock(uow, owner_id, run_id, clock=clock)
     uow.commit()
     return _mock_run_response(run)
@@ -344,7 +407,9 @@ def post_mock_complete(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     run = get_interview_run(uow, owner_id, run_id)
     if run.mode != "Mock":
         raise NotFoundError("Mock run not found.")
@@ -376,7 +441,14 @@ def post_mock_complete(
             deduplicated=True,
         )
         return accepted_job(ref)
-    validate_mock_completion(uow, owner_id, run_id, body.draft)
+    validate_mock_completion(
+        uow,
+        owner_id,
+        run_id,
+        body.draft,
+        turns_per_session_limit=settings.interview_turns_per_session_limit,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
+    )
     bundle = get_bundle(uow, owner_id, run.bundle_id)
     item = next(value for value in bundle.items if value.id == run.bundle_item_id)
     if item.topic_stable_id is None:
@@ -399,6 +471,8 @@ def post_mock_complete(
         origin="mock-complete",
         content=json.dumps(transcript, ensure_ascii=False, separators=(",", ":")),
         content_version="mock-transcript-v1",
+        max_payload_bytes=settings.evidence_payload_max_bytes,
+        retained_owner_limit=settings.evidence_retained_owner_limit,
         clock=clock,
     )
     run = reserve_mock_completion(
@@ -481,7 +555,9 @@ def post_interview_retry(
     dispatcher: Annotated[JobDispatcher, Depends(get_job_dispatcher)],
     key: Annotated[str, Depends(idempotency_key)],
     clock: Annotated[Clock, Depends(get_clock)],
+    settings: Annotated[Settings, Depends(get_settings_dependency)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     current = get_interview_run(uow, owner_id, run_id)
     if current.mode == "Mock":
         operation = f"mock_retry:{run_id}"
@@ -517,7 +593,11 @@ def post_interview_retry(
             )
         )
         uow.commit()
-        payload = {"run_id": run.id}
+        payload = {
+            "run_id": run.id,
+            "turns_per_session_limit": settings.interview_turns_per_session_limit,
+            "bytes_per_session_limit": settings.interview_bytes_per_session_limit,
+        }
         if kind == "generate_mock_next_turn":
             payload["answer_turn_id"] = run.active_answer_turn_id
         return accepted_job(
@@ -542,7 +622,9 @@ def post_interview_retry(
     run = reserve_evaluation_retry(uow, owner_id, run_id, job_id, clock=clock)
     uow.commit()
     return accepted_job(
-        _dispatch_practice(dispatcher, owner_id, run, key, job_id, disclosure.id)
+        _dispatch_practice(
+            dispatcher, owner_id, run, key, job_id, disclosure.id, settings
+        )
     )
 
 
@@ -556,6 +638,7 @@ def post_interview_cancel(
     uow: Annotated[InterviewUnitOfWork, Depends(get_unit_of_work)],
     clock: Annotated[Clock, Depends(get_clock)],
 ):
+    uow.profiles_goals.lock_idempotency_commands(owner_id)
     current = get_interview_run(uow, owner_id, run_id)
     run = (
         cancel_mock_generation(uow, owner_id, run_id, clock=clock)
@@ -795,13 +878,19 @@ def _dispatch_practice(
     key: str,
     job_id: str,
     disclosure_ref: str,
+    settings: Settings,
 ):
     assert run.active_answer_turn_id is not None
     return dispatcher.enqueue(
         JobRequest(
             "evaluate_practice_answer",
             owner_id,
-            {"run_id": run.id, "answer_turn_id": run.active_answer_turn_id},
+            {
+                "run_id": run.id,
+                "answer_turn_id": run.active_answer_turn_id,
+                "turns_per_session_limit": (settings.interview_turns_per_session_limit),
+                "bytes_per_session_limit": (settings.interview_bytes_per_session_limit),
+            },
             dedupe_key=run.active_answer_turn_id,
             idempotency_key=key,
             requested_job_id=job_id,
@@ -822,6 +911,7 @@ def _post_mock_answer(
     dispatcher: JobDispatcher,
     key: str,
     clock: Clock,
+    settings: Settings,
 ):
     operation = f"mock_answer:{run.id}"
     request_data = body.model_dump(mode="json")
@@ -837,7 +927,14 @@ def _post_mock_answer(
     disclosure_ref = require_disclosure(uow, owner_id).id
     job_id = new_id()
     updated = submit_mock_answer(
-        uow, owner_id, run.id, body.answer, job_id, clock=clock
+        uow,
+        owner_id,
+        run.id,
+        body.answer,
+        job_id,
+        turns_per_session_limit=settings.interview_turns_per_session_limit,
+        bytes_per_session_limit=settings.interview_bytes_per_session_limit,
+        clock=clock,
     )
     reserved = JobRefResponse(
         job_id=job_id,
@@ -863,7 +960,16 @@ def _post_mock_answer(
             JobRequest(
                 "generate_mock_next_turn",
                 owner_id,
-                {"run_id": updated.id, "answer_turn_id": updated.active_answer_turn_id},
+                {
+                    "run_id": updated.id,
+                    "answer_turn_id": updated.active_answer_turn_id,
+                    "turns_per_session_limit": (
+                        settings.interview_turns_per_session_limit
+                    ),
+                    "bytes_per_session_limit": (
+                        settings.interview_bytes_per_session_limit
+                    ),
+                },
                 dedupe_key=updated.active_answer_turn_id,
                 idempotency_key=key,
                 requested_job_id=job_id,
@@ -889,8 +995,15 @@ def run_mock_next_turn_job(
             run = get_interview_run(uow, request.owner_id, run_id)
         question = adapter.next_question(run)
         with uow_factory() as uow:
+            uow.profiles_goals.lock_idempotency_commands(request.owner_id)
             append_mock_next_question(
-                uow, request.owner_id, run_id, answer_turn_id, question
+                uow,
+                request.owner_id,
+                run_id,
+                answer_turn_id,
+                question,
+                turns_per_session_limit=int(request.payload["turns_per_session_limit"]),
+                bytes_per_session_limit=int(request.payload["bytes_per_session_limit"]),
             )
             uow.commit()
             return get_interview_run(uow, request.owner_id, run_id)
@@ -941,6 +1054,7 @@ def run_mock_final_evaluation_job(
             )
             uow.commit()
         with uow_factory() as uow:
+            uow.profiles_goals.lock_idempotency_commands(request.owner_id)
             assessment = perform_assessment(
                 uow,
                 adapter,
@@ -1029,6 +1143,8 @@ def run_practice_evaluation_job(
                 dimensions=dimensions,
                 feedback=assessment.feedback,
                 cross_question_candidate=assessment.cross_question_candidate,
+                turns_per_session_limit=int(request.payload["turns_per_session_limit"]),
+                bytes_per_session_limit=int(request.payload["bytes_per_session_limit"]),
             )
             uow.commit()
             return assessment

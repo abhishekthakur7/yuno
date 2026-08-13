@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
+  dataLifecyclePolicyQueryOptions,
   patchSettings,
   settingsQueryOptions,
   type OwnerSettings,
@@ -13,6 +14,7 @@ const SETTINGS_KEY = ['settings'] as const
 export function useOwnerSettings() {
   const queryClient = useQueryClient()
   const settings = useQuery(settingsQueryOptions())
+  const dataLifecyclePolicy = useQuery(dataLifecyclePolicyQueryOptions())
   const save = useMutation({
     mutationFn: (patch: OwnerSettingsPatch) => {
       const current = queryClient.getQueryData<OwnerSettings>(SETTINGS_KEY)
@@ -25,5 +27,5 @@ export function useOwnerSettings() {
   const saveProgressDisplay = useMutation({
     mutationFn: (progressDisplay: ProgressDisplay) => save.mutateAsync({ progress_display: progressDisplay }),
   })
-  return { settings, save, saveProgressDisplay }
+  return { settings, dataLifecyclePolicy, save, saveProgressDisplay }
 }

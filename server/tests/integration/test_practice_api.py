@@ -305,7 +305,10 @@ def test_practice_repair_appends_byte_exact_answers_and_turns_are_db_immutable(
     with engine.begin() as connection:
         with pytest.raises(Exception, match="append-only|immutable"):
             connection.execute(
-                text("UPDATE interview_turns SET body='rewritten' WHERE id=:id"),
+                text(
+                    "UPDATE interview_turn_bodies SET body='rewritten' "
+                    "WHERE turn_id=:id"
+                ),
                 {"id": answers[0]["id"]},
             )
         with pytest.raises(Exception, match="append-only|immutable"):
@@ -386,6 +389,32 @@ def test_practice_cancel_and_failed_retry_preserve_the_existing_attempt(
     ]
     assert len(recovered["results"]) == 1
     assert recovered["results"][0]["answer_turn_id"] == failed_attempt["id"]
+
+
+def test_explicit_session_delete_removes_transcript_bodies_and_keeps_hashes(
+    client: TestClient, uow_factory: UnitOfWorkFactory, engine
+) -> None:
+    arranged = _arrange_practice(client, uow_factory, suffix="delete-session")
+    created = _create_run(client, arranged)
+    assert created.status_code == 201, created.text
+    run_id = created.json()["id"]
+
+    deleted = client.delete(f"/api/v1/interview-runs/{run_id}")
+
+    assert deleted.status_code == 204
+    assert client.get(f"/api/v1/interview-runs/{run_id}").status_code == 404
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM interview_run_bodies WHERE run_id=:id"),
+                {"id": run_id},
+            )
+            == 0
+        )
+        retained_hash = connection.scalar(
+            text("SELECT body_hash FROM interview_runs WHERE id=:id"), {"id": run_id}
+        )
+        assert retained_hash is not None
 
 
 @pytest.fixture(autouse=True)

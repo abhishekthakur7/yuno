@@ -21,6 +21,8 @@ from yuno.modules.canonical.repository import (
     SqlAlchemyCanonicalMergeRepository,
     SqlAlchemyCanonicalRepository,
 )
+from yuno.modules.data_lifecycle.ports import DataLifecycleRepository
+from yuno.modules.data_lifecycle.repository import SqlAlchemyDataLifecycleRepository
 from yuno.modules.diagnostics.ports import DiagnosticsRepository
 from yuno.modules.diagnostics.repository import SqlAlchemyDiagnosticsRepository
 from yuno.modules.evidence_evaluation.ports import EvidenceRepository
@@ -68,6 +70,7 @@ class SqlAlchemyUnitOfWork:
     canonical: CanonicalGraphRepository
     canonical_merges: CanonicalMergeRepository
     diagnostics: DiagnosticsRepository
+    data_lifecycle: DataLifecycleRepository
     evidence: EvidenceRepository
     hands_on: HandsOnRepository
     imports: ImportRepository
@@ -112,6 +115,7 @@ class SqlAlchemyUnitOfWork:
         self.canonical = SqlAlchemyCanonicalRepository(self._session)
         self.canonical_merges = SqlAlchemyCanonicalMergeRepository(self._session)
         self.diagnostics = SqlAlchemyDiagnosticsRepository(self._session)
+        self.data_lifecycle = SqlAlchemyDataLifecycleRepository(self._session)
         self.evidence = SqlAlchemyEvidenceRepository(self._session)
         self.hands_on = SqlAlchemyHandsOnRepository(self._session)
         self.imports = SqlAlchemyImportRepository(self._session)

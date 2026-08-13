@@ -25,7 +25,7 @@ from yuno.shared.domain.errors import (
     ConflictError,
     DomainValidationError,
     NotFoundError,
-    PendingCapError,
+    OverlayPendingCapError,
 )
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
@@ -69,7 +69,7 @@ def create_proposal(
     if existing is not None:
         return existing, True
     if uow.roadmap.count_pending_proposals(owner_id, goal_id) >= pending_cap:
-        raise PendingCapError(
+        raise OverlayPendingCapError(
             "This goal has reached its pending overlay proposal limit. "
             "Accept, postpone, or dismiss a proposal before adding another.",
             current_state=OverlayProposalState.AWAITING_DECISION.value,

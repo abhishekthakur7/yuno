@@ -788,8 +788,9 @@ def test_invalid_generation_result_rolls_back_artifact_snapshot_claims_and_citat
         )
         artifact = connection.execute(
             text(
-                "SELECT state, body_ref, body_hash, current_snapshot_id "
-                "FROM generated_artifacts"
+                "SELECT a.state, b.body_ref, a.body_hash, a.current_snapshot_id "
+                "FROM generated_artifacts a LEFT JOIN generated_artifact_bodies b "
+                "ON b.artifact_id=a.id AND b.owner_id=a.owner_id"
             )
         ).one()
     assert artifact.state == "failed"
@@ -937,6 +938,7 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
             "artifact": layer["artifact_id"],
             "snapshot": snapshot_id,
             "text": f"{claim_type} claim {claim_id}",
+            "hash": hash_payload(f"{claim_type} claim {claim_id}"),
             "type": claim_type,
             "sensitive": sensitive,
             "status": status,
@@ -945,9 +947,19 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
     insert_claim = text(
         "INSERT INTO claims "
         "(id,owner_id,goal_id,content_revision_id,generated_artifact_id,snapshot_id,"
-        "claim_text,claim_type,sensitive,status) "
-        "VALUES (:id,:owner,:goal,NULL,:artifact,:snapshot,:text,:type,:sensitive,:status)"
+        "claim_hash,claim_type,sensitive,status) "
+        "VALUES (:id,:owner,:goal,NULL,:artifact,:snapshot,:hash,:type,:sensitive,:status)"
     )
+
+    def insert_claim_body(connection, values: dict[str, object]) -> None:
+        connection.execute(
+            text(
+                "INSERT INTO claim_bodies(claim_id,owner_id,goal_id,claim_text) "
+                "VALUES (:id,:owner,:goal,:text)"
+            ),
+            values,
+        )
+
     for claim_type, sensitive in (
         ("fact", 1),
         ("disputed", 0),
@@ -967,16 +979,16 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
 
     routine_id = "routine-uncited"
     with engine.begin() as connection:
-        connection.execute(
-            insert_claim, claim_values(routine_id, "routine", 0, "published")
-        )
+        values = claim_values(routine_id, "routine", 0, "published")
+        connection.execute(insert_claim, values)
+        insert_claim_body(connection, values)
     assert client.get(f"/api/v1/claims/{routine_id}").json()["citations"] == []
 
     required_id = "pending-sensitive-fact"
     with engine.begin() as connection:
-        connection.execute(
-            insert_claim, claim_values(required_id, "fact", 1, "pending")
-        )
+        values = claim_values(required_id, "fact", 1, "pending")
+        connection.execute(insert_claim, values)
+        insert_claim_body(connection, values)
     with (
         pytest.raises(IntegrityError, match="required claim citation missing"),
         engine.begin() as connection,
@@ -991,8 +1003,8 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
         connection.execute(
             text(
                 "INSERT INTO source_snapshots "
-                "(id,owner_id,source_id,retrieved_at,content_ref,content_hash,status,version_label) "
-                "VALUES (:id,:owner,:source,:at,'inline:fixture','snapshot-hash','unavailable','v1')"
+                "(id,owner_id,source_id,retrieved_at,content_hash,status) "
+                "VALUES (:id,:owner,:source,:at,'snapshot-hash','unavailable')"
             ),
             {
                 "id": source_snapshot_id,
@@ -1001,12 +1013,24 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
                 "at": timestamp,
             },
         )
+        connection.execute(
+            text(
+                "INSERT INTO source_snapshot_bodies "
+                "(snapshot_id,owner_id,source_id,content_ref,version_label,redacted_failure) "
+                "VALUES (:id,:owner,:source,'inline:fixture','v1',NULL)"
+            ),
+            {
+                "id": source_snapshot_id,
+                "owner": owner_id,
+                "source": source_id,
+            },
+        )
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(
             text(
                 "INSERT INTO citations "
-                "(id,owner_id,goal_id,claim_id,source_id,source_snapshot_id,locator,support_kind) "
-                "VALUES ('mismatched-snapshot',:owner,:goal,:claim,:other,:snapshot,'s1','supports')"
+                "(id,owner_id,goal_id,claim_id,source_id,source_snapshot_id,body_hash,support_kind) "
+                "VALUES ('mismatched-snapshot',:owner,:goal,:claim,:other,:snapshot,'mismatch-hash','supports')"
             ),
             {
                 "owner": owner_id,
@@ -1022,8 +1046,8 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
         connection.execute(
             text(
                 "INSERT INTO citations "
-                "(id,owner_id,goal_id,claim_id,source_id,source_snapshot_id,locator,support_kind) "
-                "VALUES (:id,:owner,:goal,:claim,:source,:snapshot,'section-1','supports')"
+                "(id,owner_id,goal_id,claim_id,source_id,source_snapshot_id,body_hash,support_kind) "
+                "VALUES (:id,:owner,:goal,:claim,:source,:snapshot,:body_hash,'supports')"
             ),
             {
                 "id": citation_id,
@@ -1032,7 +1056,16 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
                 "claim": required_id,
                 "source": source_id,
                 "snapshot": source_snapshot_id,
+                "body_hash": hash_payload({"locator": "section-1", "note": None}),
             },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO citation_bodies "
+                "(citation_id,owner_id,goal_id,locator,note) "
+                "VALUES (:id,:owner,:goal,'section-1',NULL)"
+            ),
+            {"id": citation_id, "owner": owner_id, "goal": goal_id},
         )
         connection.execute(
             text("UPDATE claims SET status='published' WHERE id=:id"),
@@ -1047,26 +1080,29 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
 
     for statement, message in (
         (
-            "UPDATE claims SET claim_text='rewritten' WHERE id=:id",
+            "UPDATE claims SET claim_hash='rewritten' WHERE id=:id",
             "published claims are immutable",
         ),
         ("DELETE FROM claims WHERE id=:id", "published claims are immutable"),
         (
-            "UPDATE citations SET locator='rewritten' WHERE id=:id",
-            "citations is immutable",
+            "UPDATE citation_bodies SET locator='rewritten' WHERE citation_id=:id",
+            "citation_bodies body is immutable",
         ),
-        ("DELETE FROM citations WHERE id=:id", "citations is immutable"),
+        ("DELETE FROM citations WHERE id=:id", "citations header is immutable"),
         (
-            "UPDATE source_snapshots SET version_label='v2' WHERE id=:id",
-            "source_snapshots is immutable",
+            "UPDATE source_snapshot_bodies SET version_label='v2' WHERE snapshot_id=:id",
+            "source_snapshot_bodies body is immutable",
         ),
-        ("DELETE FROM source_snapshots WHERE id=:id", "source_snapshots is immutable"),
+        (
+            "DELETE FROM source_snapshots WHERE id=:id",
+            "source_snapshots header is immutable",
+        ),
     ):
         target_id = (
             required_id
             if "claims" in statement
             else citation_id
-            if "citations" in statement
+            if "citation" in statement
             else source_snapshot_id
         )
         with (
@@ -1089,9 +1125,9 @@ def test_required_claim_citations_and_immutable_provenance_are_database_enforced
             text(
                 "INSERT INTO claims "
                 "(id,owner_id,goal_id,content_revision_id,generated_artifact_id,snapshot_id,"
-                "claim_text,claim_type,sensitive,status) "
+                "claim_hash,claim_type,sensitive,status) "
                 "VALUES ('both-parents',:owner,:goal,'content-revision-citation-guards',"
-                ":artifact,:snapshot,'invalid dual parent','routine',0,'pending')"
+                ":artifact,:snapshot,'invalid-dual-parent-hash','routine',0,'pending')"
             ),
             {
                 "owner": owner_id,

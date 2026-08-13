@@ -70,9 +70,7 @@ def test_import_api_preserves_original_lists_parses_and_guards_statement_writes(
     assert parsed_replay.json()["job_id"] == parsed.json()["job_id"]
     assert parsed_replay.json()["deduplicated"] is True
 
-    statements_response = client.get(
-        f"/api/v1/imports/{created['id']}/statements"
-    )
+    statements_response = client.get(f"/api/v1/imports/{created['id']}/statements")
     assert statements_response.status_code == 200
     statements = statements_response.json()
     assert [statement["sequence"] for statement in statements] == [1, 2]
@@ -172,12 +170,12 @@ def test_map_response_exposes_atomic_topic_imports_hash(
     )
     assert parsed.status_code == 202
     wait_for_job(client, parsed)
-    statement = client.get(
-        f"/api/v1/imports/{created['id']}/statements"
-    ).json()[0]
+    statement = client.get(f"/api/v1/imports/{created['id']}/statements").json()[0]
     with engine.connect() as connection:
         before_side_effects = {
-            table: connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+            table: connection.execute(
+                text(f"SELECT count(*) FROM {table}")
+            ).scalar_one()
             for table in ("topics", "evidence", "learning_states")
         }
 
@@ -197,7 +195,9 @@ def test_map_response_exposes_atomic_topic_imports_hash(
     assert len(body["topic_imports_hash"]["imports_hash"]) == 64
     with engine.connect() as connection:
         after_side_effects = {
-            table: connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+            table: connection.execute(
+                text(f"SELECT count(*) FROM {table}")
+            ).scalar_one()
             for table in ("topics", "evidence", "learning_states")
         }
     assert after_side_effects == before_side_effects
@@ -209,3 +209,48 @@ def test_map_response_exposes_atomic_topic_imports_hash(
     )
     assert replay.status_code == 200
     assert replay.json() == body
+
+
+def test_explicit_import_delete_removes_bodies_but_retains_integrity_metadata(
+    client: TestClient, engine: Engine
+) -> None:
+    created = _create(client, key="create-delete")
+    parsed = client.post(
+        f"/api/v1/imports/{created['id']}/parse",
+        headers={"Idempotency-Key": "parse-delete"},
+    )
+    wait_for_job(client, parsed)
+    statement_id = client.get(f"/api/v1/imports/{created['id']}/statements").json()[0][
+        "id"
+    ]
+
+    deleted = client.delete(f"/api/v1/imports/{created['id']}")
+
+    assert deleted.status_code == 204
+    assert client.get(f"/api/v1/imports/{created['id']}").status_code == 404
+    assert client.get("/api/v1/imports").json() == []
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM import_record_bodies WHERE import_id=:id"),
+                {"id": created["id"]},
+            )
+            == 0
+        )
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM import_statement_bodies WHERE statement_id=:id"
+                ),
+                {"id": statement_id},
+            )
+            == 0
+        )
+        retained = connection.execute(
+            text(
+                "SELECT original_hash,parser_version FROM import_records WHERE id=:id"
+            ),
+            {"id": created["id"]},
+        ).one()
+        assert retained.original_hash == created["original_hash"]
+        assert retained.parser_version is not None

@@ -24,7 +24,12 @@ from yuno.api.dependencies import (
 from yuno.config import Settings
 from yuno.modules.runner.adapters import detect_command, memory_limit_enforced
 from yuno.modules.runner.domain import RUNNER_LIMITATION, DeclaredInput
-from yuno.modules.runner.models import RunnerInputRow, RunnerRecordRow
+from yuno.modules.runner.models import (
+    RunnerInputBodyRow,
+    RunnerInputRow,
+    RunnerRecordBodyRow,
+    RunnerRecordRow,
+)
 from yuno.modules.runner.repository import RunnerRepository
 from yuno.modules.runner.service import (
     capabilities,
@@ -186,28 +191,50 @@ def start_runner(
                 capability=confirmation.capability,
                 operation=confirmation.operation,
                 toolchain=str(settings.runner_javac_command),
-                argv_json="[]",
                 working_directory_policy="isolated-temporary-workspace-v1",
                 environment_policy_version=confirmation.environment_policy_version,
                 limits_config_version=confirmation.limits_config_version,
                 state="queued",
+                argv_hash=hash_payload([]),
+                outcome_hash=None,
+                temp_path_hash=None,
                 cleanup_state="cleanup-pending",
+                cleanup_classification=None,
                 created_at=now_text(SystemClock()),
                 updated_at=now_text(SystemClock()),
+                body=RunnerRecordBodyRow(
+                    runner_id=run_id,
+                    owner_id=owner_id,
+                    argv_json="[]",
+                    pid=None,
+                    pgid=None,
+                    temp_path=None,
+                    outcome_json=None,
+                ),
             )
             session.add(record)
             session.flush()
             for item in confirmed_inputs:
-                content_ref = "confirmed-base64:" + item.resolved_content
-                session.add(
-                    RunnerInputRow(
-                        id=new_id(),
-                        owner_id=owner_id,
-                        runner_id=run_id,
-                        logical_path=item.logical_path,
-                        declared_type=item.declared_type,
-                        content_ref=content_ref,
-                        content_hash=item.content_hash,
+                if item.resolved_content is None:
+                    raise ConflictError(
+                        "Runner confirmation input expired; confirm a fresh run."
+                    )
+                input_id = new_id()
+                session.add_all(
+                    (
+                        RunnerInputRow(
+                            id=input_id,
+                            owner_id=owner_id,
+                            runner_id=run_id,
+                            logical_path=item.logical_path,
+                            declared_type=item.declared_type,
+                            content_hash=item.content_hash,
+                        ),
+                        RunnerInputBodyRow(
+                            input_id=input_id,
+                            owner_id=owner_id,
+                            content_ref="confirmed-base64:" + item.resolved_content,
+                        ),
                     )
                 )
         session.commit()
@@ -264,6 +291,12 @@ def get_runner_run(
                     "sequence": item.sequence,
                     "ordinal": item.ordinal,
                     "content": item.content_ref,
+                    "availability": (
+                        "available" if item.content_ref is not None else "unavailable"
+                    ),
+                    "reason": (
+                        None if item.content_ref is not None else "policy-excluded"
+                    ),
                     "truncated": bool(item.truncated),
                 }
                 for item in chunks
@@ -272,7 +305,7 @@ def get_runner_run(
             "test_phase": phase("test"),
             "static_phase": phase("static"),
             "cleanup_state": row.cleanup_state,
-            "cleanup_diagnostic": row.cleanup_diagnostic,
+            "cleanup_diagnostic": row.cleanup_classification,
             "limitation": RUNNER_LIMITATION,
         }
 

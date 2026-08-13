@@ -21,6 +21,19 @@ def memory_limit_enforced() -> bool:
     return sys.platform != "darwin"
 
 
+def workspace_usage(path: Path) -> tuple[int, int]:
+    total_bytes = 0
+    file_count = 0
+    for root, directories, files in os.walk(path, followlinks=False):
+        directories[:] = [
+            name for name in directories if not (Path(root) / name).is_symlink()
+        ]
+        for name in files:
+            total_bytes += (Path(root) / name).lstat().st_size
+            file_count += 1
+    return total_bytes, file_count
+
+
 def detect_command(
     language: str, capability: str, command: str | None, prefix: str | None
 ) -> dict[str, str]:
@@ -78,9 +91,7 @@ class LocalRunnerProcessPort:
             cpu_seconds = max(1, ceil(spec.limits.cpu_seconds))
             resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds,) * 2)
             if memory_limit_enforced():
-                resource.setrlimit(
-                    resource.RLIMIT_AS, (spec.limits.memory_bytes,) * 2
-                )
+                resource.setrlimit(resource.RLIMIT_AS, (spec.limits.memory_bytes,) * 2)
             resource.setrlimit(resource.RLIMIT_NPROC, (spec.limits.process_count,) * 2)
             resource.setrlimit(resource.RLIMIT_FSIZE, (spec.limits.file_bytes,) * 2)
 
@@ -105,11 +116,13 @@ class LocalRunnerProcessPort:
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         chunks: list[OutputChunk] = []
         sizes = {"stdout": 0, "stderr": 0}
+        total_output_bytes = 0
         sequences = {"stdout": 0, "stderr": 0}
         limited = was_cancelled = False
         child_usage = None
         termination_started = None
         killed = False
+        limit_classification = None
 
         def request_termination() -> None:
             nonlocal termination_started
@@ -132,7 +145,27 @@ class LocalRunnerProcessPort:
                 request_termination()
             elif time.monotonic() - started >= spec.limits.wall_seconds:
                 limited = True
+                limit_classification = "runner-wall-time-limit"
                 request_termination()
+            elif termination_started is None:
+                try:
+                    temp_bytes, temp_files = workspace_usage(spec.working_directory)
+                except OSError:
+                    limited = True
+                    limit_classification = "runner-temp-inspection-limit"
+                    request_termination()
+                else:
+                    if temp_bytes > spec.limits.temp_bytes:
+                        limited = True
+                        limit_classification = "runner-temp-bytes-limit"
+                        request_termination()
+                    elif (
+                        spec.limits.temp_files is not None
+                        and temp_files > spec.limits.temp_files
+                    ):
+                        limited = True
+                        limit_classification = "runner-temp-files-limit"
+                        request_termination()
             if (
                 termination_started is not None
                 and not killed
@@ -150,9 +183,19 @@ class LocalRunnerProcessPort:
                     selector.unregister(key.fileobj)
                     continue
                 stream = str(key.data)
-                remaining = max(0, spec.limits.output_bytes - sum(sizes.values()))
+                stream_limit = (
+                    spec.limits.stdout_bytes
+                    if stream == "stdout"
+                    else spec.limits.stderr_bytes
+                )
+                if stream_limit is None:
+                    stream_limit = spec.limits.output_bytes
+                stream_remaining = max(0, stream_limit - sizes[stream])
+                total_remaining = max(0, spec.limits.output_bytes - total_output_bytes)
+                remaining = min(stream_remaining, total_remaining)
                 kept = data[:remaining]
                 sizes[stream] += len(kept)
+                total_output_bytes += len(kept)
                 sequences[stream] += 1
                 chunks.append(
                     OutputChunk(
@@ -165,15 +208,18 @@ class LocalRunnerProcessPort:
                 )
                 if len(kept) < len(data):
                     limited = True
+                    limit_classification = (
+                        f"runner-{stream}-limit"
+                        if stream_remaining <= total_remaining
+                        else "runner-output-limit"
+                    )
                     request_termination()
             if child_usage is not None and not selector.get_map():
                 break
         selector.close()
         assert process.returncode is not None and child_usage is not None
         code = process.returncode
-        cpu_ms = int(
-            max(0.0, child_usage.ru_utime + child_usage.ru_stime) * 1000
-        )
+        cpu_ms = int(max(0.0, child_usage.ru_utime + child_usage.ru_stime) * 1000)
         return RunnerProcessOutcome(
             process.pid,
             pgid,
@@ -184,4 +230,5 @@ class LocalRunnerProcessPort:
             tuple(chunks),
             int((time.monotonic() - started) * 1000),
             cpu_ms,
+            limit_classification,
         )

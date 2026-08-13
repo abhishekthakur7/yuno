@@ -157,7 +157,7 @@ def test_database_rejects_overlay_entry_update(
         pytest.raises(IntegrityError, match="append-only"),
     ):
         connection.execute(
-            text("UPDATE overlay_entries SET reason='changed' WHERE id=:id"),
+            text("UPDATE overlay_entries SET content_hash='changed' WHERE id=:id"),
             {"id": entry.id},
         )
 

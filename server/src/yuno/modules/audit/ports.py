@@ -19,7 +19,9 @@ class AuditRepository(Protocol):
 
     def append(self, event: AuditEvent) -> None: ...
 
-    def list_for_owner(self, owner_id: str, limit: int = 100) -> Sequence[AuditEvent]: ...
+    def list_for_owner(
+        self, owner_id: str, limit: int = 100
+    ) -> Sequence[AuditEvent]: ...
 
 
 class AuditUnitOfWork(UnitOfWork, Protocol):

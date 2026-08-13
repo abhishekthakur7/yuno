@@ -1,11 +1,12 @@
 import { expect, test as base, type Page, type Request } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { createHash } from 'node:crypto'
 import type { DiagnosticPreviewEdit, DiagnosticSession, DiagnosticSetup } from '../../src/shared/api/diagnostics'
 import type { Assessment, EvidenceDetail, GoalProgress, Source } from '../../src/shared/api/evidence'
 import type { HandsOnWorkspace } from '../../src/shared/api/hands-on'
 import type { GoalCreate, GoalWorkspace, LearnerProfile, ProfileUpdate, ResumeDestination } from '../../src/shared/api/profile-goals'
 import type { InterviewBundle, InterviewQuestion, InterviewRefresher, MockRun, PracticeRun } from '../../src/shared/api/interview'
-import type { OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
+import type { DataLifecyclePolicy, OwnerSettings, OwnerSettingsPatch } from '../../src/shared/api/settings'
 
 const routes = [
   ['/', /Continue Resilient order fulfillment/i],
@@ -95,6 +96,14 @@ function isLocalRequest(request: Request) {
   return ['data:', 'blob:'].includes(url.protocol) || ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase())
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, '__YUNO_E2E_PRACTICE__', {
@@ -146,6 +155,26 @@ test.beforeEach(async ({ page }) => {
     accessibility: { reduced_motion: false },
     provider_selection: null,
     row_version: 1,
+  }
+  const lifecyclePolicy: DataLifecyclePolicy = {
+    policy_version: '1.0', import_original_max_bytes: 10_485_760, import_retained_owner_limit: 100,
+    import_statements_per_import_limit: 10_000, import_unreviewed_owner_limit: 50_000,
+    evidence_payload_max_bytes: 10_485_760, evidence_retained_owner_limit: 10_000,
+    generated_body_max_bytes: 2_097_152, generated_retained_owner_limit: 5_000,
+    interview_turns_per_session_limit: 1_000, interview_bytes_per_session_limit: 10_485_760,
+    interview_sessions_owner_limit: 200, runner_input_files_limit: 100,
+    runner_input_bytes_limit: 10_485_760, runner_stdout_bytes_limit: 1_048_576,
+    runner_stderr_bytes_limit: 1_048_576, runner_output_bytes_limit: 2_097_152,
+    runner_temp_bytes_limit: 268_435_456, runner_temp_files_limit: 10_000,
+    overlay_proposal_pending_cap: 25, pending_job_cap: 100,
+    diagnostic_abandoned_retention_days: 30, interview_inactive_retention_days: 30,
+    terminal_job_retention_days: 30, job_event_retention_days: 7, job_event_owner_limit: 10_000,
+    runner_output_retention_days: 7, runner_workspace_retention_seconds: 3_600,
+    export_package_retention_seconds: 86_400, export_operation_retention_days: 30,
+    structured_log_file_count: 5, structured_log_file_max_bytes: 10_485_760,
+    structured_log_total_max_bytes: 52_428_800, structured_log_retention_days: 14,
+    export_format: 'yuno-portable-export', export_version: '1.0', export_available: true, recovery_window_days: 0,
+    yuno_managed_backups: false, remote_support_access: false,
   }
   await page.route('**/api/v1/runner/capabilities', route => route.fulfill({ json: {
     enabled: false,
@@ -242,6 +271,13 @@ test.beforeEach(async ({ page }) => {
       const created = { id: `import-${imports.length + 1}`, ...body, original_hash: 'exact-original-hash', parser_version: 'pending', status: 'selected', failure_code: null, failure_reference: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' }
       imports = [created, ...imports]
       await route.fulfill({ status: 201, json: created })
+      return
+    }
+    if (request.method() === 'DELETE' && importId?.startsWith('import-')) {
+      const record = imports.find(item => item.id === importId)
+      if (record) record.original_content = ''
+      importStatements = importStatements.filter(item => item.import_id !== importId)
+      await route.fulfill({ status: 204, body: '' })
       return
     }
     if (importId?.startsWith('import-')) {
@@ -370,6 +406,10 @@ test.beforeEach(async ({ page }) => {
     const request = route.request()
     const path = new URL(request.url()).pathname.split('/')
     const action = path.at(-1)
+    if (request.method() === 'DELETE' && action !== 'interview-runs') {
+      await route.fulfill({ status: 204, body: '' })
+      return
+    }
     if (request.method() === 'POST' && action === 'interview-runs') {
       const body = request.postDataJSON() as { mode?: string; goal_id: string; bundle_id: string; bundle_item_id: string; rubric_id: string; rubric_version: string; requested_capability: string }
       if (body.mode === 'Mock') {
@@ -917,6 +957,38 @@ test.beforeEach(async ({ page }) => {
       }
     }
     await route.fulfill({ json: ownerSettings })
+  })
+  await page.route('**/api/v1/settings/data-lifecycle-policy', route => route.fulfill({ json: lifecyclePolicy }))
+  const canonicalData = '{"goals":[],"profile":[]}'
+  const dataDigest = createHash('sha256').update(canonicalData).digest('hex')
+  const canonicalExport = `{"data":${canonicalData},"exported_at":"2026-08-13T00:02:00.000000Z","format":"yuno-portable-export","integrity":{"algorithm":"sha256","digest":"${dataDigest}"},"product":"Yuno","scope":{"goal_id":"goal-default","kind":"goal"},"version":"1.0"}`
+  await page.route('**/api/v1/exports**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path.endsWith('/download')) {
+      await route.fulfill({
+        status: 200,
+        body: canonicalExport,
+        contentType: 'application/json; charset=utf-8',
+        headers: {
+          'Content-Disposition': 'attachment; filename="yuno-export-v1-20260813T000200Z.json"',
+          'Content-Length': String(Buffer.byteLength(canonicalExport)),
+        },
+      })
+      return
+    }
+    if (request.method() === 'POST') {
+      await route.fulfill({ status: 202, json: { job_id: 'export-e2e', kind: 'export_data', status: 'queued', enqueued_at: '2026-08-13T00:01:00Z', deduplicated: false, attempt: 0 } })
+      return
+    }
+    await route.fulfill({ json: {
+      id: 'export-e2e', goal_id: 'goal-default', status: 'complete', format: 'yuno-portable-export', version: '1.0',
+      filename: 'yuno-export-v1-20260813T000200Z.json', package_hash: createHash('sha256').update(canonicalExport).digest('hex'),
+      completed_at: '2026-08-13T00:02:00.000000Z', package_expires_at: '2026-08-14T00:02:00.000000Z',
+      metadata_expires_at: '2026-09-12T00:02:00.000000Z', download_available: true, job_id: 'export-e2e',
+      result_ref: 'ExportOperation:export-e2e', failure_reference: null,
+      created_at: '2026-08-13T00:01:00.000000Z', updated_at: '2026-08-13T00:02:00.000000Z',
+    } })
   })
   await page.route('**/api/v1/provider-capabilities', route => route.fulfill({ json: [
     { provider: 'codex', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null },
@@ -1604,6 +1676,63 @@ test('navigation drawer and destructive dialog restore focus to their triggers',
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: /Cancel/i }).click()
   await expect(previewDeletion).toBeFocused()
+})
+
+test('Settings discloses policy 1.0 guarantees and downloads canonical local JSON', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  await page.evaluate(() => fetch('/api/v1/imports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal_id: 'goal-default', import_type: 'markdown', original_content: 'sensitive import body' }),
+  }))
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByText(/Deletion is irreversible/)).toBeVisible()
+  await expect(page.getByText(/no undelete or recovery window/i).first()).toBeVisible()
+  await expect(page.getByText(/External OS, filesystem, VM, or user-created backups may retain deleted data/i)).toBeVisible()
+  await expect(page.getByText(/no remote support access/i)).toBeVisible()
+
+  await page.getByText(/Data limits and retention/).click()
+  await expect(page.getByText(/10 MiB each, 100 retained per owner/)).toBeVisible()
+  await expect(page.getByText(/5 local files of at most 10 MiB each \(50 MiB total\)/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete import import-1' }).click()
+  const importDialog = page.getByRole('alertdialog', { name: 'Delete this import body?' })
+  await expect(importDialog.getByText(/no undelete, recovery window, or Yuno-managed backup/i)).toBeVisible()
+  await importDialog.getByRole('button', { name: 'Confirm import body deletion' }).click()
+  await expect(page.getByText('The selected import body was deleted.')).toBeVisible()
+
+  await page.getByRole('textbox', { name: 'Interview session ID' }).fill('practice-run-e2e-1')
+  await page.getByRole('button', { name: 'Delete session body' }).click()
+  const sessionDialog = page.getByRole('alertdialog', { name: 'Delete this interview session body?' })
+  await sessionDialog.getByRole('button', { name: 'Confirm session body deletion' }).click()
+  await expect(page.getByText('The interview session body was deleted.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Create export' }).click()
+  const downloadLink = page.getByRole('link', { name: /Download yuno-export-v1-20260813T000200Z.json/ })
+  await expect(downloadLink).toBeVisible()
+  await expect(downloadLink).toHaveAttribute('download', 'yuno-export-v1-20260813T000200Z.json')
+  const href = await downloadLink.getAttribute('href')
+  expect(href).toBe('/api/v1/exports/export-e2e/download')
+  const downloaded = await page.evaluate(async url => {
+    const response = await fetch(url)
+    return {
+      status: response.status,
+      disposition: response.headers.get('content-disposition'),
+      body: await response.text(),
+    }
+  }, href!)
+  expect(downloaded.status).toBe(200)
+  expect(downloaded.disposition).toBe('attachment; filename="yuno-export-v1-20260813T000200Z.json"')
+  const raw = downloaded.body
+  expect(raw).toBe(canonicalJson(JSON.parse(raw)))
+  const envelope = JSON.parse(raw) as { data: unknown; integrity: { algorithm: string; digest: string }; format: string; version: string }
+  expect(envelope.format).toBe('yuno-portable-export')
+  expect(envelope.version).toBe('1.0')
+  expect(envelope.integrity.algorithm).toBe('sha256')
+  const canonicalData = canonicalJson(envelope.data)
+  expect(envelope.integrity.digest).toBe(createHash('sha256').update(canonicalData).digest('hex'))
 })
 
 test('reduced-motion preference suppresses non-essential motion', async ({ page, diagnostics }) => {

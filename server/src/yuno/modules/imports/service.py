@@ -28,6 +28,9 @@ from yuno.shared.domain.clock import Clock, SystemClock, now_text
 from yuno.shared.domain.errors import (
     ConflictError,
     DomainValidationError,
+    ImportCountLimitError,
+    ImportStatementLimitError,
+    ImportTooLargeError,
     NotFoundError,
     PreconditionFailedError,
 )
@@ -43,17 +46,29 @@ def create_import(
     import_type: ImportType,
     source_text: str,
     parser_version: str = PARSER_VERSION,
+    max_bytes: int = 10 * 1024 * 1024,
+    retained_owner_limit: int = 100,
     clock: Clock | None = None,
 ) -> ImportRecord:
     source = source_text.encode("utf-8", errors="strict")
     if not source:
         raise DomainValidationError("Import source must not be empty.")
+    if len(source) > max_bytes:
+        raise ImportTooLargeError(
+            f"Imports may contain at most {max_bytes} UTF-8 bytes.",
+            recovery_action="Reduce the import size and try again.",
+        )
     if parser_version != PARSER_VERSION:
         raise DomainValidationError(
             f"Unsupported import parser version '{parser_version}'."
         )
     if goal_id is not None and uow.profiles_goals.get_goal(owner_id, goal_id) is None:
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
+    if uow.imports.count_live_imports(owner_id) >= retained_owner_limit:
+        raise ImportCountLimitError(
+            f"An owner may retain at most {retained_owner_limit} imports.",
+            recovery_action="Delete or export an existing import before adding another.",
+        )
     timestamp = now_text(clock or SystemClock())
     record = ImportRecord(
         new_id(),
@@ -141,6 +156,8 @@ def parse_import(
     import_id: str,
     *,
     parser_version: str = PARSER_VERSION,
+    statements_per_import_limit: int = 10_000,
+    unreviewed_owner_limit: int = 50_000,
     clock: Clock | None = None,
 ) -> ImportParseResult:
     record = get_import(uow, owner_id, import_id)
@@ -150,6 +167,26 @@ def parse_import(
         )
     timestamp = now_text(clock or SystemClock())
     parsed = parse_source(record.original_content, parser_version=parser_version)
+    if len(parsed) > statements_per_import_limit:
+        raise ImportStatementLimitError(
+            f"An import may contain at most {statements_per_import_limit} statements.",
+            recovery_action="Split the source into smaller imports and try again.",
+        )
+    new_statement_count = sum(
+        uow.imports.get_statement_for_occurrence(
+            owner_id, import_id, item.sequence, parser_version
+        )
+        is None
+        for item in parsed
+    )
+    if (
+        uow.imports.count_unreviewed_statements(owner_id) + new_statement_count
+        > unreviewed_owner_limit
+    ):
+        raise ImportStatementLimitError(
+            f"An owner may retain at most {unreviewed_owner_limit} unreviewed statements.",
+            recovery_action="Review or delete existing statements before parsing another import.",
+        )
     duplicate_ids: list[str] = []
     for item in parsed:
         existing = uow.imports.get_statement_for_occurrence(
@@ -220,6 +257,8 @@ def reprocess_import(
     import_id: str,
     *,
     parser_version: str = PARSER_VERSION,
+    statements_per_import_limit: int = 10_000,
+    unreviewed_owner_limit: int = 50_000,
     clock: Clock | None = None,
 ) -> ImportParseResult:
     record = get_import(uow, owner_id, import_id)
@@ -228,7 +267,13 @@ def reprocess_import(
             uow, owner_id, import_id, expected_version=record.row_version, clock=clock
         )
     return parse_import(
-        uow, owner_id, record.id, parser_version=parser_version, clock=clock
+        uow,
+        owner_id,
+        record.id,
+        parser_version=parser_version,
+        statements_per_import_limit=statements_per_import_limit,
+        unreviewed_owner_limit=unreviewed_owner_limit,
+        clock=clock,
     )
 
 
@@ -359,7 +404,9 @@ def dismiss_statement(
     )
     if active is not None:
         if uow.imports.revoke_mapping(owner_id, active.id, updated.updated_at) is None:
-            raise ConflictError("The active mapping changed while dismissing the statement.")
+            raise ConflictError(
+                "The active mapping changed while dismissing the statement."
+            )
         remapped = uow.imports.update_statement(
             owner_id,
             statement_id,
@@ -367,7 +414,9 @@ def dismiss_statement(
             {"mapping_state": MappingState.UNMAPPED, "updated_at": updated.updated_at},
         )
         if remapped is None:
-            raise PreconditionFailedError("The statement changed while revoking its mapping.")
+            raise PreconditionFailedError(
+                "The statement changed while revoking its mapping."
+            )
         updated = remapped
         _refresh_topic_hash(
             uow,

@@ -6,6 +6,11 @@ from collections.abc import Sequence
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from yuno.modules.data_lifecycle.models import (
+    JobAttemptBodyRow,
+    JobBodyRow,
+    JobResultBodyRow,
+)
 from yuno.modules.jobs_events.models import (
     JobAttemptRow,
     JobEventRow,
@@ -62,9 +67,6 @@ class JobRepository:
             retryable=0,
             dedupe_key=request.dedupe_key,
             idempotency_key=request.idempotency_key,
-            payload_json=json.dumps(
-                dict(request.payload), sort_keys=True, separators=(",", ":")
-            ),
             payload_hash=hash_payload(request.payload),
             request_ref=request.request_ref,
             disclosure_ref=request.disclosure_ref,
@@ -76,6 +78,14 @@ class JobRepository:
             priority=100,
             queued_at=timestamp,
             updated_at=timestamp,
+        )
+        row.body = JobBodyRow(
+            job_id=row.id,
+            owner_id=row.owner_id,
+            payload_json=json.dumps(
+                dict(request.payload), sort_keys=True, separators=(",", ":")
+            ),
+            diagnostic=None,
         )
         self.session.add(row)
         self.session.flush()
@@ -127,12 +137,15 @@ class JobRepository:
             ).all()
         )
 
-    def pending_count(self) -> int:
+    def pending_count(self, owner_id: str) -> int:
         return int(
             self.session.scalar(
                 select(func.count())
                 .select_from(JobRow)
-                .where(JobRow.state.in_(ACTIVE_STATES))
+                .where(
+                    JobRow.owner_id == owner_id,
+                    JobRow.state.in_(("queued", "running")),
+                )
             )
             or 0
         )
@@ -189,12 +202,18 @@ class JobRepository:
             owner_id=row.owner_id,
             job_id=row.id,
             attempt_number=row.attempt,
-            process_identity=process_identity,
-            pid=pid,
-            pgid=pgid,
             substitution_ref=row.substitution_ref,
             confirmation_ref=row.confirmation_ref,
             started_at=row.started_at,
+        )
+        attempt.body = JobAttemptBodyRow(
+            attempt_id=attempt.id,
+            owner_id=attempt.owner_id,
+            process_identity=process_identity,
+            pid=pid,
+            pgid=pgid,
+            temp_path=None,
+            diagnostic=None,
         )
         self.session.add(attempt)
         self.session.flush()
@@ -252,20 +271,23 @@ class JobRepository:
             return "cancelled"
         if current.state != "running":
             return current.state
-        self.session.add(
-            JobResultRow(
-                id=new_id(),
-                owner_id=current.owner_id,
-                job_id=current.id,
-                kind=current.kind,
-                schema_version=current.schema_version,
-                result_ref=result_ref,
-                result_hash=result_hash,
-                warnings_json=json.dumps(tuple(warnings)),
-                diagnostic_ref=diagnostic_ref,
-                committed_at=timestamp,
-            )
+        result = JobResultRow(
+            id=new_id(),
+            owner_id=current.owner_id,
+            job_id=current.id,
+            kind=current.kind,
+            schema_version=current.schema_version,
+            result_ref=result_ref,
+            result_hash=result_hash,
+            committed_at=timestamp,
         )
+        result.body = JobResultBodyRow(
+            result_id=result.id,
+            owner_id=result.owner_id,
+            warnings_json=json.dumps(tuple(warnings)),
+            diagnostic_ref=diagnostic_ref,
+        )
+        self.session.add(result)
         current.state, current.retryable, current.terminal_at, current.updated_at = (
             "succeeded",
             0,
@@ -329,20 +351,23 @@ class JobRepository:
             select(JobResultRow).where(JobResultRow.job_id == source.id)
         ).one()
         timestamp = now_text(self.clock)
-        self.session.add(
-            JobResultRow(
-                id=new_id(),
-                owner_id=row.owner_id,
-                job_id=row.id,
-                kind=source_result.kind,
-                schema_version=source_result.schema_version,
-                result_ref=source_result.result_ref,
-                result_hash=source_result.result_hash,
-                warnings_json=source_result.warnings_json,
-                diagnostic_ref=source_result.diagnostic_ref,
-                committed_at=timestamp,
-            )
+        adopted = JobResultRow(
+            id=new_id(),
+            owner_id=row.owner_id,
+            job_id=row.id,
+            kind=source_result.kind,
+            schema_version=source_result.schema_version,
+            result_ref=source_result.result_ref,
+            result_hash=source_result.result_hash,
+            committed_at=timestamp,
         )
+        adopted.body = JobResultBodyRow(
+            result_id=adopted.id,
+            owner_id=adopted.owner_id,
+            warnings_json=source_result.warnings_json,
+            diagnostic_ref=source_result.diagnostic_ref,
+        )
+        self.session.add(adopted)
         row.state, row.retryable = "succeeded", 0
         row.result_ref, row.result_hash = (
             source_result.result_ref,
@@ -403,9 +428,13 @@ class JobRepository:
             self.session.scalars(
                 select(JobAttemptRow)
                 .join(JobRow, JobRow.id == JobAttemptRow.job_id)
+                .join(
+                    JobAttemptBodyRow,
+                    JobAttemptBodyRow.attempt_id == JobAttemptRow.id,
+                )
                 .where(
                     JobRow.state.in_(TERMINAL_STATES),
-                    JobAttemptRow.temp_path.is_not(None),
+                    JobAttemptBodyRow.temp_path.is_not(None),
                     JobAttemptRow.ended_at.is_not(None),
                     JobAttemptRow.ended_at <= ended_before,
                 )

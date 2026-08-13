@@ -71,6 +71,11 @@ async function enqueue(path: 'parse' | 'reprocess', importId: string) {
 export const parseImport = (importId: string) => enqueue('parse', importId)
 export const reprocessImport = (importId: string) => enqueue('reprocess', importId)
 
+export async function deleteImportBody(importId: string) {
+  const { error, response } = await client.DELETE('/api/v1/imports/{import_id}', { params: { path: { import_id: importId } } })
+  if (error) failure(error, response.status, 'The import body could not be deleted.')
+}
+
 export async function correctImportStatement(statement: ImportStatement, body: ImportCorrection) {
   const { data, error, response } = await client.PATCH('/api/v1/import-statements/{statement_id}', {
     params: { path: { statement_id: statement.id }, header: { 'If-Match': String(statement.row_version), 'Idempotency-Key': crypto.randomUUID() } },

@@ -32,7 +32,11 @@ from yuno.modules.interview.service import (
     request_hint,
     submit_answer,
 )
-from yuno.shared.domain.errors import ConflictError, DomainValidationError
+from yuno.shared.domain.errors import (
+    ConflictError,
+    DomainValidationError,
+    InterviewTranscriptLimitError,
+)
 
 FIXTURE_MARKER = "fixture-v0-non-production"
 FIXTURE_QUESTION = (
@@ -63,6 +67,41 @@ class _InterviewRepository:
         self.runs: dict[str, PracticeRun] = {}
         self.turns: dict[str, list[PracticeTurn]] = {}
         self.results: dict[str, list[PracticeTurnResult]] = {}
+
+    def count_live_sessions(self, owner_id: str) -> int:
+        return sum(run.owner_id == owner_id for run in self.runs.values())
+
+    def count_turns(self, owner_id: str, run_id: str) -> int:
+        run = self.runs.get(run_id)
+        return (
+            len(self.turns.get(run_id, ())) if run and run.owner_id == owner_id else 0
+        )
+
+    def session_body_utf8_bytes(self, owner_id: str, run_id: str) -> int:
+        run = self.get_run(owner_id, run_id)
+        if run is None:
+            return 0
+        result_bodies = (
+            value
+            for result in run.results
+            for value in (
+                *result.facts,
+                *result.trade_offs,
+                *(dimension.rationale for dimension in result.dimensions),
+                result.feedback,
+                result.cross_question_candidate or "",
+            )
+        )
+        return sum(
+            len(value.encode())
+            for value in (
+                run.question,
+                run.hint_text or "",
+                run.draft,
+                *(turn.body for turn in run.turns),
+                *result_bodies,
+            )
+        )
 
     def get_bundle(self, owner_id: str, bundle_id: str):
         value = self.bundles.get(bundle_id)
@@ -138,6 +177,106 @@ def _uow() -> _Uow:
 
 def _answer_turns(run: PracticeRun) -> tuple[PracticeTurn, ...]:
     return tuple(turn for turn in run.turns if turn.kind is InterviewTurnKind.ANSWER)
+
+
+def test_interview_limits_are_utf8_exact_and_preserve_the_current_run() -> None:
+    uow = _uow()
+    baseline_bytes = len((FIXTURE_QUESTION * 2 + FIXTURE_HINT).encode())
+    run = create_practice_run(
+        uow,
+        "owner",
+        "goal",
+        "bundle-fixture-v0",
+        "question-fixture-v0",
+        "rubric-fixture-v0",
+        "fixture-v0",
+        "implement",
+        hint_text=FIXTURE_HINT,
+        bytes_per_session_limit=baseline_bytes,
+    )
+    before = uow.interview.get_run("owner", run.id)
+    with pytest.raises(InterviewTranscriptLimitError):
+        submit_answer(
+            uow,
+            "owner",
+            run.id,
+            "é",
+            "evidence",
+            "job",
+            bytes_per_session_limit=uow.interview.session_body_utf8_bytes(
+                "owner", run.id
+            )
+            + 1,
+        )
+    assert uow.interview.get_run("owner", run.id) == before
+
+    accepted = submit_answer(
+        uow,
+        "owner",
+        run.id,
+        "é",
+        "evidence",
+        "job",
+        bytes_per_session_limit=uow.interview.session_body_utf8_bytes("owner", run.id)
+        + 2,
+    )
+    assert accepted.body == "é"
+
+
+def test_interview_session_cap_is_owner_scoped_and_atomic() -> None:
+    uow = _uow()
+    uow.interview.runs["other-run"] = PracticeRun(
+        "other-run",
+        "other",
+        "goal",
+        "bundle-fixture-v0",
+        "question-fixture-v0",
+        "Practice",
+        PracticeRunState.READY,
+        "q",
+        None,
+        "rubric",
+        "v1",
+        "implement",
+        None,
+        None,
+        None,
+        False,
+        "",
+        None,
+        "now",
+        "now",
+        (),
+        (),
+    )
+    uow.interview.turns["other-run"] = []
+    uow.interview.results["other-run"] = []
+    created = create_practice_run(
+        uow,
+        "owner",
+        "goal",
+        "bundle-fixture-v0",
+        "question-fixture-v0",
+        "rubric-fixture-v0",
+        "fixture-v0",
+        "implement",
+        session_owner_limit=1,
+    )
+    before = set(uow.interview.runs)
+    with pytest.raises(InterviewTranscriptLimitError):
+        create_practice_run(
+            uow,
+            "owner",
+            "goal",
+            "bundle-fixture-v0",
+            "question-fixture-v0",
+            "rubric-fixture-v0",
+            "fixture-v0",
+            "implement",
+            session_owner_limit=1,
+        )
+    assert set(uow.interview.runs) == before
+    assert created.owner_id == "owner"
 
 
 def test_practice_state_machine_keeps_feedback_terminal_and_attempts_append_only() -> (

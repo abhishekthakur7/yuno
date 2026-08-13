@@ -92,6 +92,7 @@ class RoadmapRepository(Protocol):
 
 
 class LearningContentRepository(Protocol):
+    def count_live_artifacts(self, owner_id: str) -> int: ...
     def get_artifact_by_key(
         self,
         owner_id: str,
