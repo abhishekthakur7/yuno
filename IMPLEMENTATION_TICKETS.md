@@ -11,7 +11,7 @@
 5. Remaining PRD material.
 6. The surviving selected application as the approved UX reference, where it does not conflict with the above.
 
-Unresolved questions are never answered here. Where the PRD or specification leaves something open, this plan carries a decision ticket, a `Blocked by` status, and an explicit stop point rather than a chosen value. No threshold, provider command or version, source license, OS/toolchain matrix, retention guarantee, security or sandbox property, readiness claim, or operational guarantee has been invented.
+Unresolved questions are never silently answered here. Where the PRD or specification leaves something open, this plan carries a decision ticket, a `Blocked by` status, and an explicit stop point until an attributed decision artifact is approved. No threshold, provider command or version, source license, OS/toolchain matrix, retention guarantee, security or sandbox property, readiness claim, or operational guarantee is introduced without that recorded authority.
 
 ## Ledgers
 
@@ -60,12 +60,12 @@ IDK-107 owns that end-to-end proof and owns removing the prototype localStorage 
 
 ## Phase exit semantics
 
-IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1, while IDK-001, IDK-002 and IDK-004 are framing-only tickets that cannot themselves resolve those gates. Both are correct; "exit" is being used in two senses, and this plan distinguishes them explicitly rather than letting the ambiguity block sequencing:
+IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1. IDK-004 now resolves G4's role-copy policy; IDK-001 and IDK-002 remain framing tickets, and every gate still requires proof that its decision was applied to shipped artifacts. "Exit" is used in two senses, distinguished here so mechanism work and content approval remain explicit:
 
 - **Engineering exit** — every ticket in the phase is implemented and its required tests pass against approved fixtures. This is what gates *starting the next phase*. It does not require any IDK-0xx decision to be resolved, because every ticket's mechanism is specified to be testable against fixture data, and each decision ticket states the preliminary work permitted while it is open.
 - **Content / pilot exit** — the phase's approval gates are resolved and demonstrably applied to shipped artifacts. This is what gates *release, pilot, and any learner-facing content claim*. It is the sense §11's gate list uses.
 
-So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 (IDK-001, IDK-002, IDK-004) are approved and applied. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
+So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 are both approved and applied. G4 policy is approved by IDK-004 decision version 1.0, but its consuming UI/review evidence remains required. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
 
 This is a terminology reconciliation, not a decision: it selects no answer to any open question, and an approver may relabel either sense without changing a single ticket's scope or tests.
 
@@ -194,79 +194,81 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
-### IDK-004 — Frame the user-facing role-taxonomy decision
+### IDK-004 — Approve the user-facing role-taxonomy decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame which learner-facing mid/senior/staff competency descriptions appear in onboarding, acknowledging company-title variance, beyond the three base tier names already given in PRD §3.
+- Status: Approved — decision version 1.0 recorded 2026-08-13
+- Objective: Record the exact learner-facing mid/senior/staff competency descriptions, company-title-variation helper, no-beginner audience note, and level/capability interpretation used across onboarding and Interview Prep.
 - User-visible outcome: None directly; determines the exact competency-description copy shown during onboarding target-level selection.
 - PRD traceability: CORE-02 (contributing), ONB-01 (contributing)
 - Appendix H decisions: None.
 - Owning module: profiles_goals
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q9; IMPLEMENTATION_SPEC §12.3 Q4): "What learner-facing mid/senior/staff competency descriptions acknowledge company-title variation?"
-  - Evidence required: draft competency-description copy for each of the three PRD-named tiers (mid-level, senior, staff) with an explicit note that company titles vary, reviewed against CORE-02's no-beginner-track boundary.
-  - Affected tickets and phases: gates the exact onboarding label copy used by IDK-104/IDK-105's target-level UI; does not block the level enum (`Mid-level`/`Senior`/`Staff`, already named in PRD §3) or the structural no-beginner-track enforcement.
-  - Allowed preliminary work: implement the target-level enum and structural CORE-02 checks (no beginner-track option ever renders) using the three PRD-given tier names without invented competency-description prose.
-  - Stop point: onboarding may not display invented per-tier competency descriptions in production; the copy field remains a documented placeholder until approved.
+  - Resolved question (PRD §14 Q9; IMPLEMENTATION_SPEC §12.3 Q4): `role-competency-copy-v1` records exact copy and behavior in `docs/decisions/IDK-004-role-level-competencies.md`.
+  - Approved labels: Mid-level backend engineer, Senior backend engineer, and Staff-level backend engineer, each mapped to the unchanged `Mid-level`/`Senior`/`Staff` persisted value.
+  - Approved boundary: titles vary across companies; learners choose desired practice scope, not a validated current title. The selection predicts no hiring, promotion, or job performance and introduces no beginner track.
+  - Affected tickets and phases: IDK-104/105 apply the copy to setup, IDK-301 applies it to Interview Prep, IDK-405 consumes it alongside IDK-009's evaluator calibration, and IDK-503 reviews the shipped result.
+  - Stop point after approval: unapproved competency prose may not ship, and the approved copy is not production-active until the decision artifact's section 6 evidence passes.
 - Out of scope:
-  - The base three-tier enum itself (already given in PRD §3, not TBD).
+  - Changing the base three-tier enum (already given in PRD §3).
   - Goal workspace CRUD mechanics (IDK-104).
 - Data and invariants:
-  - `goal_workspaces.target_level` enum values are fixed to the three PRD tiers regardless of this decision's outcome.
+  - `goal_workspaces.target_level` remains exactly `Mid-level`/`Senior`/`Staff`; capability remains independently selected from `know`/`understand`/`choose`/`implement`/`diagnose`/`defend`.
+  - Level is learner-confirmed, never inferred from title, employer, years, imports, diagnostics, assessment, or model output; changing it never relabels historical evidence or assessments.
 - API/domain/event contracts: None.
-- UX routes and states: `/app/onboarding` target-level selector renders the three tier names now; descriptive copy is deferred.
-- Implementation notes: None.
+- UX routes and states: `/app/onboarding`, goal Settings, Interview Prep level controls, and hands-on role-context help consume one versioned copy registry; compact controls retain the stable labels and expose the selected description accessibly.
+- Implementation notes: Approval is display-copy/data policy, not a schema migration or compatibility layer.
 - Acceptance criteria:
-  - A documented open competency-description question exists; no invented description text ships to production.
+  - Decision version 1.0 records exact labels, descriptions, audience/title-variation/capability helpers, ambiguity/history behavior, IDK-009 alignment, activation evidence, and change control.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Product owner approves the competency-description copy for each tier.
-  - Existing coverage reused: None.
+  - Manual: Product owner approved `role-competency-copy-v1` on 2026-08-13; consuming tickets retain component and shipped-copy review obligations.
+  - Existing coverage reused: PRD §3 fixes the three labels and audience baseline; IDK-009 fixes matching evaluator calibration. Neither substitutes for consuming UI evidence.
 - Failure and recovery:
-  - Unresolved: onboarding ships with tier names only (no competency-description prose) rather than an invented description.
+  - Missing/mismatched copy with a valid stored enum shows the stable label and an unavailable helper without forcing reselection. A missing/invalid target value requires explicit selection and never silently defaults; neither case invents a description.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (product owner per PRD §13). Required artifact: approved per-tier competency-description copy acknowledging company-title variance.
+  - Approved by the product owner on 2026-08-13. Artifact: `docs/decisions/IDK-004-role-level-competencies.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
-### IDK-005 — Frame the OS/toolchain support-matrix decision
+### IDK-005 — Approve the local runner support matrix
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame which operating systems, Java/Python versions, build tools, and unsupported configurations are documented for local execution.
+- Status: Approved — decision version 1.0 recorded 2026-08-13
+- Objective: Record the exact MVP operating-system, Java, learner-language, build-mode, detection, and unsupported-configuration policy for local execution.
 - User-visible outcome: None directly; determines what "supported/missing/incompatible" toolchain detection reports to a learner.
 - PRD traceability: NFR-10 (contributing)
 - Appendix H decisions: None.
 - Owning module: runner
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q4; IMPLEMENTATION_SPEC §12.3 Q5): "Which OS, Java/Python versions, JDK/build tools and unsupported configurations are documented?"
-  - Evidence required: a proposed support matrix (OS list, Java/Python version ranges, build tool versions) and the exact unsupported-configuration messaging.
-  - Affected tickets and phases: gates the Section 4 runner tickets (IDK-406) and their NFR-10 acceptance; does not block any ticket in my sections directly, since Sections 1–2 contain no runner implementation.
-  - Allowed preliminary work: none required within Sections 0–2; noted here only because the question is a named PRD open item this packet must frame.
-  - Stop point: no runner capability may claim "supported" for any OS/toolchain combination until this matrix is approved (Phase 4 exit gate G5/G6 per spec §10.3).
+  - Resolved question (PRD §14 Q4; IMPLEMENTATION_SPEC §12.3 Q5): `runner-toolchain-v1` supports attested Ubuntu 24.04 LTS host/conventional-VM rows on `x86_64` or `arm64`, a complete stable JDK `21.x`, and direct application-constructed `javac`/`java` compile/test only, exactly as recorded in `docs/decisions/IDK-005-local-runner-support-matrix.md`.
+  - Learner Python execution, Maven, Gradle, Ant, wrappers, dependency downloads, macOS, Windows, WSL, containers, other Linux distributions/releases, and every unlisted configuration are unsupported in MVP. Go remains absent/Later. IDK-008 decision v1.0 separately approves database execution as absent.
+  - Detection is configuration-led from one absolute JDK home, validates the exact platform/architecture and paired `java`/`javac` identity, runs a fixed sentinel, and revalidates before execution. Exact state precedence, safe diagnostic codes, learner messages, records, evidence, and change control are part of decision version 1.0.
+  - Affected tickets and phases: the support-policy part of IDK-406's NFR-10 gate is satisfied. IDK-007 and IDK-008 are also approved; IDK-406 is Ready, but implementation/exact-tuple evidence still prohibits activation.
 - Out of scope:
-  - Runner execution mechanics, threat model, and resource limits (IDK-007, Section 4 IDK-406).
-- Data and invariants: None owned by Sections 0–2.
-- API/domain/event contracts: None.
+  - Runner process mechanics and enforcement implementation (IDK-406).
+  - Enablement, numeric resource limits, termination grace, and cleanup posture (IDK-007).
+  - Database-exercise posture (IDK-008).
+- Data and invariants: Decision version `runner-toolchain-v1` is immutable. Matrix/invocation changes require a newly approved version. Stable JDK 21 patch/implementor changes remain probe-compatible but require new exact-tuple activation evidence; they never enable execution automatically.
+- API/domain/event contracts: `runner-toolchain-v1` fixes Java capability states, diagnostics/messages, safe response metadata, top-level enablement separation, server-owned test-driver resolution, and immutable snapshot/evidence references; IDK-406 owns their schema/API implementation and generated-contract replacement.
 - UX routes and states: None in my sections.
-- Implementation notes: None.
+- Implementation notes: Approval is policy, not activation. A probe-compatible Java item may be `supported`; top-level runner enablement remains false without the exact platform/JDK/executable evidence and IDK-007's complete posture.
 - Acceptance criteria:
-  - A documented open support-matrix question exists; no OS/toolchain combination is declared supported.
+  - Decision version 1.0 records the exact matrix, direct-JDK compile/test contract, paired-tool discovery, state precedence, safe diagnostic/message set, unsupported configurations, activation ownership, and immutable change control.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Engineering owner approves the support matrix.
-  - Existing coverage reused: None.
+  - Manual: Engineering owner approved `runner-toolchain-v1` on 2026-08-13; IDK-406 retains every implementation, state/message, race, and exact-tuple smoke-test obligation.
+  - Existing coverage reused: Official Java, Ubuntu, Python subprocess/OS, Maven, and Gradle documentation plus read-only local inspection are recorded in the decision artifact; none substitutes for activation evidence.
 - Failure and recovery:
-  - Unresolved: runner capability remains disabled everywhere (see IDK-007).
+  - Missing/unverifiable/mismatched platform or tools fail closed with a fixed safe diagnostic and no learner process. Unsupported configurations retain full static review.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (engineering owner per PRD §13). Required artifact: an approved OS/toolchain support matrix with unsupported-configuration messaging.
+  - Approved by the engineering owner on 2026-08-13. Artifact: `docs/decisions/IDK-005-local-runner-support-matrix.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
 ### IDK-006 — Frame the provider CLI version/authentication-discovery decision
 
@@ -303,116 +305,116 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - Estimate:
   - Completed with the IDK-403/404 implementation.
 
-### IDK-007 — Frame the runner enablement and resource-posture decision
+### IDK-007 — Approve the runner enablement and resource posture
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame whether the Java runner is disabled-until-enabled or enabled after first-run acknowledgement, and what resource/output/temp-storage limits and cleanup posture apply.
+- Status: Approved — decision version 1.0 recorded 2026-08-13
+- Objective: Record the disabled-by-default Settings opt-in, per-run confirmation, exact whole-tree resource limits, network controls, termination, cleanup, reconciliation, and safety-suspension posture for local Java execution.
 - User-visible outcome: None directly; determines whether/how the runner feature is ever exposed to a learner.
 - PRD traceability: RUN-01 (contributing), RUN-02 (contributing), RUN-03 (contributing)
 - Appendix H decisions: None (Appendix C is a threat-model reference, not a D-decision).
 - Owning module: runner
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q5; IMPLEMENTATION_SPEC §12.3 Q7): "Disabled-until-enabled or first-run acknowledgement? What resource/output/temp limits and cleanup posture are approved?"
-  - Evidence required: a decision between the two enablement postures (spec §12.2 recommends disabled-until-first-run-acknowledgement as a non-adopted default), plus concrete wall-time, process, memory/CPU, output, and temp-storage limit values.
-  - Affected tickets and phases: gates Section 4 runner implementation (IDK-406); does not block any ticket in my sections.
-  - Allowed preliminary work: none required within Sections 0–2.
-  - Stop point: the runner feature remains disabled while the static workflow (topic layers, evidence via Submit, code review) remains fully usable, until this posture and its limits are approved (Phase 4 exit gate G5/G7/G10).
+  - Resolved question (PRD §14 Q5; IMPLEMENTATION_SPEC §12.3 Q7): `runner-environment-v1`, `runner-limits-v1`, `runner-risk-ack-v1`, and `runner-run-confirmation-v1` are recorded in `docs/decisions/IDK-007-runner-enablement-and-resource-posture.md`.
+  - Runner is off until the owner explicitly enables it in Settings under the exact tuple/evidence/current-policy gates; every run still needs a single-use five-minute confirmation. Policy/evidence changes and cleanup failures revoke/suspend enablement; there is no automatic enablement.
+  - Aggregate compile+test limits are exact thresholds/denials: 10-second preparation; wall termination threshold 30 seconds; aggregate-CPU termination threshold 20 CPU-seconds with 10-ms target observation cadence and two-CPU bandwidth (actual observation/final usage recorded, no false scheduler-overshoot guarantee); 1 GiB/no-swap memory; 128 tasks; 100/10 MiB learner input; 256 KiB driver; 1 MiB each/2 MiB aggregate output; 16 MiB file; 256 FDs; no core; authoritative 256 MiB/10,000-entry workspace denial/classification; one live and three queued runs; and two-second graceful TERM/tree-empty windows. Limits/control failure freeze and kill immediately; file/FD OS denials are not fabricated terminal classifications.
+  - Enforcement uses one delegated parent cgroup-v2 subtree with workspace-server/payload children, an administrator-installed root-owned broker under immutable `runner-broker-service-v1` service-manager death/watchdog coupling, immutable runtime-view/workspace-filesystem/filter manifests, a complete privilege drop to a dedicated runner identity, private user/PID/mount/network namespaces with only broker-owned `runner-workspace-fs-v1` writable, `no_new_privs`, fixed RLIMIT defense-in-depth, and an architecture-verified deny-by-default syscall allowlist. The workspace server records a monotonic denial event before returning `ENOSPC`; cleanup failure or broker/control/filesystem loss creates immediate persistent safety suspension; startup and shutdown reconcile before runner enablement.
+  - Affected tickets and phases: IDK-406's enablement/resource-policy gate is satisfied. IDK-008 is also approved, so IDK-406 is Ready; implementation/native exact-tuple evidence still prohibits activation.
 - Out of scope:
-  - Runner threat-model mechanics and implementation (Section 4, IDK-406).
-- Data and invariants: None owned by Sections 0–2.
-- API/domain/event contracts: None.
-- UX routes and states: None in my sections; `/app/topic-studio` Run/Submit controls in my sections cover only the browser-side static "Run static checks" prototype behavior being replaced elsewhere, not the real runner.
-- Implementation notes: None.
+  - Runner mechanisms and native evidence (IDK-406).
+  - OS/JDK/build-mode policy (IDK-005), database exercises (IDK-008), and retained-output/cleanup-intent lifecycle (IDK-010).
+- Data and invariants: All nine policy IDs (`runner-environment-v1`, `runner-limits-v1`, `runner-risk-ack-v1`, `runner-run-confirmation-v1`, `yuno-runner-broker-v1`, `runner-broker-service-v1`, `runner-runtime-view-v1`, `runner-workspace-fs-v1`, `runner-syscall-filter-v1`) and all numeric/state/message semantics are immutable version 1.0; a change revokes acknowledgement/enablement and requires a new approved version and activation evidence.
+- API/domain/event contracts: Version 1.0 fixes desired/effective enablement, Settings acknowledgement, per-run confirmation/expiry, limit codes/messages, concurrency, safety suspension/reset, immutable limit snapshots, and cleanup/reconciliation records. IDK-406 owns implementation/generated contracts.
+- UX routes and states: Settings owns explicit enable/disable/re-acknowledgement; Topic Studio owns per-run confirmation and fixed disabled/limit/cancel/cleanup states; Submit/static review remains independent.
+- Implementation notes: Approval is not activation. Compatible toolchain state can remain visible while `effective_enabled=false`; no learner process starts without exact-tuple evidence and every control.
 - Acceptance criteria:
-  - A documented open enablement/resource-posture question exists; no limit value or enablement default is declared adopted.
+  - Decision version 1.0 records every enablement gate, acknowledgement, numeric limit/measurement, cgroup/workspace/network boundary, message, termination/cleanup/reconciliation transition, record, version rule, activation test, and implementation removal.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Engineering/security owner approves enablement posture and resource limits.
-  - Existing coverage reused: None.
+  - Manual: Engineering/security owner approved decision version 1.0 on 2026-08-13; IDK-406 retains all mechanism, boundary, race, native, security, and accessible-UX evidence.
+  - Existing coverage reused: PRD Appendix C, the IDK-005 toolchain boundary, current-code audit, and official Linux/Python documentation are recorded in the artifact; none substitutes for activation evidence. IDK-007 independently owns its execution/admission/escalation values and does not treat pending lifecycle policy as prior approval.
 - Failure and recovery:
-  - Unresolved: runner remains disabled by policy; static workflow is unaffected.
+  - Incomplete/unverifiable controls keep effective enablement false. Unverified process/workspace cleanup immediately suspends the runner and requires recorded manual recovery; the rest of Yuno/static review remains available.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (engineering/security owner per PRD §13). Required artifact: an approved runner enablement posture and resource-limit configuration.
+  - Approved by the engineering/security owner on 2026-08-13. Artifact: `docs/decisions/IDK-007-runner-enablement-and-resource-posture.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
-### IDK-008 — Frame the database-exercise posture decision
+### IDK-008 — Approve the MVP database-exercise posture
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame whether the optional relational-database connector only connects to a learner-supplied database, or also manages a local instance.
-- User-visible outcome: None directly; determines whether any local database lifecycle management is ever offered.
+- Status: Approved — decision version 1.0 recorded 2026-08-14
+- Objective: Record `database-exercise-posture-v1`: MVP exposes no executable database connector, while mechanisms remain eligible for IDK-001/002-approved RDB content and explicitly labelled static SQL/design review.
+- User-visible outcome: None directly; IDK-406 must remove false relational-capability advertising while static artifact review remains possible without opening a database connection.
 - PRD traceability: RUN-01 (contributing)
 - Appendix H decisions: None.
 - Owning module: runner
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q6; IMPLEMENTATION_SPEC §12.3 Q8): "Does the optional relational connector only connect to a user-supplied database, or also manage a local instance?"
-  - Evidence required: a decision between user-supplied-only (spec §12.2 recommends this as a non-adopted default) and product-managed-instance, with resource/lifecycle implications for whichever is chosen.
-  - Affected tickets and phases: gates Section 4 runner scope (IDK-406) if RDB exercises are enabled; does not block any ticket in my sections.
-  - Allowed preliminary work: none required within Sections 0–2.
-  - Stop point: no database-exercise capability, of either posture, may be advertised as configured until this is approved.
+  - Resolved question (PRD §14 Q6; IMPLEMENTATION_SPEC §12.3 Q8): version 1.0 adopts neither learner-supplied nor product-managed database execution in MVP. Artifact: `docs/decisions/IDK-008-database-exercise-posture.md`.
+  - Relational/database execution is absent from capabilities, Settings, confirmation/run contracts, persisted enums/checks, generated clients, and UI. Configuration or an installed/listening database never creates a capability.
+  - The Java-only runner schema has no relational discriminator or compatibility path. The exact retired regression signature is `POST /runner/confirmations` with an otherwise-valid body containing `"language":"relational"`; it receives the standard `422` closed-schema response before route/UoW. Other unknown fields/invalid values use ordinary schema validation, while SQL artifact text remains eligible for static review.
+  - Subject to IDK-001/002 content approval, RDB SQL/design artifacts and static rubric review remain eligible. Each review-specific limitation must say it made no database connection, executed no statement/plan/migration/concurrency behavior, and proves no runtime/persistence/performance/locking/production behavior; no global exact sentence is mandated.
+  - Affected tickets and phases: this resolves IDK-406's final decision blocker and IDK-503 reviews the shipped absence/rejection. It does not activate Java execution.
 - Out of scope:
-  - Runner implementation mechanics (Section 4).
-- Data and invariants: None owned by Sections 0–2.
-- API/domain/event contracts: None.
-- UX routes and states: None in my sections.
-- Implementation notes: None.
+  - Implementing any learner-supplied or managed database connector, accepting credentials/endpoints, provisioning lifecycle, or weakening the approved Java socket-denial boundary.
+- Data and invariants: `database-exercise-posture-v1` is immutable; no structured database-execution configuration/credential/endpoint, confirmation, job, runner record, or output is created by invalid runner input. Learner-authored static content is governed separately by privacy/export policy.
+- API/domain/event contracts: Relational/database values are absent from capability/confirmation/run schemas; the exact retired `POST /runner/confirmations` `"language":"relational"` signature receives ordinary standard `422` schema validation before route/UoW. IDK-406 owns the removal and generated-contract/zero-side-effect evidence.
+- UX routes and states: No relational connector control or disabled placeholder ships. RDB static review remains usable and explicitly says no database connection or runtime validation occurred.
+- Implementation notes: Approval requires IDK-406 to remove a false placeholder capability rather than adding a second privileged execution system; it does not claim the removal is already live. Any future connector requires a new approved engine/credential/network/operation/lifecycle policy and its own activation evidence.
 - Acceptance criteria:
-  - A documented open database-exercise-posture question exists; no posture is declared adopted.
+  - Decision version 1.0 records absence, closed-schema validation, static-review semantics/ownership, obsolete-path removal, change control, and implementation/review evidence ownership without claiming execution activation.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Engineering owner approves the database-exercise posture.
-  - Existing coverage reused: None.
+  - Manual: Engineering owner approved `database-exercise-posture-v1` on 2026-08-14; IDK-406 owns negative implementation evidence and IDK-503 the shipped review.
+  - Existing coverage reused: PRD RUN-01's optionality, IMPLEMENTATION_SPEC §12.2/§12.3, the current false configured-string capability audit, and approved IDK-005/007 boundaries are recorded in the artifact.
 - Failure and recovery:
-  - Unresolved: no database-exercise capability is advertised as configured.
-- Removal/replacement: None.
+  - Until IDK-406 removes the placeholder paths and proves closed-schema zero-side-effect rejection, no relational/database capability is exposed. Static review remains the recovery/fallback in every state.
+- Removal/replacement: IDK-406 removes `runner_relational_connector`, `RunnerLanguage.RELATIONAL`, relational SQLite checks/migrations, the configured-string detector, relational OpenAPI/client/UI variants, fixtures, and compatibility paths. Its Java-only migration transactionally deletes any non-authoritative `language='relational'` placeholder rows, exclusively owned bodies/inputs/outputs, and linked `kind='runner'` jobs/results/attempts/events whose logical request/run/result references target those placeholders. Unrelated jobs and all goals/artifacts/evidence survive, and no dangling logical reference remains; IDK-501 verifies this approved obsolete-row removal and governed-data preservation.
 - Approval gate:
-  - Approver: TBD (engineering owner per PRD §13). Required artifact: an approved database-exercise posture decision.
+  - Approved by the engineering owner on 2026-08-14. Artifact: `docs/decisions/IDK-008-database-exercise-posture.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
 ### IDK-009 — Frame the representative assessment scenarios and derived-state rule set decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame which representative initial/delayed and Practice/Mock scenarios, rubric versions, and role-level breadth are approved, and — because this also gates the deterministic derived-state rule set — frame the derived-state rule-version approval this unlocks.
-- User-visible outcome: None directly; determines the real rubric dimensions, scenario content, and readiness/coverage/proficiency/retention weighting a learner eventually sees, while the deterministic function shape itself is already fixed by Appendix H D6.
+- Status: Approved — decision version 1.0 recorded 2026-08-13
+- Objective: Record the approved representative initial/delayed hands-on and Practice/Mock scenarios, rubric dimensions and qualitative outcomes, role-level breadth, ambiguity policy, deterministic derived-state rules, and review-scheduling parameters.
+- User-visible outcome: None directly; determines the real rubric dimensions, scenario content, and readiness/coverage/proficiency/retention rules a learner eventually sees, while the deterministic function shape itself is already fixed by Appendix H D6.
 - PRD traceability: EVAL-01 (contributing), EVAL-02 (contributing), PRG-01 (contributing), PRG-02 (contributing), HND-03 (contributing), RET-01 (contributing), RET-03 (contributing)
-- Appendix H decisions: D6 (function shape `f(evidence, corrections, now, rule_version)` resolved; the rule set's actual weights/version content is what this decision approves).
+- Appendix H decisions: D6 fixes the function shape; this ticket separately approves its production policy as `derived-state-v1`.
 - Owning module: evidence_evaluation
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q8; IMPLEMENTATION_SPEC §12.3 Q9): "Which representative initial/delayed and Practice/Mock scenarios, rubric versions and role-level breadth are approved? This also gates the deterministic derived-state rules."
-  - Evidence required: representative scenario fixtures per exposed role/level (mid/senior/staff) satisfying HND-03's non-toy-domain requirement, rubric dimension sets per scenario type, and a proposed derived-state rule version (no numeric weight invented in this ticket).
-  - Affected tickets and phases: gates the real rubric/scenario content used by Section 3/4 Practice-Mock tickets (IDK-302–304) and the production rule-version activated by IDK-205; does not block IDK-204/IDK-205/IDK-206's own mechanism tests, which use fixture rubrics, fixture scenarios, and a fixture `rule_version` string per NFR-09.
-  - Allowed preliminary work: implement rubric/assessment/dispute schema and the deterministic derived-state function against fixture rubrics and a placeholder `rule_version="fixture-v0"`.
-  - Stop point: no `rule_version` other than the approved one may be presented as authoritative readiness/coverage/proficiency/retention in production, and no scenario fixture may be presented as a real assessment scenario, until this is approved (Phase 2 exit gate; also gates HND-03 fixtures in Phase 4).
+  - Resolved question (PRD §14 Q8; IMPLEMENTATION_SPEC §12.3 Q9): the twelve-scenario mid/senior/staff matrix, three rubric versions, qualitative outcome representation, valid-alternative/ambiguity policy, `derived-state-v1`, and `review-schedule-v1` are recorded in `docs/decisions/IDK-009-assessment-and-derived-state.md`.
+  - Approved breadth: initial and delayed changed-context hands-on, Practice, and Mock at each exposed level; delayed evidence is eligible no earlier than seven UTC calendar dates after its exact paired initial submission.
+  - Affected tickets and phases: the decision gate is satisfied for IDK-204–206 and IDK-302–304, and the scenario/rubric portion is satisfied for IDK-405/IDK-503. Together with approved IDK-004, this removes IDK-405's decision blockers. IDK-204 owns rubric manifests and exact canonical-topic mappings, IDK-302 owns Practice records, IDK-303 owns Mock records, and IDK-405 owns hands-on records. Consuming code, the IDK-001/102 approved graph mapping, the IDK-003 source posture for factual corrections, and manual scenario-realism evidence remain required before production activation or release.
+  - Stop point after approval: no fixture/unapproved scenario or rubric may be presented as reviewed content, and progress remains non-authoritative until the decision artifact's section 11 implementation evidence passes.
 - Out of scope:
   - The deterministic function's shape and invariants (already resolved by D6; implemented in IDK-205).
-  - Review-queue scheduling algorithm parameters, which are a distinct sub-question tracked here but implemented against fixture parameters in IDK-206.
+  - Runtime content loading, persisted scenario/revision/phase and normalized ambiguity/carry-forward fields, derived-rule activation, and review-scheduler activation, which remain implementation work in their owning tickets.
 - Data and invariants:
-  - `assessments`/`rubrics`/`rubric_dimensions`/`goal_progress_memos.derivation_version` columns remain populated by fixture values pending this decision.
+  - Scenario, rubric, ambiguity, derived-rule, and schedule versions are immutable references. Existing fixture records retain their fixture identity and never become approved by relabelling.
 - API/domain/event contracts: None.
-- UX routes and states: `/app/evidence`, `/app/reports`, `/app/practice`, `/app/mock` render fixture-backed rubric/scenario content until this decision resolves.
+- UX routes and states: `/app/evidence`, `/app/reports`, `/app/practice`, `/app/mock`, and `/app/topic-studio` consume the approved versions only after their implementation gates pass.
 - Implementation notes:
-  - No numeric weight, threshold, or scenario content is proposed here.
+  - Version 1 deliberately uses five qualitative dimension outcomes (`pass`, `trade-off`, `factual-correction`, `not-demonstrated`, `ambiguity-unresolved`) and conservative classifications with no hidden numeric score or topic/rubric weights.
 - Acceptance criteria:
-  - A documented open scenario/rubric/rule-version question exists; no scenario, rubric dimension set, or rule weight is declared adopted.
+  - Decision version 1.0 records every required role/scenario cell and content revision, scenario/capability/rubric/pair mapping, rubric dimension/outcome, curated valid-alternative/near-miss case, ambiguity persistence/neutrality rule, deterministic derived-state classification/timing/aggregation rule, scheduling parameter, disclosure, and version-change rule.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Content/assessment owner approves representative scenarios, rubric versions, and the derived-state rule-version content.
-  - Existing coverage reused: None.
+  - Manual: Content/assessment owner approved decision version 1.0 on 2026-08-13; consuming tickets retain their implementation and shipped-artifact reviews.
+  - Existing coverage reused: PRD Appendix H D6 and the implemented fixture mechanisms establish the fixed function shape; they do not substitute for production activation evidence.
 - Failure and recovery:
-  - Unresolved: IDK-204/205/206 continue operating against fixture rubrics/rule-versions only; nothing fixture-based is presented as pilot-ready.
+  - Missing or mismatched approved content/rule data fails closed to non-authoritative/unavailable; fixture content remains explicitly non-production.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (content/assessment owner per PRD §13). Required artifact: approved representative scenarios, rubric versions, and a derived-state rule-version specification.
+  - Approved by the content/assessment owner on 2026-08-13. Artifact: `docs/decisions/IDK-009-assessment-and-derived-state.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
 ### IDK-010 — Frame the combined size/retention and export/delete/logging lifecycle decision
 
@@ -651,16 +653,16 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 - PRD traceability: CORE-03 (primary), CORE-02 (primary)
 - Appendix H decisions: None.
 - Owning module: profiles_goals
-- Dependencies: IDK-101, IDK-103
+- Dependencies: IDK-004, IDK-101, IDK-103
 - Scope:
   - `learner_profiles` (global, not goal-scoped) and `goal_workspaces` (owner, name, path `learn/interview_prep`, subject/role, target level/capability, one graph pin, status, `row_version`).
   - Goal create, switch (set current goal), resume (historical Resume, distinct record/surface from Recommended next per spec §2.1), archive.
   - `/` states: empty (no goals → setup), ready/stale (goal cards + explanation), locked/unavailable (goal deleted/migration issue).
   - Target-level enum restricted to the PRD §3 tiers (Mid-level/Senior/Staff); no beginner-track option ever rendered (CORE-02 structural check).
+  - Shared `role-competency-copy-v1` metadata from IDK-004 for onboarding and goal Settings: exact display labels/descriptions, audience/title-variation helper, independent capability helper, and explicit-confirmation/history behavior.
 - Out of scope:
   - Goal delete mechanics, impact preview, and cross-goal evidence tombstoning (IDK-108).
   - Full export orchestration (Section 4, IDK-409).
-  - Final competency-description copy for each tier (IDK-004).
 - Data and invariants:
   - `goal_workspaces` per spec §4.4; index owner/status/recent; no goal mixes evidence or progress across goals (verified via repository-level isolation test).
 - API/domain/event contracts:
@@ -672,15 +674,16 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
   - Two goals created by the same owner never leak each other's evidence/progress/overlay state when queried independently.
   - Switching the current goal changes what `/` and downstream routes render without losing the other goal's state.
   - No beginner-track option is ever rendered in onboarding, and the audience statement appears in onboarding's target-level step. CORE-02's "catalog labels" resolve to the canonical graph's curriculum scope-boundary tags surfaced on the roadmap and topic surfaces, which are owned and validated by IDK-102 under CUR-01 — this ticket does not introduce a separate catalog surface, and none exists among the 14 routes.
+  - The exact `role-competency-copy-v1` label/description and title-variation helper for the selected level are programmatically associated with the control; goal Settings preserves the stable stored value while exposing the same copy.
 - Minimum required tests:
-  - Automated: Repository/integration test proving two-goal isolation — creating goal A and goal B for the same owner, writing state to A, and asserting a query scoped to B never returns A's rows (proves CORE-03's "two-goal isolation journey" per spec §10.2).
+  - Automated: Repository/integration plus component test proving two-goal isolation and asserting the exact approved heading, three stable values/labels, selected description and helpers, no beginner option, no first-use preselection, accessible association, invalid-value fail-closed behavior, no setup/goal persistence before explicit confirmation, and unchanged `Mid-level`/`Senior`/`Staff` request payloads.
   - Manual: None beyond the isolation test; audience/level labelling is verified structurally by the automated test plus IDK-004's manual approval of copy.
   - Existing coverage reused: None — the prototype models exactly one hardcoded course/goal with no isolation concept to reuse.
 - Failure and recovery:
   - A migration or read failure for the currently selected goal surfaces `/` as `unavailable` with retry, never silently falls back to a different goal.
 - Removal/replacement: Removes the prototype's single hardcoded `COURSE` fixture (`src/shared/model.ts`) as the only goal a learner can ever have, and deletes `src/shared/model.test.ts`, whose eleven-lesson/four-module assertions exist solely to pin that fixture and become meaningless once goals are server-persisted; replaced by server-persisted `GoalWorkspace` records with real multiplicity.
 - Approval gate:
-  - Final onboarding/catalog audience-label copy additionally requires IDK-004; this ticket's structural no-beginner-track and goal-isolation acceptance do not require it.
+  - Copy policy is satisfied by `docs/decisions/IDK-004-role-level-competencies.md`, decision version 1.0; production activation requires the component and shipped-copy evidence listed there.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -693,11 +696,12 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 - PRD traceability: ONB-01 (primary), ONB-02 (primary), D11 (primary, shared with IDK-107)
 - Appendix H decisions: D11
 - Owning module: diagnostics
-- Dependencies: IDK-101, IDK-102, IDK-103
+- Dependencies: IDK-004, IDK-101, IDK-102, IDK-103
 - Scope:
   - `diagnostic_sessions` (owner, captured approved graph, setup inputs, state, started/paused/expiry/failure, confirmed goal) and `diagnostic_answers` (owner/session, sequence, question ref, answer, confidence, adaptive-context version, timestamp, unique session/sequence, append-only).
   - States per spec Appendix D / §9.1: `not-started → in-progress/paused/skipped → roadmap-preview` (confirm is IDK-107), `failed` retryable preserving prior answers.
   - Adaptive next-question selection driven by prior responses/confidence against a versioned question set.
+  - Persisted setup inputs include the explicit target level and independently selected target capability; the onboarding control renders `role-competency-copy-v1`, permits edits before preview/confirmation, and restores the exact saved choice after pause/reload.
   - Optional Markdown/plain-text notes/questions captured verbatim as untrusted seed, later handed to Imports (IDK-203) for review — never parsed or treated as truth here.
   - Every optional step (diagnostic itself, notes/questions) skippable without forcing retake.
 - Out of scope:
@@ -716,15 +720,16 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
   - Pausing mid-diagnostic and reloading resumes with all prior answers intact.
   - Skipping the diagnostic or the notes/questions step never blocks reaching roadmap-preview.
   - Adaptive next-question selection changes based on a prior answer's content/confidence in a reproducible way.
+  - Target level and capability changes survive pause/reload and optional diagnostic skip; neither diagnostics nor imported text silently changes the learner-confirmed selection.
 - Minimum required tests:
-  - Automated: Domain/integration test asserting a paused/refreshed/restarted diagnostic session preserves every previously recorded answer and that skipping any optional step reaches `roadmap-preview` without requiring retake (proves ONB-01/ONB-02's "adaptive fixture/skip/restart" acceptance per spec §10.2).
+  - Automated: Domain/integration test asserting a paused/refreshed/restarted diagnostic session preserves every answer plus the explicit target-level/capability selections; editing both before confirmation persists the final explicit choice; and skipping any optional step reaches `roadmap-preview` without requiring retake. IDK-104 owns rendering the approved copy.
   - Manual: None beyond the automated test.
   - Existing coverage reused: None — the prototype's `onboarding.sourceMaterial` (`src/shared/state.tsx`) is a single localStorage string with no session/answer persistence to reuse.
 - Failure and recovery:
   - A service failure during the diagnostic preserves all recorded answers and reports `failed` retryable rather than discarding progress.
 - Removal/replacement: Removes the prototype's single `onboarding.sourceMaterial` string field with no diagnostic-session concept at all; replaced by persisted `diagnostic_sessions`/`diagnostic_answers`.
 - Approval gate:
-  - Concrete expiry/cleanup duration for abandoned sessions requires IDK-010; this ticket's own persistence/skip/resume acceptance does not require it.
+  - IDK-004 decision version 1.0 satisfies the role-copy policy; its UI evidence remains required. Concrete expiry/cleanup duration for abandoned sessions requires IDK-010; this ticket's own persistence/skip/resume acceptance does not require it.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -1010,9 +1015,11 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 - PRD traceability: EVAL-01 (primary), EVAL-02 (primary)
 - Appendix H decisions: D6 (contributing — "AI output becomes an input only after schema validation records it as evidence").
 - Owning module: evidence_evaluation
-- Dependencies: IDK-101, IDK-108
+- Dependencies: IDK-101, IDK-102, IDK-108
 - Scope:
   - `rubrics`, `rubric_dimensions`, `assessments`, `assessment_dimension_results`, `assessment_disputes`, `reevaluation_requests` per spec §4.5, layered on IDK-108's `evidence`/`evidence_payloads` base.
+  - Load and version-gate the three immutable IDK-009 v1 rubric manifests and persist the exact approved `topic_binding_key → canonical topic stable ID` mapping after IDK-102 publishes the IDK-001-approved graph.
+  - Approved assessment metadata from IDK-009 v1: immutable scenario ID/content revision, assessment phase, conditionally required paired-initial reference, ambiguity-policy version, five-outcome dimension vocabulary, and normalized per-dimension ambiguity records with same-scope carried-result references.
   - `POST /goals/{goalId}/evidence` (immutable create); `GET .../evidence`; `GET /evidence/{id}`; `POST .../assess`; `GET /assessments/{id}`; `POST .../disputes`; `POST .../reevaluate` per spec §5.2.
   - Evaluation accepts multiple valid solutions when assumptions/consequences are defensible; feedback separates factual corrections from trade-offs (EVAL-01).
   - Dispute appends a reason; re-evaluation creates a successor `assessments` row and marks the predecessor `derivation_excluded=true` in one UoW, preserving both (EVAL-02).
@@ -1026,8 +1033,11 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
   - Evidence and assessments are immutable; the only lifecycle event is append (new evidence, new assessment, new dispute, new re-evaluation successor) — never UPDATE/DELETE, enforced by repository and SQLite trigger.
   - `assessments.derivation_excluded` is the only field a re-evaluation ever sets on a predecessor; its text/result never changes.
   - Unresolved ambiguity (`ambiguity-unresolved` state) carries zero readiness penalty by construction — verified jointly with IDK-205.
+  - Every authoritative assessment uses an approved scenario/rubric pairing whose role, phase, capability and content revision match; fixture/unapproved rows are rejected rather than treated as production content.
+  - Capability matching is exact-only. A delayed assessment requires a paired initial assessment; every other phase forbids one. The pair must be earlier, eligible, and match owner, goal, mapped topic, capability, and the registry-declared initial scenario.
+  - Each ambiguous dimension records cause, competing interpretations, resolution needed, and the immutable pre-attempt effective clear dimension-result reference (or explicit null); an ambiguity never makes prior evidence newer.
 - API/domain/event contracts:
-  - `EvaluationRequest`/`EvaluationResult` per spec §5.3: dimension outcomes/rationales, facts, trade-offs, citations, ambiguities, feedback, cross-question candidate, revision invitation, warnings/limitation labels.
+  - `EvaluationRequest`/`EvaluationResult` per spec §5.3 plus IDK-009 v1 scenario/revision/phase/pair and normalized ambiguity fields: dimension outcomes (`pass`, `trade-off`, `factual-correction`, `not-demonstrated`, `ambiguity-unresolved`), rationales, facts, trade-offs, citations, ambiguities, feedback, cross-question candidate, revision invitation, warnings/limitation labels.
   - Evaluation/re-evaluation return `202 JobRef`; assess/reevaluate endpoints per spec §5.2.
 - UX routes and states: `/app/practice` `evaluating → feedback-ready/failed-recoverable`; `/app/evidence` assessment `feedback-ready → disputed → re-evaluating → feedback-ready/ambiguity-unresolved/failed` per spec §9.2.
 - Implementation notes:
@@ -1037,15 +1047,16 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
   - Two structurally different but defensible answers to the same prompt both receive passing dimension outcomes when their assumptions are stated and consistent.
   - Disputing an assessment never alters the original; re-evaluating creates a new assessment row, marks the old one `derivation_excluded=true`, and both remain queryable.
   - An `ambiguity-unresolved` assessment produces no readiness deduction (verified against IDK-205's function).
+  - A mixed assessment preserves its clear dimensions while every ambiguous dimension resolves to its recorded pre-attempt carry; an all-ambiguous assessment leaves assessed, correction-only, and transfer-only baselines exactly unchanged.
 - Minimum required tests:
-  - Automated: Domain/property test asserting re-evaluation always creates a successor assessment and marks exactly the immediate predecessor `derivation_excluded=true` in one transaction, with both rows still readable afterward and no evidence or assessment ever mutated in place (proves EVAL-02's "append-only/no-penalty" acceptance per spec §10.2).
-  - Manual: Content/assessment reviewer validates the "multiple valid solutions accepted" behavior against curated valid-alternative fixtures once IDK-009 approves representative scenarios.
+  - Automated: Domain/property test asserting re-evaluation always creates a successor assessment and marks exactly the immediate predecessor `derivation_excluded=true` in one transaction, with both rows still readable afterward and no evidence or assessment ever mutated in place; the same suite rejects scenario/rubric/mapping/capability mismatches and every invalid delayed-pair relation, validates all five outcomes including omitted-but-not-false `not-demonstrated`, accepts the curated alternatives while correcting each near miss, and proves mixed/all-ambiguous carried-result scope and neutrality over assessed/correction/transfer baselines (with IDK-205 owning aggregate outputs).
+  - Manual: Content/assessment reviewer validates the "multiple valid solutions accepted" behavior against the curated valid-alternative cases approved by IDK-009 decision version 1.0.
   - Existing coverage reused: None — REPLACED. The prototype's `evaluateCode` regex-based static-check function and `practiceFeedback` regex-based feedback generator (`src/shared/state.tsx`) are deterministic fixture logic standing in for real evaluation; they are replaced by the schema-validated `EvaluationResult` contract, testable here against a fake adapter. The Run-versus-Submit invariant asserted by `src/shared/state.test.ts`'s `keeps exploratory Run separate from evidence-producing Submit` is re-homed to IDK-405, which owns evidence creation on Submit; this ticket does not duplicate it.
 - Failure and recovery:
   - A failed evaluation job leaves the evidence record intact and reports `failed` on the assessment path; retry is cache-checked per D4/D8 (Section 4) and never double-charges or duplicates an assessment.
 - Removal/replacement: None directly. This ticket supplies the schema-validated `EvaluationResult`/`assessments` domain contract that replaces the prototype's regex-based fixture scoring, but the deletions themselves are owned elsewhere — `practiceFeedback` by IDK-302, and `evaluateCode`/`SIMULATION_LIMITATION` by IDK-405.
 - Approval gate:
-  - Real rubric dimensions and scenario content additionally require IDK-009; this ticket's append-only/dispute/re-evaluation mechanism acceptance uses fixture rubrics and does not require it.
+  - The production rubric dimensions, scenario matrix, and ambiguity policy are approved by IDK-009 decision version 1.0; activation still requires the approved-content and ambiguity carry-forward evidence named there. Authoritative learner-facing factual corrections additionally remain blocked until IDK-003's approved source/citation posture is implemented; synthetic-source mechanism tests may proceed.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -1053,7 +1064,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 
 - Phase: 2 — MVP learning and evidence
 - Status: Ready
-- Objective: Implement D6 — a server-side deterministic function `f(eligible evidence, learner corrections/confirmations, explicit now, rule version)` computing coverage, proficiency, retention, and readiness; corrections are first-class inputs recomputation never silently reverses; `now` is explicit because retention decays; per-goal memoization is invalidated in the same transaction as evidence appends; responses carry definitions, supporting evidence, uncertainty, and rule version; exactly four inferred states (likely known, partial, unverified, new), never inferred completion; detailed/simple is presentation-only and deletes nothing; dismissed/disabled reviews carry no penalty; no numeric weight is invented — the rule set is versioned and approved under IDK-009.
+- Objective: Implement D6 — a server-side deterministic function `f(eligible evidence, learner corrections/confirmations, explicit now, rule version)` computing coverage, proficiency, retention, and readiness; corrections are first-class inputs recomputation never silently reverses; `now` is explicit because retention decays; per-goal memoization is invalidated in the same transaction as evidence appends; responses carry definitions, supporting evidence, uncertainty, and rule version; exactly four inferred states (likely known, partial, unverified, new), never inferred completion; detailed/simple is presentation-only and deletes nothing; dismissed/disabled reviews carry no penalty; the production policy is `derived-state-v1` from IDK-009 decision version 1.0.
 - User-visible outcome: Progress always reflects real evidence and the learner's own corrections, never silently reverts a correction, and is explicit about what "now" means when retention is involved.
 - PRD traceability: PRG-01 (primary), PRG-02 (primary), D6 (primary)
 - Appendix H decisions: D6
@@ -1066,13 +1077,14 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
   - Exactly four classification states (`likely_known`/`partial`/`unverified`/`new`) on `learning_states`; never a completion flag.
   - Detailed/simple display is presentation-only — simple mode never deletes underlying data (consumed by IDK-208's UI).
 - Out of scope:
-  - The actual rule-set weights/thresholds for coverage/proficiency/retention/readiness (IDK-009) — this ticket implements the function shape and invariants against a fixture `rule_version`.
+  - Authoring or approving derived-state policy — `derived-state-v1` is owned by IDK-009. This ticket implements and activates it after the section 11 evidence in the decision artifact passes.
   - Evidence/assessment creation itself (IDK-204).
   - Review dismiss/disable UI (IDK-206) — this ticket only guarantees the zero-penalty invariant the review module must respect.
 - Data and invariants:
   - Corrections override inference until explicitly superseded by a later correction — recomputation never silently discards a standing correction (D6).
   - `goal_progress_memos` is a cache only, always recomputable from source rows; never a source of truth.
   - Detailed/simple never deletes data (PRG-01).
+  - Cell outcome selection, correction/transfer semantics, coverage/proficiency/retention/readiness aggregation, and UTC-date timing follow `derived-state-v1` exactly; no implementation-local score or threshold exists.
 - API/domain/event contracts:
   - `GET /goals/{goalId}/progress?now=`, `GET /goals/{goalId}/learning-state-explanations` per spec §5.2; response fields include definitions, supporting evidence references, uncertainty, and `rule_version`.
 - UX routes and states: `/app/evidence`, `/app/reports`, `/app/settings` (progress-display setting) consume this; states are presentation-only, not lifecycle states of this service itself.
@@ -1085,14 +1097,14 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
   - A dismissed or disabled review item produces zero change to readiness/coverage/proficiency/retention.
   - No classification other than the four allowed states is ever returned; no field represents "completion."
 - Minimum required tests:
-  - Automated: Domain/property test proving `f` is a pure deterministic function of `(evidence, corrections, now, rule_version)` — randomized evidence/correction sequences with a fixed replay always reproduce identical output; a correction is never reversed by recomputation unless explicitly superseded; and toggling `progress_display` between `detailed` and `simple` leaves every stored evidence, assessment and `goal_progress_memos` row byte-identical on re-read (proves PRG-01's "simple mode does not delete data"). The dismissed/disabled-review zero-delta assertion is owned by IDK-206 and is not repeated here. This ticket is the primary owner of "deterministic derived state with explicit now".
-  - Manual: None beyond the automated test; real rule-weight validation is a manual approval activity under IDK-009.
+  - Automated: Domain/property test proving `f` is a pure deterministic function of `(evidence, corrections, now, rule_version)` — randomized input order with fixed replay reproduces identical output; newest-clear-per-dimension ordering resolves contradictions; mixed/all ambiguity has the approved carried/zero delta; corrections and transfers follow their distinct rules; retention aggregates per required cell at the 7th, 90th and 91st UTC-date boundaries; memo hashes roll at those date boundaries; a correction is never reversed unless explicitly superseded; and detailed/simple toggling leaves stored evidence/assessments/memos byte-identical. IDK-206 owns dismissed/disabled-review zero delta.
+  - Manual: None beyond the automated test; policy approval is recorded under IDK-009 and shipped-artifact review remains IDK-503 work.
   - Existing coverage reused: None — the prototype never computes derived progress at all; its roadmap `learnerState` dropdown (`src/shared/state.tsx`) is a directly user-set field with no derivation, which this ticket supersedes by treating that same value as one correction input among several, not the entire state.
 - Failure and recovery:
   - A memo-invalidation failure falls back to recomputing directly from source rows on the next read rather than serving a stale cached value.
-- Removal/replacement: Supersedes the prototype's roadmap `learnerState` dropdown as the sole source of a topic's knowledge state; the learner's selection remains a valid `learner_corrections` input, but the displayed state is now derived, not directly assigned.
+- Removal/replacement: Supersedes the prototype's roadmap `learnerState` dropdown as the sole source of all progress dimensions. The persisted learner correction remains the exact displayed-state override until explicitly superseded, while coverage/proficiency/retention/readiness are deterministically derived under its approved correction semantics.
 - Approval gate:
-  - The production rule-set (weights/thresholds) requires IDK-009; this ticket's function-shape and invariant acceptance uses a fixture `rule_version` and does not require it.
+  - Satisfied by `docs/decisions/IDK-009-assessment-and-derived-state.md`, decision version 1.0; output must remain explicitly non-authoritative until its section 11 activation evidence passes.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -1100,7 +1112,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 
 - Phase: 2 — MVP learning and evidence
 - Status: Ready
-- Objective: Deliver one notebook per goal with entries labelled auto or user and optional topic/evidence/source links, plus an optional non-blocking review queue with retrieval, spacing, interleaving, and context variation; per-goal enable/disable and duration/cadence/type tuning; recall/explanation/application required before reveal; attempts record response, optional confidence, feedback/correction, next interval, and later varied-context result; scheduling parameters versioned and approved under IDK-009, no algorithm invented.
+- Objective: Deliver one notebook per goal with entries labelled auto or user and optional topic/evidence/source links, plus an optional non-blocking review queue with retrieval, spacing, interleaving, and context variation; per-goal enable/disable and duration/cadence/type tuning; recall/explanation/application required before reveal; attempts record response, optional confidence, feedback/correction, next interval, and later varied-context result; production scheduling uses `review-schedule-v1` approved by IDK-009.
 - User-visible outcome: Every goal has a real notebook of labelled entries, and an optional review queue that never blocks navigation and never penalizes dismissal or disabling.
 - PRD traceability: NBK-01 (primary), RET-01 (primary), RET-02 (primary), RET-03 (primary)
 - Appendix H decisions: D6 (contributing — "dismissed reviews carry no penalty" is part of the D6 rule set).
@@ -1108,16 +1120,19 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 - Dependencies: IDK-204, IDK-201
 - Scope:
   - `notebook_entries` (owner/goal, optional topic/evidence/source, `entry_kind CHECK(auto,user)`, Markdown, timestamps, optional tombstone) per spec §4.5.
-  - `goal_review_preferences` (owner/goal PK, enabled, duration/cadence/type settings, row version); `review_items` (owner/goal/topic, prompt ref/type, ready/due/dismissed/disabled/generation-failed/completed, due/interval/context); `review_attempts` (owner/goal/item, response, optional confidence, feedback/correction, next interval, context variation/result, timestamp, immutable).
+  - `goal_review_preferences` (owner/goal PK, enabled, duration/cadence/type settings, row version); `review_items` (owner/goal/topic, unique immutable source-assessment ref, prompt ref/type, ready/due/dismissed/disabled/generation-failed/completed, current rung, due/interval); `review_attempts` (owner/goal/item, response, optional confidence, feedback/correction, next interval, non-reused context ref/hash and result, timestamp, immutable).
   - `GET/POST /goals/{goalId}/notebook`; `PATCH/DELETE /notebook/{id}`; `GET/PATCH .../review-preferences`; `GET .../reviews`; `POST /reviews/{id}/attempts`; `POST .../dismiss` per spec §5.2.
   - Retrieval prompts require recall/explanation/application before the answer is revealed (RET-03).
   - Per-goal enable/disable and duration/cadence/type tuning affects only future suggestions, never blocks roadmap access, and creates zero readiness penalty (RET-02, verified jointly with IDK-205).
+  - `review-schedule-v1` interval transitions, UTC cadence anchors/slots, deterministic subject interleaving, five-minute item budget, and changed-context requirement.
 - Out of scope:
-  - The actual spacing/interleaving/context-variation scheduling algorithm and its parameters (IDK-009) — this ticket implements the queue mechanics against a fixture/versioned scheduling parameter set.
+  - Authoring or approving scheduling policy — `review-schedule-v1` is owned by IDK-009. This ticket implements and activates it.
   - Derived-state computation itself (IDK-205) — this ticket only guarantees it never feeds a penalty in.
 - Data and invariants:
   - Review is optional and non-blocking by construction — a disabled or empty review queue never gates any roadmap or topic action.
   - `review_attempts` are immutable; the answer stays hidden until a response is recorded (reveal-before-response is forbidden per spec §9.2).
+  - Review items and attempts retain `review-schedule-v1`; each item has a current ladder rung before attempt, and a scheduling decision consumes the assessed review classification plus optional confidence rather than inferring quality from response text.
+  - Initial `due_at` is anchored to the immutable source assessment timestamp; subsequent due times are anchored to the attempt. Cadence compares UTC dates, missing approved topic/subject mappings fail closed, and varied-context hashes may not repeat for an item.
 - API/domain/event contracts: As listed in Scope, per spec §5.2 "Notebook/review" group.
 - UX routes and states: notebook/review states — `empty/ready → saved`; review `ready/due → completed/ready`; `dismissed/disabled` per spec §9.2; empty or disabled review never blocks navigation.
 - Implementation notes:
@@ -1127,15 +1142,16 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
   - Disabling review, or dismissing every due item, never blocks any roadmap or topic navigation action and produces zero readiness change.
   - A review item's answer is never retrievable before a response is recorded for it.
   - Attempts are append-only and immutable once recorded.
+  - Every initial interval, result/confidence transition, cadence slot, subject ordering, session budget and varied-context decision is reproducible from persisted inputs under `review-schedule-v1`.
 - Minimum required tests:
-  - Automated: Domain test asserting (1) recall/explanation/application response is required before an item's answer becomes retrievable (proves RET-03), and (2) dismissing or disabling review produces exactly zero change to the goal's progress memo/readiness output from IDK-205 (proves RET-02's "disable/dismiss derived-state test" per spec §10.2).
-  - Manual: None beyond the automated test; real scheduling-parameter validation is a manual approval activity under IDK-009.
+  - Automated: Domain test asserting (1) recall/explanation/application response is required before reveal, (2) every `review-schedule-v1` initial/result/confidence transition including material-correction/not-demonstrated precedence, source-anchored initial due time, UTC-date cadence slot, deterministic subject interleave, five-minute session budget, unique changed-context hash, idempotent source-item creation, and missing-topic/subject fail-closed rule, and (3) dismissing or disabling review produces exactly zero progress delta.
+  - Manual: None beyond the automated test; policy approval is recorded under IDK-009 and shipped-artifact review remains IDK-503 work.
   - Existing coverage reused: None — the prototype's `codeNotes` (`src/shared/state.tsx`) is a single free-text field standing in for the entire notebook, and its `review` settings (`src/selected/operations/OperationalPages.tsx`) are inert toggles with no actual queue; both are replaced by real `notebook_entries`/`review_items`/`review_attempts`.
 - Failure and recovery:
   - A review-item generation failure reports `generation-failed` retryable while the roadmap and topic workspace remain fully available (spec §9.2).
 - Removal/replacement: Removes the prototype's single-string `codeNotes` field as the entire notebook, and the inert `review` settings toggles with no backing queue; replaced by goal-scoped `notebook_entries` and a real `review_items`/`review_attempts` queue.
 - Approval gate:
-  - Production scheduling algorithm/parameters require IDK-009; this ticket's queue-mechanics and non-blocking/no-penalty invariants use fixture parameters and do not require it.
+  - Satisfied by `docs/decisions/IDK-009-assessment-and-derived-state.md`, decision version 1.0; fixture scheduling remains non-production until replaced by `review-schedule-v1`.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -1240,12 +1256,13 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 - PRD traceability: INT-01 (primary), INT-02 (primary), INT-03 (primary), REF-01 (primary), CORE-01 (contributing).
 - Appendix H decisions: D3 (contributing — Refresher artifacts are read through the D3 generated-content cache owned by IDK-207/IDK-404).
 - Owning module: interview, frontend.
-- Dependencies: IDK-103, IDK-104, IDK-201, IDK-205.
+- Dependencies: IDK-004, IDK-103, IDK-104, IDK-201, IDK-205.
 - Scope:
   - `/app/interview-hub` route rendering separate Refresher, Questions, Practice, Mock cards per the existing approved layout (`InterviewHub` in `src/selected/core/CorePages.tsx`), re-pointed to API-backed reads.
   - `?mode=refresher` and `?mode=questions` as query states of the same canonical route (no new route); direct deep-link entry with no Learn-goal or Learn-completion check.
   - `interview_bundles`/`interview_bundle_items` CRUD and copy: `GET/POST /interview-bundles`, `GET/PATCH/DELETE /interview-bundles/{id}`, `POST /interview-bundles/{id}/copy`.
   - Generic role/level context fields only; no company field or company-identifying text accepted anywhere in bundle create/edit/copy.
+  - The role/level selector and level-derived heading consume `role-competency-copy-v1`; compact labels retain the three stable values while the selected description and company-title-variation helper remain adjacent and accessible.
   - Behavioral and leadership as `interview_bundle_items` with an `optional`/`included` flag independently toggleable without touching technical-subject items.
   - Refresher listing: `GET /goals/{goalId}/refreshers` returning artifacts each carrying subject, layer, source reference, and the evidence gap that motivated the refresher.
   - Questions listing: `GET /goals/{goalId}/questions` surfacing bundle-scoped question selection controls that hand off into Practice/Mock without producing feedback themselves (Questions mode never shows evaluative feedback — that only appears after entering Practice per spec §7.4).
@@ -1253,7 +1270,6 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
   - Practice/Mock run mechanics (IDK-302, IDK-303).
   - Consolidated reports (IDK-304).
   - Live provider-backed refresher generation and source retrieval wiring (IDK-404); this ticket consumes whatever artifact the D3 cache already holds and shows a stale/unavailable state otherwise.
-  - Final role-taxonomy competency descriptions beyond the three PRD-established labels (Mid-level/Senior/Staff backend engineer) — see Approval gate.
 - Data and invariants:
   - `interview_bundles`: owner, optional goal, name, generic role/level, origin, copy source, status, `row_version`; no company column exists, so no company claim can be persisted.
   - `interview_bundle_items`: bundle, subject, optional topic/question, position, optional/included flag; behavioral and leadership rows are ordinary optional items, removable without altering technical-subject rows.
@@ -1268,40 +1284,43 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 - Implementation notes:
   - Preserve the existing card layout, icons, and copy exactly (approved UX); only the data source changes from `useLearningState()` reducer fields to generated OpenAPI query hooks.
   - Independent reachability is enforced by never gating the route `beforeLoad`/query on any Learn goal or Learn-roadmap completion signal.
-  - Bundle role/level selector uses exactly the three PRD Users-and-jobs labels (Mid-level, Senior, Staff backend engineer) until IDK-004 delivers fuller competency descriptions; do not invent additional taxonomy text.
+  - Bundle role/level selector uses the exact three labels and descriptions approved by IDK-004; the page heading derives from the selected bundle/goal level rather than assuming Senior.
 - Acceptance criteria:
   - Opening `/app/interview-hub`, `?mode=refresher`, and `?mode=questions` in a fresh owner session with zero Learn evidence renders successfully with no Learn-completion check performed.
   - Copying a bundle produces a new `interview_bundles` row editable independently of the source; no request/response path carries a company field.
   - Toggling a behavioral or leadership `interview_bundle_item` never mutates a technical-subject item's `optional`/`included` state.
   - A Refresher artifact's detail view shows its subject, layer, source, and the evidence gap that triggered it, or an explicit `unavailable`/`stale` state — never a fabricated link.
+  - The selector renders the approved title-variation helper and selected competency description, and changing any level still persists only the stable `Mid-level`/`Senior`/`Staff` value.
 - Minimum required tests:
-  - Automated: Domain/API contract test on the `interview` module — creating and copying an `interview_bundles` row enforces generic role/level fields and rejects a company-identifying field (INT-02), and independently toggling a behavioral/leadership `interview_bundle_items` row leaves technical-subject rows unchanged (INT-03).
+  - Automated: Domain/API plus component test — creating/copying a bundle enforces generic role/level fields and rejects a company field; the exact three approved labels/descriptions and helper render, the heading follows each selection, PATCH retains the stable enum, and independently toggling behavioral/leadership items leaves technical-subject rows unchanged.
   - Manual: Content review confirms each shipped Refresher artifact's subject/layer/source/evidence-gap linkage reads correctly and names no company (REF-01; contributes to G3/G4 review at hardening).
   - Existing coverage reused: `tests/e2e/selected-app.spec.ts`'s 14-route render test already opens `/app/interview-hub` from a fresh browser session, demonstrating no Learn-completion prerequisite; extend it with `?mode=refresher`/`?mode=questions` deep-link assertions rather than duplicating full navigation coverage.
 - Failure and recovery:
   - Refresher/bundle fetch failure renders `unavailable` and retains any previously loaded authored material; no synthesized bundle or refresher content is shown.
   - A bundle copy that fails mid-request leaves the source bundle untouched (single synchronous create, no partial write).
 - Removal/replacement: None owned by this ticket. The hub's Mock card status text currently reads the local reducer's `state.mock.status`; IDK-303 owns replacing that read with the API-backed run status.
-- Approval gate: G4 (role taxonomy, IDK-004) and G1 (curriculum spine, IDK-001) must be settled before hardening exit to finalize bundle role/level wording and subject coverage; this ticket ships against the PRD's existing three role labels and the bounded MVP curriculum without waiting on either.
+- Approval gate: G4 role-copy policy is satisfied by IDK-004 decision version 1.0; its component/shipped-copy evidence remains required. G1 (IDK-001) still gates final subject coverage before hardening exit.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ### IDK-302 — Practice: hints, per-attempt feedback, append-only retry
 
 - Phase: 3 — MVP interview
-- Status: Blocked by IDK-009
+- Status: Ready
 - Objective: Implement the Practice lifecycle `ready → answering → follow-up → submitted → evaluating → feedback-ready → failed-recoverable` with hints only after explicit request, feedback only after Submit, facts/trade-offs separation, adaptive follow-ups, and append-only attempts that retry/repair never overwrite.
 - User-visible outcome: A learner answers a Practice question, optionally requests a hint before answering, submits to receive per-attempt feedback that separately labels factual corrections and trade-offs, and can repair or continue without losing any earlier attempt; cancelling an in-flight evaluation preserves the submitted attempt.
 - PRD traceability: QPR-01 (primary), QPR-02 (primary), EVAL-01 (contributing), EVAL-02 (contributing), HND-01 (contributing — Practice's response/evidence pattern reuses the same evaluated-artifact shape whose primary owner is IDK-405), NFR-09 (contributing).
 - Appendix H decisions: D6 (contributing — accepted practice attempts become evidence input to derived learner state).
 - Owning module: interview, evidence_evaluation, frontend.
-- Dependencies: IDK-009, IDK-204, IDK-205, IDK-301.
+- Dependencies: IDK-008, IDK-009, IDK-204, IDK-205, IDK-301.
 - Scope:
+  - Load exactly the three approved Practice scenario records from IDK-009 content revision `idk009-v1-r1`; consume IDK-204's approved rubric registry and exact canonical-topic mappings rather than accepting caller-authored or fixture content as authoritative.
   - `/app/practice` route: selected question/scenario, draft answer, on-request hint, Submit, dimension feedback, facts/trade-offs, retry/repair, adaptive follow-up.
   - `interview_runs` (mode `Practice`) and `interview_turns` (question/answer/hint/follow-up kinds) persistence; `interview_turn_results` visible only after Submit.
   - `POST /interview-runs`; `GET /interview-runs/{id}`; `POST /interview-runs/{id}/answers`; `POST /interview-runs/{id}/hints` — hint turn appended only on explicit request, never auto-shown.
   - Submit is the approval boundary: it creates an immutable attempt/evidence candidate and enqueues an interactive-lane evaluation job; feedback is not shown before that job's terminal result commits.
   - Cancel-in-flight-evaluation control that preserves the just-submitted attempt turn (attempt row is never deleted or replaced by a cancel).
   - Adaptive follow-up turns that target named assumptions or evidence gaps from the evaluation result, not generic re-asks.
+  - The approved `senior-zero-downtime-schema-practice-v1` static feedback limitation communicates IDK-008's semantic clauses: no database connection; no statement/query-plan/migration/concurrency execution; and no proof of runtime, persistence, performance, locking, or production behavior.
 - Out of scope:
   - The evaluator's internal rubric computation and dispute/re-evaluation mechanics (owned by IDK-204's evidence_evaluation domain; this ticket only consumes its contract).
   - Live CLI-provider execution (IDK-403) and the durable two-lane worker's crash/restart guarantees (IDK-401); Practice is built and tested against the interview/evaluation domain contract and a fake evaluator per NFR-09, then connected to the real job/provider pipeline by IDK-404.
@@ -1329,14 +1348,14 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
   - Cancelling an `evaluating` run leaves the submitted attempt row intact and queryable.
   - Feedback UI renders facts and trade-offs as separately labeled groups sourced from distinct `EvaluationResult` fields.
 - Minimum required tests:
-  - Automated: Domain/state-machine test (interview module, lowest useful level) driving `ready → answering → (hint) → submitted → evaluating → feedback-ready`, asserting hint-before-request is impossible, feedback-before-Submit is impossible, a second submit appends rather than overwrites, and cancelling `evaluating` preserves the attempt row. This is the primary Practice-timing test for the codebase; no other ticket duplicates it.
+  - Automated: Domain/state-machine test (interview module, lowest useful level) loading the exact three approved Practice records and driving `ready → answering → (hint) → submitted → evaluating → feedback-ready`, asserting exact role/topic/capability/rubric mapping, hint-before-request is impossible, feedback-before-Submit is impossible, a second submit appends rather than overwrites, cancelling `evaluating` preserves the attempt row, and the approved RDB Practice record carries every IDK-008 static-limitation clause. This is the primary Practice-timing test for the codebase; no other ticket duplicates it.
   - Manual: Reviewer confirms adaptive follow-up wording names a specific assumption or evidence gap rather than a generic prompt (QPR-01 follow-up quality, part of G9 content review).
   - Existing coverage reused: `tests/e2e/selected-app.spec.ts`'s "Practice reveals a requested hint, then feedback, repair, and append-only history" test is REPLACED — its localStorage-state assertions (`learningState(page)` reads of `lattice.learning.state.v1`) are superseded by assertions against `GET /interview-runs/{id}` once Practice is API-backed; the interaction ordering it exercises (hint → submit → feedback → repair → second attempt) remains the intended E2E shape for the successor test.
 - Failure and recovery:
   - Evaluation job failure surfaces `failed-recoverable` with a retry action that resumes from the existing attempt (no re-submission required); the attempt itself is never lost.
   - A dropped connection during `evaluating` reconciles via `GET /interview-runs/{id}` on reload; no client-only state is authoritative.
 - Removal/replacement: The localStorage-persisted `practice` slice (`questionIndex`, `draft`, `hintRequested`, `mode`, `attempts`) and its dispatch actions (`SET_PRACTICE_DRAFT`, `REQUEST_HINT`, `SUBMIT_PRACTICE`, `START_REPAIR`, `CONTINUE_PRACTICE`) in `src/shared/state.tsx`, the deterministic `practiceFeedback()` fixture scorer, and the bundled `PRACTICE_QUESTIONS` fixture bank in `src/shared/model.ts` are removed and replaced by the `interview_runs`/`interview_turns`/`interview_turn_results` contract above.
-- Approval gate: Blocked by IDK-009 (representative assessment scenarios and derived-state rules) — Practice questions, rubric dimensions, and the facts/trade-offs classification require the approved scenario/rubric set before this ticket's acceptance criteria can be verified against real content; the state-machine test above is written against the domain contract and can be authored ahead of approval, but no production Practice content ships until IDK-009 resolves.
+- Approval gate: Satisfied by `docs/decisions/IDK-009-assessment-and-derived-state.md`, decision version 1.0. Production Practice content must use the approved scenario/rubric versions and pass the decision artifact's section 11 activation evidence.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ### IDK-303 — Focused Mock: adaptive turns, exact safe-exit draft, terminal Complete
@@ -1348,8 +1367,9 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 - PRD traceability: QMK-01 (primary), EVAL-01 (contributing), EVAL-02 (contributing).
 - Appendix H decisions: D4.
 - Owning module: interview, jobs_events, frontend.
-- Dependencies: IDK-301, IDK-302, IDK-104.
+- Dependencies: IDK-009, IDK-301, IDK-302, IDK-104.
 - Scope:
+  - Load exactly the three approved Mock scenario records from IDK-009 content revision `idk009-v1-r1`; consume IDK-204's approved rubric registry and exact canonical-topic mappings rather than generating authoritative questions from arbitrary bundle text.
   - `/app/mock` route rendered without `GlobalHeader`/`CourseBand` at every viewport (focused shell, matching the existing `focusedMock` behavior in `src/selected/LearningApp.tsx`).
   - `interview_runs` (mode `Mock`) and `interview_turns` state machine: `ready → answering/follow-up → paused (Save & exit) → answering (resume) → answering → follow-up (submit turn, generate next turn) → completing (explicit Complete, transcript fixed, final evaluation enqueued) → completed | failed-recoverable`.
   - `POST /interview-runs` (mode=Mock); `POST /interview-runs/{id}/answers`; `POST /interview-runs/{id}/pause`; `POST /interview-runs/{id}/resume`; `POST /interview-runs/{id}/complete`.
@@ -1382,20 +1402,20 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
   - Complete on a blank draft is rejected; Complete on a valid draft transitions to `completing` exactly once even if the client double-submits the request (idempotency key deduping and terminal-state check both prevent a second transcript fix).
   - Cancelling a next-turn generation leaves the transcript's turn count and content identical to before the cancel.
 - Minimum required tests:
-  - Automated: Domain/property test (interview module) asserting byte-for-byte draft preservation across pause→resume (including a string with leading/trailing whitespace and embedded newlines), Complete's rejection of a blank/incomplete transcript, Complete's idempotency under a repeated call, next-turn-generation cancellation leaving the transcript unchanged, and a hint or interim-report request while the run is nonterminal returning `409 mock_feedback_withheld` with no state change. It also asserts, at the component level, that `/app/mock` renders no `GlobalHeader`/`CourseBand` while nonterminal. This is the primary Mock-timing/exact-draft test for the codebase; no other ticket duplicates it.
+  - Automated: Domain/property test (interview module) loading the exact three approved Mock records and asserting role/topic/capability/rubric mapping, byte-for-byte draft preservation across pause→resume (including a string with leading/trailing whitespace and embedded newlines), Complete's rejection of a blank/incomplete transcript, Complete's idempotency under a repeated call, next-turn-generation cancellation leaving the transcript unchanged, and a hint or interim-report request while the run is nonterminal returning `409 mock_feedback_withheld` with no state change. It also asserts, at the component level, that `/app/mock` renders no `GlobalHeader`/`CourseBand` while nonterminal. This is the primary Mock-timing/exact-draft test for the codebase; no other ticket duplicates it.
   - Manual: Reviewer confirms the active Mock screen at all four required viewports shows only status, current question, answer field, Save & exit, and Complete — nothing else (focused-shell UX review).
   - Existing coverage reused: `tests/e2e/selected-app.spec.ts`'s "Mock pause/resume preserves the exact draft and evaluation appears only after terminal completion" test is REPLACED for its state-machine portion (pause/resume exact-draft, Complete gating dialogs) — that interaction shape is retained as the E2E successor against the API-backed run, while its `reportKind`/fixture-evaluation assertions move to IDK-304's regression test.
 - Failure and recovery:
   - A next-turn generation failure surfaces `failed-recoverable` on the run with the transcript unchanged and a retry action; the learner is never shown a synthesized next question.
   - Final-evaluation enqueue failure after a valid Complete leaves the run in `completing` with `failed-recoverable` recovery per D4, not silently reverting to `answering` (the transcript is already fixed).
 - Removal/replacement: The localStorage-persisted `mock` slice (`status`, `draft`, `priorTurns`, `completedTurns`) and its dispatch actions (`SET_MOCK_DRAFT`, `SAFE_EXIT_MOCK`, `RESUME_MOCK`, `COMPLETE_MOCK`) in `src/shared/state.tsx`, and the bundled `MOCK_PRIOR_TURNS`/`MOCK_CURRENT_QUESTION` fixtures in `src/shared/model.ts`, are removed and replaced by the `interview_runs`/`interview_turns` contract above. The `reportKind` fixture-vs-transcript-only classification and `MOCK_FIXTURE_DRAFT` string-match gate are IDK-304's removal, not this ticket's.
-- Approval gate: None blocking this ticket's own mechanics (QMK-01 carries no G-gate in spec §10.2); production Mock question content is subject to the same G4/G9 review as Practice before release, tracked under IDK-302's and IDK-304's gates rather than duplicated here.
+- Approval gate: The Mock scenario/rubric decision is satisfied by IDK-009 decision version 1.0. The state-machine mechanics remain independently buildable, but authoritative Mock content requires IDK-204's exact approved topic mapping and the decision artifact's section 11 evidence; G4/G9 shipped-content review remains required before release.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ### IDK-304 — Terminal-only consolidated Reports and fixture-evaluation removal
 
 - Phase: 3 — MVP interview
-- Status: Blocked by IDK-009
+- Status: Ready
 - Objective: Deliver `/app/reports` as the learner-readable, conclusion-first consolidated view for terminal Mock (and Practice-linked) results, with rubric history and dispute/re-evaluation entry, and remove the prototype's exact-string-match fixture scoring so it survives only as a controlled regression test.
 - User-visible outcome: A learner sees a report only after explicitly completing Mock; the report leads with a plain-language conclusion and next action, then discloses assumptions, facts vs. trade-offs, rubric dimensions, ambiguity, transcript, and provenance; edited, blank, incomplete, or arbitrary transcripts never receive the exact-fixture evaluation and are instead shown as transcript-only or a real evaluator result.
 - PRD traceability: QMK-02 (primary), EVAL-01 (contributing), EVAL-02 (contributing), PRG-01 (contributing), CNT-04 (contributing).
@@ -1438,7 +1458,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
   - Evaluator failure on a completed run's final evaluation surfaces `failed-recoverable` on the report with a retry action; the fixed transcript is never altered by a failed or retried evaluation.
   - Ambiguity in the evaluation result is shown as `ambiguity-unresolved` and explicitly does not reduce any readiness/progress figure (EVAL-02, D6).
 - Removal/replacement: Removes the prototype's exact-string-match fixture scoring (`MOCK_FIXTURE_DRAFT` and `reportKind: 'fixture-evaluation'` in `src/shared/state.tsx` and `src/shared/model.ts`) and the `FIXTURE_REPORT` constant in `src/shared/model.ts` with its consumption in `Reports` (`src/selected/core/CorePages.tsx`); fixture evaluation survives only as the controlled regression test described above.
-- Approval gate: Blocked by IDK-009 — rubric dimensions, ambiguity handling, and the assessment content shown in a real (non-fixture) report require the approved assessment-scenario/derived-state rule set; the regression test and gating mechanics can be built ahead of approval, but no production report content ships until IDK-009 resolves.
+- Approval gate: Satisfied by `docs/decisions/IDK-009-assessment-and-derived-state.md`, decision version 1.0. A real report must retain the approved rubric, ambiguity, version, and non-prediction disclosures and pass the decision artifact's section 11 activation evidence.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ## 4. MVP AI and hands-on
@@ -1460,7 +1480,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - One worker process with two reserved dispatch loops (interactive: tutor/Practice/Mock turns and explicit regenerations; background: bulk generation, import parsing, indexing, review scheduling); FIFO within each lane; background work can never occupy the interactive slot.
   - Queue-level dedupe/single-flight enforced at enqueue via the active dedupe-key constraint.
   - A configured, visible pending-job cap and background age-promotion after a configured interval, both implemented as server configuration values with the numeric value left TBD pending IDK-010 — the mechanism (cap enforcement returning `429`, promotion changing scheduling priority) ships now; the specific numbers are supplied later without a code change beyond configuration.
-  - Startup reconciliation: `queued` stays `queued`; `running` has its recorded process group and temp path reconciled then becomes `failed`+`retryable`; `cancel-requested` becomes `cancelled` with no retry offer.
+  - Startup reconciliation: `queued` stays `queued`; an ordinary provider/background `running` attempt has its recorded process group and temp path reconciled then becomes `failed`+`retryable`; `cancel-requested` becomes `cancelled` with no retry offer. Runner jobs first invoke IDK-406's registered cgroup/cleanup-intent lifecycle hook and are never reconciled through this generic process-group path.
   - Result artifact, terminal job state, and terminal event committed in one transaction (`job_results` unique per job, inserted atomically with the terminal `jobs.state` write and the `job_events` row).
   - Retry: short-circuits to `succeeded` when a committed result already exists under the job's dedupe key; typed per job kind — idempotent rerun (indexing/import), cache-checked rerun (generation), resume-with-substitution (interview turns), user-confirmed fresh run (runner).
   - Cancellation races resolved per spec §8.2: terminal result committed first wins; cancellation committed first discards/quarantines a late result; repeated cancel returns the authoritative state idempotently.
@@ -1657,25 +1677,29 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-405 — Hands-on lifecycle and static/runtime separation
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Blocked by IDK-004, IDK-009
+- Status: Ready
 - Objective: Implement the hands-on lifecycle `scenario → artifact/code/design/decision → visible rubric review → adaptive cross-question → revision → submitted evidence` with every stage and revision linked, static review always labelled static with a required non-empty limitation, and the UI visually distinguishing static analysis, compilation, and test execution, where only Submit appends evidence.
 - User-visible outcome: A learner works a scenario in Topic Studio, submits an artifact for review, sees a rubric-based static review that is unmistakably labelled as static (never claiming runtime behavior), receives an adaptive cross-question, revises, and only an explicit Submit creates evidence; Run remains exploratory and never appends evidence on its own.
 - PRD traceability: HND-01 (primary), HND-02 (primary), HND-03 (co-primary with IDK-503, which owns the scenario-realism review that HND-03's PRD acceptance actually names), EVAL-01 (contributing).
 - Appendix H decisions: D6 (contributing — submitted hands-on evidence feeds derived learner state).
 - Owning module: learning_content, evidence_evaluation, frontend.
-- Dependencies: IDK-004, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404.
+- Dependencies: IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404.
 - Scope:
   - `hands_on_work`, `hands_on_artifacts` (immutable revisions), `hands_on_reviews` (review mode, required limitation label) per spec §4.6.
+  - Load exactly the three approved initial and three paired delayed hands-on scenario records from IDK-009 content revision `idk009-v1-r1`; consume IDK-204's approved rubric registry and exact canonical-topic mappings.
+  - For each scenario revision that permits runner `test`, approve one versioned server-owned Java driver source/hash/reserved path/FQCN binding under IDK-005's `runner-test-driver-manifest-v1`, plus curated passing and failing artifacts proving the intended assertions; scenarios without that reviewed binding permit compile/static review only and never infer a test entry point.
   - Scenario presentation carrying role/level metadata and credible production constraints (the approved scenario set itself is IDK-009's; this ticket consumes it).
+  - Scenario role-context help consumes IDK-004 `role-competency-copy-v1`; the six approved IDK-009 records map exactly to `Mid-level`/`Senior`/`Staff` without changing IDK-009 evaluator calibration.
   - Artifact submission (`Submit`) creates an immutable `hands_on_artifacts` revision and, only at Submit, an evidence candidate — `Run`/preview actions never do.
   - Static review path: a schema-validated static review result (via IDK-403/IDK-404's provider wiring) that always carries a non-empty, review-specific limitation string — never a single hardcoded global disclaimer reused verbatim across every review.
+  - For an IDK-001/002-approved RDB artifact, that review-specific limitation must communicate all IDK-008 clauses: no database connection; no statement/query-plan/migration/concurrency execution; and no proof of runtime, persistence, performance, locking, or production behavior.
   - Adaptive cross-question generated from the specific submitted artifact and its review result, targeting a named gap or assumption (mirrors QPR-01's follow-up pattern but for hands-on work).
   - Revision: a new `hands_on_artifacts` row linked to the same `hands_on_work` aggregate; every stage (scenario, each artifact revision, each review, the cross-question, and the final evidence) is queryable as one linked chain.
   - UI treatment that visually distinguishes "static analysis" results from "compilation" and "test execution" results wherever a runner-produced result (IDK-406) appears alongside this ticket's static review, so a learner can never mistake one for the other.
 - Out of scope:
   - The runner subprocess itself, its confirmation flow, limits, and cleanup (IDK-406) — this ticket only defines how its output is visually and semantically separated from static review, not how it runs.
   - The rubric/assessment domain mechanics themselves (owned by IDK-204); this ticket is a consumer.
-  - Scenario content authoring (IDK-009's approved scenario set) and role-taxonomy wording (IDK-004).
+  - Scenario content authoring (IDK-009's approved scenario set) and role-taxonomy wording (IDK-004); both are approved inputs rather than authored here.
 - Data and invariants:
   - `hands_on_artifacts`: immutable revisions, unique `(work_id, revision_number)`; no UPDATE/DELETE path exists on a prior revision.
   - `hands_on_reviews`: `review_mode` enumerated (at minimum `static`); a static-mode row's `required_limitation_label` column is `NOT NULL` and non-empty at the database constraint level, not just at the UI layer — a static review can never be persisted without one.
@@ -1695,82 +1719,99 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - Clicking Run at no point creates a `hands_on_artifacts`-linked evidence row; only Submit does.
   - A full lifecycle (scenario → artifact → static review → cross-question → revision → submitted evidence) is reconstructable as one linked chain from a single `hands_on_work` ID.
   - The rendered page never places a static-review result and a runner-produced (compile/test) result in the same visual container without a clear label distinguishing them.
+  - Each test-enabled scenario revision has exactly one approved driver binding with complete curated pass/fail sources and expected result/reason; non-test-enabled revisions have none, and a caller cannot supply or override one. IDK-406 executes these pairs before activation.
 - Minimum required tests:
-  - Automated: Domain/component test — a static review is never persisted without a non-empty limitation label (constraint-level test), Run never appends evidence while Submit does (mirrors the existing "Run is exploratory, Submit alone appends evidence" invariant now asserted against the real API instead of the local reducer), and the UI's static-vs-runtime result regions are structurally distinct (component test asserting separate labelled containers). This is the primary static/runtime-separation test for the codebase; no other ticket duplicates it.
-  - Manual: Reviewer confirms, across the mid/senior/staff scenario samples IDK-009 approves, that no static review's limitation label is a copy-pasted generic string reused unchanged across unrelated scenarios (part of G4/G9 content review).
+  - Automated: Domain/component test — the exact six approved hands-on records load with their role/topic/capability/rubric/pair mappings, exact IDK-004 learner-facing metadata, and an exact zero-or-one reviewed driver binding per revision with complete pass/fail sources and expected reason; static review requires a limitation, and any approved RDB artifact limitation contains every IDK-008 semantic clause; exploratory Run appends neither artifact nor evidence while Submit does; and static/runtime regions are distinct. IDK-406 owns compilation/execution, manifest enforcement, injection, argv, and Java-only runner schema—not review wording.
+  - Manual: Reviewer approves each test driver's assertions and curated pass/fail expectations, then confirms across the IDK-009 samples that no static-review limitation label is a generic string reused across unrelated scenarios (part of G4/G9 review).
   - Existing coverage reused: `tests/e2e/selected-app.spec.ts`'s "Topic Studio Run is exploratory and Submit alone appends evidence" test is REPLACED — its `learningState(page)`/localStorage evidence-length assertions are superseded by assertions against `GET /goals/{goalId}/evidence` once Submit is API-backed; the Run-vs-Submit ordering it exercises remains the intended E2E shape for the successor test.
 - Failure and recovery:
   - A failed static-review evaluation job surfaces `failed-recoverable` on the submitted artifact without discarding the artifact revision itself; retry re-runs review against the same immutable revision.
   - If the runner is disabled or unapproved (IDK-406's posture), the static-review workflow described here remains fully usable — HND-02/RUN-03's "static workflow remains usable" guarantee is honored by this ticket having no runtime dependency on the runner.
 - Removal/replacement: Removes the deterministic regex-based `evaluateCode()` "static checks" scorer, the hardcoded `SIMULATION_LIMITATION` string, and the `RUN_CHECKS`/`SUBMIT_CODE` reducer actions' evidence-writing behavior in `src/shared/state.tsx` and `src/shared/model.ts`, replacing them with the schema-validated static-review pipeline and per-review limitation labels described above. (The `Run` button's own execution semantics, if backed by the real runner, are IDK-406's replacement, not this ticket's.)
-- Approval gate: Blocked by IDK-004 (role taxonomy — scenario role/level metadata) and IDK-009 (approved scenario set and derived-state/rubric rules) — HND-03's credible-production-constraint acceptance cannot be verified without both; the lifecycle mechanism, immutability, and static-labelling invariants are fully specified and testable ahead of either decision.
+- Approval gate: Decision inputs are satisfied by IDK-004 decision version 1.0 and IDK-009 decision version 1.0. Implementation plus shipped scenario-realism, shared-role-copy, and limitation-label review evidence remain required before production activation or release.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ### IDK-406 — Controlled Java runner: confirmation, no-shell execution, limits, and cleanup
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Blocked by IDK-005, IDK-007
-- Objective: Implement the confirmed, no-shell, limited, cancellable Java compile/test runner as a controlled local subprocess capability behind the runner port, with runtime/toolchain capability detection, Python/relational-connector capability appearing only after configuration, Go excluded as Later, and the feature fully disabled while runner posture is unapproved.
-- User-visible outcome: A learner explicitly confirms a Run, sees declared inputs and their hashes, watches structured ordered output stream in, can cancel (targeting the process group with a recorded cleanup outcome), and sees clear language that this is controlled subprocess execution — not a sandbox, hostile-code isolation, production, or AWS proof; if the runner isn't enabled, Run stays absent/disabled while Submit's static review (IDK-405) keeps working.
+- Status: Ready — Java-only schema/contract narrowing landed early (Alembic revision `c5b1e70a94d2`) because IDK-501 verifies it; the runner's execution machinery (broker, cgroups, namespaces, syscall filter, capability snapshots, activation evidence, test-driver manifests) is untouched and the runner remains fail-closed. Landed portion: `language IN ('java')` checks on `runner_confirmations`/`runner_records` with the approved transactional relational-placeholder disposal, `RunnerLanguage` reduced to `JAVA`, `Settings.runner_relational_connector` and `Settings.runner_python_command` removed, the configured-string relational detector and the Python capability branch removed, and the relational/Python OpenAPI, generated-client, and UI surfaces removed.
+- Objective: Implement the confirmed, no-shell, limited, cancellable Java 21 direct compile/test runner on the exact approved IDK-005/007 policies, with deterministic platform/paired-JDK detection; Python, build-tool, and database execution absent/unsupported under approved IDK-005/008; Go Later; and effective enablement fail-closed until exact-tuple evidence passes.
+- User-visible outcome: A learner explicitly confirms a Run, sees declared inputs and their hashes, watches structured ordered output stream in, can cancel the complete cgroup-owned process tree with a recorded cleanup outcome, and sees clear language that this is controlled subprocess execution — not a sandbox, hostile-code isolation, production, or AWS proof; if the runner isn't enabled, Run stays absent/disabled while Submit's static review (IDK-405) keeps working.
 - PRD traceability: RUN-01 (primary), RUN-02 (primary), RUN-03 (primary), NFR-10 (primary), HND-02 (contributing — static/runtime visual separation the runner's output must support).
 - Appendix H decisions: D8 (contributing — runner jobs are user-confirmed-fresh-run typed retries within the two-lane job system).
 - Owning module: runner.
-- Dependencies: IDK-005, IDK-007, IDK-401, IDK-405.
+- Dependencies: IDK-005, IDK-007, IDK-008, IDK-401, IDK-405.
 - Scope:
-  - `RunnerPort`/`ProcessPort`/`TempWorkspacePort` implementations for Java compile/test as the MVP runtime capability.
-  - `runner_records`, `runner_inputs`, `runner_output_chunks` tables per spec §4.7.
+  - `RunnerPort`/`ProcessPort`/`TempWorkspacePort` implementations for `runner-toolchain-v1` Java compile/test as the MVP runtime capability: Ubuntu 24.04 LTS host/conventional-VM rows on `x86_64`/`arm64`, complete stable JDK `21.x`, and direct `javac`/`java` only.
+  - Replace the ad-hoc schema with immutable `runner_capability_snapshots`, `runner_activation_evidence`, and `runner_test_driver_manifests`, plus exact snapshot/evidence/driver FKs from confirmations/records and the existing declared-input/output storage.
   - `GET /runner/capabilities`; `POST /runner/confirmations`; `POST /runner-runs`; `GET /runner-runs/{id}`; `POST /runner-runs/{id}/cancel`.
   - Explicit confirmation and declared input hashes required per run (`runner_inputs`: logical path, content ref/hash, declared type; no undeclared input may execute).
   - No shell; direct argv only (shared low-level subprocess utility with the provider per D7, but a separate environment/limits policy object).
-  - Per-run temporary workspace; separate minimal environment; explicitly no AWS credentials injected.
-  - Runtime/toolchain detection reporting supported / missing / incompatible without assuming availability.
-  - Configurable wall-time, process, memory/CPU (where enforceable), file/output, and temp-storage limits — the enforcement mechanism ships now; numeric values are left TBD pending IDK-007.
-  - Structured, ordered, truncated output (`runner_output_chunks`: stream, sequence, content ref, truncation flag).
-  - Cancellation targets the process group, then proceeds to cleanup with a recorded `cleanup-complete`/`cleanup-failed` outcome.
+  - Per-run temporary workspace; exact path/materialization grammar; empty classes/source-path directories; a fresh fixed environment excluding PATH, CLASSPATH, every Java option-injection variable, AWS credentials, and all other parent state.
+  - Configuration-led runtime/toolchain detection reporting `supported / missing / incompatible` from the exact OS/architecture/host-or-VM-attestation row, one absolute JDK home and `release` file, exact full-version/implementor/architecture agreement, both executable identities, and the fixed sentinel — never PATH presence or a compiler-only prefix probe.
+  - Direct compile uses the exact IDK-005 classpath/sourcepath/`--release 21 -proc:none -encoding UTF-8 -d` contract. Test uses an immutable server-owned `runner-test-driver-manifest-v1`, injects its reserved/hash-declared source, and launches its validated FQCN. IDK-405 owns approved scenario-to-driver content bindings; the caller never supplies or selects a driver.
+  - `runner-limits-v1` aggregate compile+test thresholds/denials: 10-second preparation; 30-second wall and 20-CPU-second observed termination thresholds with actual observation/final values recorded; two-CPU bandwidth; 1 GiB/no-swap tree memory; 128 tasks; 100/10 MiB learner input; 256 KiB driver; 1 MiB each/2 MiB aggregate output; 16 MiB file; 256 FDs; no core; authoritative 256 MiB/10,000-entry workspace denial/classification; one active/three queued; and two-second graceful TERM/empty-tree windows.
+  - One delegated parent cgroup-v2 subtree per run, with workspace-server and payload child cgroups for attribution but parent aggregate CPU/memory/pids/freeze/kill/empty proof; plus the root-owned `yuno-runner-broker-v1` service, immutable `runner-broker-service-v1` service unit (`KillMode=control-group`, one-second independent watchdog, bounded stop then hierarchy kill, `Restart=no`, nested run subtrees), and length-bounded sealed-FD request protocol; immutable `runner-runtime-view-v1` and broker-owned `runner-workspace-fs-v1` with monotonic pre-`ENOSPC` denial events; verified drop of groups/UID/GID/capabilities; private user/PID/mount/network namespaces exposing only the exact read-only JDK/runtime closure and workspace filesystem; `pivot_root`/old-root detachment; `no_new_privs`; only `/dev/null` stdin and stdout/stderr surviving exec; fixed RLIMIT defense-in-depth; and the architecture-specific immutable `runner-syscall-filter-v1` deny-by-default table. Missing/unverifiable control keeps effective enablement false.
+  - Structured, totally ordered, truncated output (`runner_output_chunks`: one runner-global sequence, stream, content ref, truncation flag).
+  - Cancellation/limit/disable/shutdown repeatedly enumerates the verified cgroup and sends pidfd SIGTERM to every member, including `setsid` descendants; after the two-second grace it uses `cgroup.kill` plus pidfd SIGKILL fallback, proves `populated=0`, then performs symlink-safe workspace/cgroup removal with recorded cleanup outcome.
   - UI/domain distinguishes compile vs. test vs. static phases explicitly (`RunnerResult` carries separate compile/test/static phases).
   - An explicit "not a sandbox / not hostile-code isolation / not production or AWS proof" statement surfaced wherever a run result appears.
-  - Python and relational-connector capability surfaced only when `GET /runner/capabilities` reports them configured; never advertised as available by default.
+  - Learner Python, Maven, Gradle, Ant, wrappers, external dependencies, and every other unapproved build mode are absent/rejected with the exact IDK-005 diagnostics; ambient installation never creates a capability.
+  - Relational/database execution is absent under `database-exercise-posture-v1`. Capability/confirmation/run contracts contain no relational value or compatibility path; the exact retired `POST /runner/confirmations` `"language":"relational"` signature receives the standard `422` Java-only schema response before route/UoW and creates no persistence, probe, job, broker, process, socket, artifact mutation, or evidence action. Subject to content approval, RDB static review remains available under IDK-405/302's review-specific no-connection/no-runtime-proof clauses.
   - Go absent entirely from the capability set and code path (RUN-04 is Later; no inactive UI control anticipates it).
   - If runner posture is not approved/enabled, `/app/topic-studio`'s Run affordance is absent or disabled while Submit (IDK-405's static review) remains fully usable.
+  - Settings desired/effective enablement and `runner-risk-ack-v1`; every run separately uses single-use five-minute `runner-run-confirmation-v1`. Policy/evidence change, disable, or safety suspension revokes enablement with no automatic recovery.
   - Retry of a failed/cancelled runner job requires a fresh user confirmation and fresh declared-input hashes (D4's user-confirmed-fresh-run typing) — never a silent re-run of stale inputs.
 - Out of scope:
   - Static review content/rubric and the Submit/evidence pipeline (IDK-405).
   - The CLI provider's own environment allowlist and timers (IDK-403) — the runner keeps a separate, distinct minimal allowlist per D7.
-  - Managing a local database instance for the relational connector (IDK-008's decision); this ticket only reports connector capability state, never provisions one.
+  - Every learner-supplied or product-managed database connector, database endpoint/credential, driver/parser, server/instance lifecycle, database process/socket, and Java network exception. IDK-008 v1 approves absence, not a connector seam.
 - Data and invariants:
-  - `runner_records`: job, owner/goal/artifact, confirmation, language/toolchain, argv JSON, environment-policy version, limits-config version, PID/PGID/temp path, state/outcome/cleanup; Java is MVP; Python/DB fields populate only when configured; Go is not a valid enum member anywhere.
+  - `runner_capability_snapshots`: immutable policy/build-mode, state/diagnostic, safe platform/tool identity, probe/expiry, environment/limits versions. `runner_activation_evidence`: immutable unique exact tuple plus compile/test/limit/cancel/cleanup evidence and approval. `runner_test_driver_manifests`: immutable approved scenario revision, reserved source/hash, FQCN, and review basis.
+  - `runner_enablements`: desired/effective state, current risk acknowledgement plus bound policy/evidence revisions, optimistic revision, transition timestamps/reason. `runner_limit_snapshots`: immutable exact v1 values. `runner_safety_suspensions`: cleanup trigger/classification and reviewed reset basis. API-private `runner_cleanup_intents`: safe cgroup/workspace identities, retry/escalation schedule, separate empty-tree/workspace/cgroup outcomes, safe diagnostic, suspension and reset references. Immutable `runner_runtime_view_manifests`, `runner_workspace_fs_manifests`, and `runner_syscall_filter_manifests` record mounted-object identity, filesystem implementation/event contract, and architecture-specific syscall action table/hash referenced by activation evidence.
+  - `runner_records`: job, owner/goal/artifact revision, confirmation, capability-snapshot/activation-evidence/test-driver references, fixed Java/build-mode identity, argv JSON, environment/limits versions, PID/PGID/temp path, state/outcome/cleanup. Java is the only language; Python, relational/database, and Go are removed from enums/checks/OpenAPI.
   - `runner_inputs`: unique per runner/logical-path; no run executes against an input that isn't a declared, hashed row here.
-  - `runner_output_chunks`: unique `(runner, stream, sequence)`; the truncation flag is set whenever a configured output/size limit is hit — output is never silently dropped without being marked truncated.
-  - No AWS credential, secret, or connection string is ever present in the runner's constructed environment, verified by an explicit negative test rather than documentation alone.
+  - `runner_output_chunks`: unique `(runner, sequence)` with `stream` as payload, giving one total capture order. The truncation flag is set only for stdout/stderr capture truncation; filesystem/file/FD denial does not invent output truncation.
+  - No AWS credential, secret, connection string, broker/control descriptor, host mount, or setup privilege is ever present in the learner process environment/view, verified by explicit negative/native tests rather than documentation alone.
+  - `cleanup-complete` requires an empty/removed cgroup and absent workspace. Unverifiable identity/tree/reference or failed removal persists cleanup intent plus safety suspension, cancels runner work, and blocks execution until reviewed reset.
 - API/domain/event contracts:
-  - `GET /runner/capabilities` → per-language `supported/missing/incompatible`; never defaults to "supported" when undetected.
-  - `POST /runner/confirmations` → records confirmation plus declared input hashes; required before `POST /runner-runs` accepts a run referencing them.
-  - `POST /runner-runs` → `202 JobRef` (runner-lane job, D8's "user-confirmed fresh run" retry typing); `GET /runner-runs/{id}` for status; `POST .../cancel` targets the process group, transitioning toward the cleanup states.
+  - `GET /runner/capabilities` → Java `direct-jdk-v1` `supported/missing/incompatible` plus separate top-level `enabled`, fixed disabled diagnostic/message, policy/environment/limits versions, and safe normalized platform/JDK fields. Free-form `detail`, raw paths/output/hashes/evidence references, and Python are absent.
+  - `GET /runner/enablement`; version-checked `POST /runner/enablement` with `accepted=true`/`runner-risk-ack-v1`; idempotent `DELETE /runner/enablement` durably disables/cancels without waiting for cleanup. Safety recovery/reset has no HTTP endpoint: the offline `yuno.runner_admin` command accepts an existing intent ID but no paths/PIDs, holds the runner-admin lease, exposes fixed safe classifications, and resets only after verified reconciliation plus recorded local-operator review.
+  - `POST /runner/confirmations` → accepts goal/work/scenario revision, optional submitted artifact revision, operation, declared learner inputs/hashes, and acknowledgement only. An exploratory draft is snapshotted in confirmation inputs without creating an artifact/evidence; a supplied immutable artifact must match. Server resolves Java/build mode/driver and records snapshot/evidence/driver before a run.
+  - `POST /runner-runs` → `202 JobRef` (runner-lane job, D8's "user-confirmed fresh run" retry typing); `GET /runner-runs/{id}` for status; `POST .../cancel` targets the complete verified cgroup tree, transitioning toward the cleanup states.
   - `RunnerSpec`/`RunnerResult` per spec §5.3 exactly: confirmation; language/capability; declared inputs and hashes; direct argv; working-directory policy; environment-policy and limits versions; compile/test/static phases; exit/signal/limit state; structured stdout/stderr refs and truncation; duration; cleanup state; explicit limitation.
 - UX routes and states:
   - `/app/topic-studio` Run region — `pending-confirmation, queued, preparing, running, cancel-requested, completed, failed, timed-out-or-limited, cancelled, cleanup-pending, cleanup-complete/cleanup-failed` (Appendix D runner states).
   - `/app/jobs` surfaces runner jobs identically to other job kinds (read-only from this ticket's perspective; IDK-401 owns the jobs view itself).
   - When runner is disabled/unapproved: the Run control is absent or explicitly disabled with a stated reason; no inactive placeholder control ships ahead of enablement.
+  - `/app/settings` renders IDK-007's exact enablement dialog; every Topic Studio Run renders exact files/driver/argv/limits plus an unchecked confirmation. Re-acknowledgement, capacity, limit, cancel, cleanup, reconciliation, and safety-suspension states use fixed copy.
 - Implementation notes:
-  - Runner and provider share the low-level "spawn argv, capture streams, kill process group" subprocess utility per D7, but instantiate distinct environment-allowlist and limits-policy objects — no shared mutable policy state between the `provider` and `runner` modules.
-  - Capability detection runs at request time (or a short-TTL cache), never assumed from install-time configuration alone, so a toolchain removed after startup is correctly reported missing.
+  - Runner and provider share only the low-level direct-argv spawn/stream-capture primitives per D7. The runner's cgroup/pidfd/namespaces/mount/syscall-filter/termination policy is a separate implementation and never falls back to the provider's process-group kill boundary.
+  - IDK-406 supplies a runner lifecycle hook registered with the durable dispatcher/composition root: startup runner reconciliation completes before runner-job admission, and shutdown first stops runner admission, cancels queued work, drains/kills the active cgroup, and persists cleanup before generic worker/database shutdown proceeds. Hook failure keeps the runner suspended while static application startup remains available; shutdown does not release runner ownership until cleanup state is durable.
+  - Capability GET may use IDK-005's bounded 60-second cache keyed by policy, platform/attestation, configuration revision/home fingerprint, and nullable two-tool identities with absent sentinels; settings changes invalidate atomically. Confirmation probes afresh; enqueue verifies the snapshot; the worker verifies executable identity and the sentinel immediately before learner execution. Every probe uses the fresh stripped environment; replacement/removal fails without learner execution.
+  - Replace threaded `subprocess` `preexec_fn` with the administrator-installed, root-owned broker and dedicated Linux launcher boundary: resolve immutable policy by run ID, validate sealed descriptors/manifests, create cgroup/namespaces/mount view, drop every setup privilege/control FD, then use descriptor-bound execution without path re-resolution. Do not keep the obsolete threaded-spawn path as a fallback.
+  - Remove `RLIMIT_NPROC`/`RLIMIT_AS`/`RLIMIT_CPU`, direct-child `wait4` accounting, process-group-only cleanup, polling-only storage enforcement, inherited PATH, and one-shot `rmtree`; replace them with IDK-007's broker/cgroup/pidfd/namespaces/quota/syscall-filter/reconciliation policy. RLIMIT file/FD/core remains defense-in-depth only and handled file/FD denial is not misreported as a terminal limit.
 - Acceptance criteria:
   - A run cannot start without a prior `POST /runner/confirmations` referencing the exact declared input hashes later used at `POST /runner-runs`.
   - No run's constructed environment contains an AWS credential variable, verified by an explicit fake-`ProcessPort` assertion.
-  - Cancelling a running job kills the full process group (including a spawned child in a fake-process test) and always reaches `cleanup-complete` or `cleanup-failed` — cleanup is never left unresolved.
+  - Cancelling a running job terminates every verified cgroup member, including children that fork and call `setsid`, proves `populated=0`, and always reaches `cleanup-complete` or durable `cleanup-failed`/safety suspension — cleanup is never left unrecorded.
   - A simulated limit breach ends the run and returns a structured `timed-out-or-limited` result rather than hanging or silently truncating without the truncation flag.
   - With the runner disabled, `/app/topic-studio`'s Submit/static-review workflow (IDK-405) completes successfully with no Run-dependent code path invoked.
   - Retrying a failed/cancelled runner job is rejected without a fresh confirmation and fresh input hashes.
+  - Java compatibility reports `supported` only after the exact probes pass; top-level `enabled` stays false unless the exact platform/JDK/executable tuple has approved compile/test, limit, cancel/process-tree, and cleanup evidence and IDK-007's complete posture passes.
+  - Maven/Gradle/wrapper/Python requests and a scenario without an approved test-driver identity are rejected before confirmation; no learner process starts. The exact retired `POST /runner/confirmations` `"language":"relational"` signature fails ordinary Java-only schema validation before route/UoW and creates zero socket/process/record/artifact-mutation/evidence effects.
+  - Running an unsubmitted editor draft creates only confirmation/run/input/output records and zero `hands_on_artifacts` or evidence rows.
+  - Manual disable durably stops admission and cancels/drains queued/live work. Startup reconciliation completes before enablement; shutdown drains before worker/database stop. Cleanup failure suspends immediately and remains visible/retried.
 - Minimum required tests:
-  - Automated: Runner threat-model test (domain/integration, per spec §10.1) — no shell (argv-only, verified via fake `ProcessPort`), declared-input hash enforcement (an undeclared input is rejected), missing-toolchain capability report, a timeout/limit breach ending the run with a structured result, cancellation reaching the process group then a recorded cleanup outcome, and compile/test/static phase labels remaining distinct in the result. This is the primary runner confirmation/no-shell/cancel/limits/cleanup test for the codebase; no other ticket duplicates it.
-  - Manual: Security/engineering reviewer inspects the runner's environment-construction code path and confirms no AWS credential or unrelated host secret can reach the child process (contributes to G7 runner-posture review).
+  - Automated: **PRIMARY** runner matrix/threat-model suite (domain/integration, per spec §10.1) — every platform/JDK/enablement/acknowledgement/disabled/limit/message fixture; probe-only versus in-run sentinel classification; cache/state-nullability rules; immutable snapshots/evidence/drivers/broker/runtime/workspace/filter/cleanup manifests; curated drivers; path/environment/final-exec races; exact argv and unsupported modes; relational absence plus the exact retired `POST /runner/confirmations` `"language":"relational"` `422` validation precedence and no settings/schema/OpenAPI/UI/socket/process/record mutation; static-review independence (content wording stays IDK-405/302-owned); Settings enable/disable/revoke and five-minute confirmation; hard-controller/input/capture/workspace boundary/+1 cases; recorded wall/CPU observation/watchdog behavior; handled `ENOSPC` still triggers exact workspace classification while filesystem/event failure suspends; file/FD denial has no false classification; real cgroup CPU/memory/task events; root-broker protocol, privilege drop/control-FD absence, private namespace/sole-writable-workspace/runtime-view identity and syscall-filter bypass tests; descendants ignoring TERM/`setsid`; broker crash/SIGKILL/deadlock/control-loss independent hierarchy kill; cancellation/disable/shutdown/crash/lifecycle-hook races; empty-tree cleanup/retry/suspension/offline reset; and static fallback. No other ticket duplicates it.
+  - Manual: Security/engineering reviewer inspects the root-owned broker/service/delegation, descriptor-bound launcher, runtime/filter manifests, privilege drop, cgroup/pidfd/namespaces/mount/quota/syscall-filter/environment path, offline recovery reset, and exact disclosures; per-exact-tuple Ubuntu evidence covers every enforceable limit/denial, cgroup-tree cancellation, host-write/socket denial, crash reconciliation, and cleanup (contributes to G7 review).
   - Existing coverage reused: None — no prior test exercises a real Java subprocess runner; the prototype's `evaluateCode()` regex scorer (removed by IDK-405) never executed a process at all.
 - Failure and recovery:
-  - A missing/incompatible toolchain surfaces as a capability-report state, not a failed run — a run is never enqueued against a capability reported missing.
+  - A missing/incompatible toolchain surfaces as a capability-report state before enqueue. If identity changes after enqueue, the worker records a safe recoverable capability failure and executes no learner code.
   - A cleanup failure (e.g., orphaned process, unremovable temp directory) is recorded as `cleanup-failed` and surfaced as a residual-risk notice, per Appendix C's "OS failures may require manual recovery" residual statement — never silently hidden.
-  - If runner posture is later disabled after being enabled, in-flight runs are cancelled through the same process-group-then-cleanup path; no run is abandoned mid-flight.
-- Removal/replacement: None — no existing runner prototype exists to remove; the prototype's `evaluateCode()`/`RUN_CHECKS` fixture (which never executed anything) is IDK-405's removal, not this ticket's. This ticket's `Run` action is new functionality gated entirely behind runner enablement.
-- Approval gate: Blocked by IDK-005 (OS/toolchain support matrix) and IDK-007 (runner enablement and resource posture) — supported Java/toolchain versions, the enablement default, and all wall-time/process/memory/CPU/output/temp-storage limit values are undetermined until both resolve; the port, confirmation flow, cancellation, and cleanup mechanics are fully specified and testable against fake toolchains ahead of either decision. IDK-008 (database exercise posture) separately gates only the optional relational-connector capability surfaced by this ticket's capability endpoint, not the Java baseline.
+  - If runner posture is disabled after being enabled, in-flight runs are cancelled through the same cgroup-empty-then-cleanup path; no run is abandoned mid-flight.
+- Removal/replacement: Remove settings `runner_javac_command`, `runner_java_command`, `runner_java_version_prefix`, `runner_python_command`, and `runner_relational_connector`, replacing the Java settings with one absolute `runner_jdk_home` plus the approved host/VM attestation. Remove `RunnerLanguage.PYTHON` and `RunnerLanguage.RELATIONAL`, both DB-check/migration members and generated OpenAPI/types, raw-path `runner_records.toolchain`, the PATH/compiler-prefix detector and fixtures, threaded `preexec_fn`, first-source entry inference, the configured-string relational detector, and all relational UI/configuration compatibility paths. The Java-only schema revision transactionally deletes non-authoritative relational placeholder confirmation/runner rows, exclusively owned bodies/inputs/outputs, and linked `kind='runner'` job/result/attempt/event subgraphs whose logical references target the placeholders. It preserves unrelated jobs and all goals, artifacts, and evidence, proves that no surviving logical reference dangles, and never relabels or archives removed rows. IDK-405 separately removes `evaluateCode()`/`RUN_CHECKS`. No obsolete path remains as a fallback.
+- Approval gate: The ordered decision inputs are satisfied by IDK-005 decision version 1.0 (OS/toolchain/build mode), IDK-007 decision version 1.0 (enablement/limits/network/termination/cleanup), and IDK-008 decision version 1.0 (database execution absent). Implementation, exact-tuple native Java evidence, verified database absence/rejection, and shipped threat-model review remain mandatory before effective enablement or learner execution.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ### IDK-407 — Atomic canonical v2 publication and opt-in merge
@@ -1944,17 +1985,18 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-501 — Alembic representative upgrades and recoverable migration failure
 
 - Phase: 5 — MVP-hardening
-- Status: Ready
+- Status: Complete
 - Objective: Prove the versioned persistence layer — Alembic schema plus the independently versioned artifacts named in spec §4.8 — upgrades forward across representative existing local databases without data loss, and that a failed migration stops startup with a recoverable diagnostic rather than exposing a partially upgraded service.
 - User-visible outcome: After any product upgrade, a learner's existing goals, evidence, diagnostics, jobs, and search remain intact and usable; if an upgrade cannot complete, the app refuses to start with a clear, recoverable message instead of behaving unpredictably.
 - PRD traceability: NFR-11 (primary); CUR-03 (contributing — approval-last immutability is exercised across upgrades).
 - Appendix H decisions: D1 (approved canonical versions are never data-migrated in place — corrections publish a new version and use D9).
 - Owning module: audit_observability (migration diagnostics/startup gating); every module owns its own Alembic revisions per §3.3 and is exercised, not rewritten, by this ticket.
-- Dependencies: IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-407, IDK-408.
+- Dependencies: IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-406, IDK-407, IDK-408.
 - Scope:
   - Build representative fixture databases reflecting spec §4.8's exact list: two goals with cross-goal transferred evidence; a paused diagnostic session; approved canonical graph v1 and v2 with a goal pinned mid-transition; an overlay conflict plus an upstream-deleted topic carrying local state; imports; a generated artifact with provenance snapshot; an active job and a job requiring startup recovery reconciliation; a completed Mock transcript; a deliberately stale FTS5 projection.
   - Run the ordered Alembic upgrade path against each fixture and assert exact preservation of governed invariants (immutability, owner/goal scoping, append-only histories, cache keys, job dedupe keys) after upgrade.
   - Verify forward-only expand/backfill/contract discipline for every migration accumulated across Phases 1–4: no destructive drop before backfill; no in-place rewrite of an approved canonical version's rows.
+  - Exercise IDK-406's explicitly approved Java-only constraint revision: any obsolete non-authoritative `language='relational'` confirmation/runner placeholder rows, exclusively owned bodies/inputs/outputs, and linked `kind='runner'` job/result/attempt/event subgraphs whose logical request/run/result references target them are deleted transactionally before check rebuild. Unrelated jobs and all goals, artifacts, and evidence survive, and no surviving logical reference points to a removed ID. This is the sole approved obsolete-placeholder disposal, not a general data-loss exception or compatibility archive.
   - Implement/verify the single-expected-head startup gate for both the FastAPI server and the offline publish tool, in both below-head and above-head (newer DB than code) directions.
   - Implement/verify a deliberately failing migration stops startup, leaves no partially upgraded readable service, and surfaces a recoverable diagnostic naming the failed revision.
   - Confirm the thirteen artifacts in §4.8 (Alembic schema, canonical manifest, graph, content revision, overlay format, import parser, prompt template, provider contract, derived-state rules, generated artifacts, job payload/result, FTS projection, export format) each carry a distinct version identifier that does not conflate with the Alembic schema version.
@@ -1975,13 +2017,13 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
   - Build fixtures by scripting the same commands/APIs used by Phase 1–4 test suites, snapshotting at pre-upgrade revisions, rather than hand-authoring SQL.
   - Parametrize pytest over "each prior revision → head" plus one genuinely broken revision.
 - Acceptance criteria:
-  - Every §4.8 fixture upgrades to head with zero data loss and intact invariants.
+  - Every §4.8 fixture upgrades to head with zero governed learner/domain data loss and intact invariants; a dedicated obsolete-relational-placeholder fixture proves only the exact IDK-008/406 placeholder-owned runner/job/result/attempt/event subgraph is removed, all governed/unrelated data remains, and no typed request/run/result reference dangles.
   - Server and publisher both refuse a non-head database, below and above head.
   - The injected-failure fixture stops startup cleanly with an actionable diagnostic.
   - All thirteen independently versioned artifacts expose distinct, mechanically verifiable version identifiers.
   - A negative test confirms an approved canonical version cannot be data-migrated in place; only new-version-plus-D9 succeeds.
 - Minimum required tests:
-  - Automated: pytest integration suite running every §4.8 representative fixture through Alembic upgrade, plus one negative test for recoverable failure with no partial state.
+  - Automated: pytest integration suite running every §4.8 representative fixture through Alembic upgrade, including the bounded obsolete-relational-placeholder disposal assertion, plus one negative test for recoverable failure with no partial state.
   - Manual: None beyond the automated suite; the recoverable-diagnostic wording is reviewed as part of IDK-503, not duplicated here.
   - Existing coverage reused: None — the prototype has no server or database, so no prior migration coverage exists to reuse.
 - Failure and recovery:
@@ -1995,7 +2037,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-502 — Essential accessibility verification across SET-02 flows
 
 - Phase: 5 — MVP-hardening
-- Status: Ready
+- Status: Automated coverage complete; blocked on the manual screen-reader pass — every automated acceptance criterion is met (axe WCAG 2 A/AA across all 14 routes × 4 viewports and every reachable async state, keyboard-only walkthroughs of all six SET-02 flows, focus restoration on every production dialog/drawer, reduced-motion via both the OS media query and the app's own `so-reduced-motion` setting). The VoiceOver/NVDA review required by "Minimum required tests" and acceptance criterion 4 needs a human operator and an accessibility owner to record findings; it is not done.
 - Objective: Verify essential keyboard, assistive-technology, responsive, focus, and reduced-motion behavior across the exact SET-02-named flows — onboarding, roadmap, questions, feedback, notebook, settings — at the four required viewports, extending rather than rewriting the existing Playwright axe/keyboard/focus/reduced-motion/overflow coverage to the routes and async states that did not exist in the prototype.
 - User-visible outcome: A learner using only a keyboard or assistive technology can complete onboarding, edit the roadmap, use Interview Prep Questions, receive and act on feedback, use the notebook, and change Settings — including job/SSE, evaluating/feedback-ready, delete-confirmation, and merge-conflict states — without losing keyboard operability, focus context, or reduced-motion compliance.
 - PRD traceability: SET-02 (primary); NFR-01 (primary); contributing: ONB-01/02/03, CORE-05, LRN-01, QPR-01/02, NBK-01, SET-01.
@@ -2044,23 +2086,24 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-503 — Consolidated content-and-safety approval review
 
 - Phase: 5 — MVP-hardening
-- Status: Blocked by IDK-001, IDK-002, IDK-003, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010
-- Objective: Convene and record the manual approval review that closes MVP's content-and-safety gates — curriculum boundary, editorial approval criteria, source/license policy, rubric and scenario review, privacy/export/delete/logging inspection, and runner threat-model posture — checked against PRD Appendix C's six threat/limitation rows.
+- Status: Blocked by IDK-001, IDK-002, IDK-003, IDK-010
+- Objective: Convene and record the manual approval review that closes MVP's content-and-safety gates — curriculum boundary, editorial approval criteria, source/license policy, role taxonomy, rubric and scenario review, privacy/export/delete/logging inspection, and runner threat-model posture — checked against PRD Appendix C's six threat/limitation rows.
 - User-visible outcome: None directly; the outcome is a set of recorded, attributed approvals (or explicit blocks) gating whether affected features may ship.
 - PRD traceability: No new primary. Contributing: DEP-03 (editorial reversal-regression sign-off, implemented by IDK-201), HND-03 (role-appropriate scenario sign-off, implemented by IDK-405), CNT-04 (source/claim sign-off, implemented by IDK-207), RUN-03 (not-a-sandbox wording sign-off, implemented by IDK-406).
 - Appendix H decisions: D1 (editorial approval posture/attribution).
 - Owning module: canonical (approval-basis record of record); review also inspects provenance, evidence_evaluation, runner, settings_data outputs without owning those tables.
-- Dependencies: IDK-001, IDK-002, IDK-003, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409.
+- Dependencies: IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409.
 - Scope:
   - Review the curriculum boundary decided in IDK-001 against the shipped canonical graph's scope tags (CUR-01).
   - Review the editorial approval evidence/criteria decided in IDK-002 against actual `editorial_approvals.basis` records produced by IDK-102's offline publisher.
   - Review the source licensing/snapshot/withdrawal policy decided in IDK-003 against shipped `sources`/`source_snapshots` rows and their license/availability status.
-  - Review the representative assessment scenarios and rubric versions decided in IDK-009 against shipped rubric fixtures and role/level scenario fixtures (HND-03 scenario review; DEP-03 layer-reversal regression review).
+  - Review the learner-facing role copy decided in IDK-004 against onboarding, Settings, Interview Prep, and hands-on scenario metadata, including title-variation, no-beginner, non-prediction, and IDK-009 calibration alignment.
+  - Review the representative assessment scenarios and rubric versions decided in IDK-009 against shipped approved rubric manifests and role/level scenario records (HND-03 scenario review; DEP-03 layer-reversal regression review).
   - Inspect the combined size/retention and export/delete/logging lifecycle decided in IDK-010 against shipped export contents, delete-confirmation impact snapshots, log redaction rules, and job/artifact retention behavior.
-  - Review the runner enablement/resource posture (IDK-005 OS/toolchain matrix, IDK-007 runner posture, IDK-008 database exercise posture) row-by-row against PRD Appendix C's six threat/limitation rows, confirming each MVP control and residual statement is actually implemented and correctly labeled in-product (RUN-03).
+  - Review the runner enablement/resource posture (IDK-005 OS/toolchain matrix, IDK-007 runner posture, IDK-008 database-execution absence) row-by-row against PRD Appendix C's six threat/limitation rows, confirming each MVP control and residual statement is actually implemented and correctly labeled in-product (RUN-03). Verify relational capability/config/schema/UI is absent, retired runner signatures fail closed-schema validation before route/UoW, RDB static reviews carry all no-connection/no-runtime-proof clauses in review-specific wording, and no structured connector credential/endpoint field or database socket/process is introduced.
   - Produce one recorded approval artifact (or explicit blocking findings) per gate, attributed and dated, referencing the specific shipped fixture/record inspected.
 - Out of scope:
-  - Making the underlying decisions (IDK-001/002/003/005/007/008/009/010) — this ticket reviews their implementation, not their authorship.
+  - Making the underlying decisions (IDK-001/002/003/004/005/007/008/009/010) — this ticket reviews their implementation, not their authorship.
   - Any code change; findings requiring a fix are filed against the owning implementation ticket.
   - Performance measurement (IDK-504) and final scope audit (IDK-505) — separate tickets.
 - Data and invariants:
@@ -2072,7 +2115,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
   - Schedule only after dependent decisions resolve and their implementation tickets ship into a reviewable build.
   - Use Appendix C's six-row table verbatim as the runner-review checklist so no row is skipped.
 - Acceptance criteria:
-  - Each of the six named gates has a recorded, attributed, dated approval or an open blocking finding with an owner.
+  - Each of the seven named gates has a recorded, attributed, dated approval or an open blocking finding with an owner.
   - Every Appendix C row has an explicit reviewed disposition.
   - No gate is approved from a description of intended behavior rather than inspection of the shipped artifact.
 - Minimum required tests:
@@ -2083,7 +2126,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
   - A blocking finding halts release of the affected feature only, provided it is tracked with an owner and is not itself an unresolved safety defect.
   - A mismatch between a reviewed artifact and its decision record blocks release until the mismatch is resolved.
 - Removal/replacement: None.
-- Approval gate: This ticket is itself the approval gate for CUR-01/CUR-03, DEP-03, HND-03, CNT-04, and RUN-03 sign-off, feeding spec §11 Phase 5 exit and §12.3 blocking questions 1–3 and 7–9.
+- Approval gate: This ticket is itself the approval gate for CUR-01/CUR-03, CORE-02/INT-02, DEP-03, HND-03, CNT-04, and RUN-03 sign-off, feeding spec §11 Phase 5 exit and §12.3 blocking questions 1–4 and 7–9.
 - Estimate:
   - TBD; implementation team to estimate after approval.
 
@@ -2342,46 +2385,46 @@ Every dependency points backward to a decision ticket or a lower-numbered implem
 | IDK-001 | 0 | Ready | — |
 | IDK-002 | 0 | Ready | — |
 | IDK-003 | 0 | Ready | — |
-| IDK-004 | 0 | Ready | — |
-| IDK-005 | 0 | Ready | — |
+| IDK-004 | 0 | Approved | — |
+| IDK-005 | 0 | Approved | — |
 | IDK-006 | 0 | Approved | — |
-| IDK-007 | 0 | Ready | — |
-| IDK-008 | 0 | Ready | — |
-| IDK-009 | 0 | Ready | — |
+| IDK-007 | 0 | Approved | — |
+| IDK-008 | 0 | Approved | — |
+| IDK-009 | 0 | Approved | — |
 | IDK-010 | 0 | Ready | — |
 | IDK-011 | 0 | Ready | — |
 | IDK-101 | 1 | Ready | — |
 | IDK-102 | 1 | Ready | IDK-101 |
 | IDK-103 | 1 | Ready | IDK-101 |
-| IDK-104 | 1 | Ready | IDK-101, IDK-103 |
-| IDK-105 | 1 | Ready | IDK-101, IDK-102, IDK-103 |
+| IDK-104 | 1 | Ready | IDK-004, IDK-101, IDK-103 |
+| IDK-105 | 1 | Ready | IDK-004, IDK-101, IDK-102, IDK-103 |
 | IDK-106 | 1 | Ready | IDK-101, IDK-102 |
 | IDK-107 | 1 | Ready | IDK-101, IDK-102, IDK-103, IDK-104, IDK-105, IDK-106 |
 | IDK-108 | 1 | Ready | IDK-101, IDK-104 |
 | IDK-201 | 2 | Ready | IDK-101, IDK-102, IDK-103, IDK-106, IDK-107 |
 | IDK-202 | 2 | Ready | IDK-106 |
 | IDK-203 | 2 | Ready | IDK-101, IDK-102, IDK-105 |
-| IDK-204 | 2 | Ready | IDK-101, IDK-108 |
+| IDK-204 | 2 | Ready | IDK-101, IDK-102, IDK-108 |
 | IDK-205 | 2 | Ready | IDK-101, IDK-108, IDK-204 |
 | IDK-206 | 2 | Ready | IDK-201, IDK-204 |
 | IDK-207 | 2 | Ready | IDK-101, IDK-102, IDK-201, IDK-203 |
 | IDK-208 | 2 | Ready | IDK-108, IDK-204, IDK-205 |
-| IDK-301 | 3 | Ready | IDK-103, IDK-104, IDK-201, IDK-205 |
-| IDK-302 | 3 | Blocked by IDK-009 | IDK-009, IDK-204, IDK-205, IDK-301 |
-| IDK-303 | 3 | Ready | IDK-104, IDK-301, IDK-302 |
-| IDK-304 | 3 | Blocked by IDK-009 | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
+| IDK-301 | 3 | Ready | IDK-004, IDK-103, IDK-104, IDK-201, IDK-205 |
+| IDK-302 | 3 | Ready | IDK-008, IDK-009, IDK-204, IDK-205, IDK-301 |
+| IDK-303 | 3 | Ready | IDK-009, IDK-104, IDK-301, IDK-302 |
+| IDK-304 | 3 | Ready | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
 | IDK-401 | 4 | Ready | IDK-101 |
 | IDK-402 | 4 | Ready | IDK-101, IDK-401 |
 | IDK-403 | 4 | Complete | IDK-006, IDK-101, IDK-401 |
 | IDK-404 | 4 | Complete | IDK-207, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-403 |
-| IDK-405 | 4 | Blocked by IDK-004, IDK-009 | IDK-004, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
-| IDK-406 | 4 | Blocked by IDK-005, IDK-007 | IDK-005, IDK-007, IDK-401, IDK-405 |
+| IDK-405 | 4 | Ready | IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
+| IDK-406 | 4 | Ready (Java-only schema slice landed) | IDK-005, IDK-007, IDK-008, IDK-401, IDK-405 |
 | IDK-407 | 4 | Ready | IDK-101, IDK-102, IDK-106, IDK-201 |
 | IDK-408 | 4 | Ready | IDK-101, IDK-201, IDK-204, IDK-206 |
 | IDK-409 | 4 | Blocked by IDK-010 | IDK-010, IDK-101, IDK-104, IDK-403 |
-| IDK-501 | 5 | Ready | IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-407, IDK-408 |
-| IDK-502 | 5 | Ready | IDK-103, IDK-105, IDK-106, IDK-107, IDK-201, IDK-202, IDK-206, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-407, IDK-409 |
-| IDK-503 | 5 | Blocked by IDK-001, IDK-002, IDK-003, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010 | IDK-001, IDK-002, IDK-003, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
+| IDK-501 | 5 | Complete | IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-406, IDK-407, IDK-408 |
+| IDK-502 | 5 | Automated complete; manual screen-reader pass outstanding | IDK-103, IDK-105, IDK-106, IDK-107, IDK-201, IDK-202, IDK-206, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-407, IDK-409 |
+| IDK-503 | 5 | Blocked by IDK-001, IDK-002, IDK-003, IDK-010 | IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
 | IDK-504 | 5 | Ready | IDK-101, IDK-103, IDK-201, IDK-202, IDK-203, IDK-401, IDK-402, IDK-408 |
 | IDK-505 | 5 | Ready | IDK-101 – IDK-409 (all), IDK-501, IDK-502, IDK-503, IDK-504 |
 | IDK-601 | 6 | Later | IDK-005, IDK-007, IDK-102, IDK-406 — builds on MVP work; no MVP acceptance depends on it |
@@ -2530,15 +2573,9 @@ Nothing below has been answered, and no ticket's acceptance criteria assume an a
 | MVP curriculum spine; scenario-relevant DSA relations | IDK-001 | Production canonical v1 content (IDK-102); Phase 1/2 content exit |
 | Editorial approval evidence and review criteria | IDK-002 | Production approval records (IDK-102); pilot-readiness (IDK-505) |
 | Approved sources, licenses, snapshot/cache/withdrawal/replacement rules | IDK-003 | Real citations in IDK-207/IDK-201; content release |
-| Learner-facing mid/senior/staff competency descriptions | IDK-004 | Onboarding copy (IDK-104/IDK-105); scenario role metadata (IDK-405) |
-| Supported OS, Java/Python versions, build tools, unsupported configurations | IDK-005 | Runner capability claims (IDK-406) |
-| Runner enablement posture; wall-time/process/memory/CPU/output/temp-storage limits and cleanup posture | IDK-007 | Runner activation (IDK-406) |
-| Database exercise posture — learner-supplied connection only, or product-managed instance | IDK-008 | Optional relational-connector capability (IDK-406) |
-| Representative assessment scenarios, rubric versions, role-level breadth, and the derived-state rule version | IDK-009 | Production Practice/Mock/report content (IDK-302, IDK-304, IDK-405); authoritative rule version (IDK-205); review scheduling parameters (IDK-206) |
-| Size/retention limits (imports, artifacts, transcripts, generated content, runner output, job/event history, temp files), diagnostic session expiry, overlay-proposal pending cap, pending-job cap, background age-promotion interval, janitor retention, SSE replay retention/expiry/maximum replay window; export package format and version, transcript inclusion, delete recovery, backups, log retention and support-access posture | IDK-010 | IDK-409; configurable placeholders in IDK-105, IDK-202, IDK-401, IDK-402 |
+| Size/retention limits (imports, artifacts, transcripts, generated content, retained runner output, job/event history, resolved cleanup records), diagnostic session expiry, overlay-proposal pending cap, generic pending-job cap, background age-promotion interval, janitor retention, SSE replay retention/expiry/maximum replay window; export package format and version, transcript inclusion, delete recovery, backups, log retention and support-access posture | IDK-010 | IDK-409; configurable placeholders in IDK-105, IDK-202, IDK-401, IDK-402 |
 | External telemetry — whether permitted at all, and under what consent, disclosure, minimization and deletion rules | IDK-011 | IDK-604 only. MVP is local-only regardless of the outcome. |
 | Performance acceptance thresholds | Approver, after IDK-504 records measurements | Release sign-off only; IDK-504 publishes no pass/fail number |
-| Assessment dimension scoring representation | IDK-009 | IDK-204's dimension representation |
 
 ## Appendix 8 — Minimal-test inventory
 
@@ -2550,35 +2587,35 @@ One required automated test per implementation ticket by default; `None` where e
 | IDK-101 | Architecture import-boundary test; schema sweep for `owner_id`/`goal_id` on every table; owner-isolation + `audit_events` immutability repository test | — |
 | IDK-102 | **PRIMARY** publication approval gate: approval-record read-gate, approval-last atomicity, half-seed invisibility; graph-validation property test; publish rejected without a `designated_editorial_approver` grant | Editorial review of half-seed and immutability fixtures |
 | IDK-103 | `?mode=` submodes resolve without a new route, and `/app/mock` renders without the global shell — the two acceptance criteria existing coverage does not reach | — |
-| IDK-104 | Two-goal isolation repository test | — |
-| IDK-105 | Diagnostic pause/refresh/restart answer preservation and optional-step skip | — |
+| IDK-104 | Two-goal isolation plus exact heading/role copy, stable values, no beginner/default, explicit-confirm-before-persist, accessibility and invalid-value fail-closed contract | — |
+| IDK-105 | Diagnostic pause/refresh/restart preserves answers and explicit role/capability edits through confirmation; optional-step skip | — |
 | IDK-106 | **PRIMARY** deterministic roadmap / no silent mutation: projector purity property test including stable-ID lexicographic tie-break | — |
 | IDK-107 | **PRIMARY** atomic diagnostic confirmation: UoW rollback integration test | — |
 | IDK-108 | **PRIMARY** conservative transfer / delete / tombstones: transfer + atomic tombstone/downgrade/audit property test | — |
 | IDK-201 | Checkpoint seven-field + capability-ladder enum validation (LRN-03, DEP-02) and DEP-03 layer-reversal content regression | Editorial reversal-regression review |
 | IDK-202 | Overlay-proposal stale rejection, pending content-hash dedupe, and placeholder-cap rejection | — |
 | IDK-203 | **PRIMARY** import mapping: out-of-graph mapping rejection, normalized dedupe, imports-hash staleness trigger | — |
-| IDK-204 | Re-evaluation successor plus predecessor exclusion, append-only | Valid-alternative fixture review (after IDK-009) |
-| IDK-205 | **PRIMARY** deterministic derived state with explicit now: purity property test, plus detailed/simple toggle deletes no stored data (PRG-01) | — |
-| IDK-206 | Recall-before-reveal and zero review penalty | — |
+| IDK-204 | Re-evaluation append/exclusion; exact scenario/rubric/topic/capability/pair gates; five outcomes; ambiguity carry neutrality over assessed/correction/transfer baselines | Valid-alternative review under IDK-009 decision version 1.0 |
+| IDK-205 | **PRIMARY** deterministic derived state with explicit now: order-independent replay, conflict/correction/transfer/ambiguity branches, 7/90/91 UTC boundaries and memo rollover, plus detailed/simple data preservation | — |
+| IDK-206 | Recall-before-reveal; all schedule transitions; source-anchored due time; UTC cadence/interleave/budget; unique changed context; mapping fail-closed; zero review penalty | — |
 | IDK-207 | Exact cache key, single-flight at enqueue, snapshot-mismatch staleness, and claim-level citation enforcement (CNT-04, NFR-09) | — |
 | IDK-208 | Component: conclusion before details; tombstoned-source warning | — |
-| IDK-301 | Bundle generic role/level with no company field; independently removable optional items | Refresher subject/layer/source/gap linkage review |
-| IDK-302 | **PRIMARY** Practice timing: state-machine test (no hint before request, no feedback before Submit, append-only retry, cancel preserves attempt) | Adaptive follow-up specificity review |
+| IDK-301 | Bundle generic stable role/level with approved shared copy/dynamic heading/no company field; independently removable optional items | Refresher subject/layer/source/gap linkage review |
+| IDK-302 | **PRIMARY** Practice timing: state-machine test (no hint before request, no feedback before Submit, append-only retry, cancel preserves attempt) plus IDK-008 static-limitation clauses on the approved RDB record | Adaptive follow-up specificity review |
 | IDK-303 | **PRIMARY** Mock timing and exact safe-exit draft: byte-for-byte draft round-trip, blank-completion rejection, idempotent Complete, cancel preserves transcript, `409 mock_feedback_withheld` while nonterminal | Focused-shell review at all four viewports |
 | IDK-304 | Controlled fixture-transcript regression (the only surviving use of fixture evaluation) | Report disclosure-ordering review |
 | IDK-401 | **PRIMARY** durable job crash/restart/retry/cancel/dedupe/lane and terminal-result atomicity, plus one case per D4 retry type | Lane non-blocking observation |
 | IDK-402 | **PRIMARY** SSE reconnect, duplicate tolerance, missed-replay GET reconciliation, keepalive is not a state change | Reconnect UX review |
 | IDK-403 | **PRIMARY** disclosure and provider schema quarantine: fake-adapter argv/stdin/env, `412` pre-enqueue gate, three timer classifications, process-group cancel, quarantine isolation | Privacy redaction inspection of a `provider_requests` record |
 | IDK-404 | Wiring integration: enqueue → real job claim → validated result → visible to caller | No-network-on-page-open confirmation |
-| IDK-405 | **PRIMARY** static/runtime separation: non-empty static limitation constraint, Run never appends evidence while Submit does, structurally distinct static vs runtime regions | Limitation labels are not a reused generic string |
-| IDK-406 | **PRIMARY** runner confirmation / no-shell / cancel / limits / cleanup threat-model test | Environment-construction security review |
+| IDK-405 | **PRIMARY** six approved scenario/role/driver mappings plus curated driver pass/fail semantics and static/runtime separation: Run appends neither artifact nor evidence, Submit does, distinct result regions; approved RDB artifacts carry every IDK-008 limitation clause | Driver assertions, shared role calibration and review-specific limitation labels reviewed across levels |
+| IDK-406 | **PRIMARY** runner matrix and threat model: all platform/JDK/state/message fixtures, paired-tool/sentinel/race checks, immutable snapshots/evidence/drivers/broker/runtime/workspace/filter/cleanup manifests, exact driver argv, relational absence/retired-signature closed-schema zero-side-effect rejection and static-review independence, unsupported modes, no-shell, resource boundaries, cancellation and cleanup | Root-broker/service/delegation, privilege-drop, runtime/filter/workspace/environment inspection plus per-tuple Ubuntu smoke |
 | IDK-407 | **PRIMARY** atomic canonical merge: two-version fixture, base→latest, unresolved-conflict rejection, one-transaction acceptance, full rollback, unmapped-import reprocessing triggered | Accept-flow copy and overlay-wins pre-selection review |
 | IDK-408 | **PRIMARY** owner/goal search isolation plus deterministic degraded fallback | Stale banner reflects real watermark |
 | IDK-409 | **PRIMARY** export/delete/redaction: settings persist-and-expose positive path, stale-snapshot rejection, atomic delete effects, log redaction | Export package privacy review |
 | IDK-501 | **PRIMARY** Alembic representative upgrades and recoverable migration failure | — |
 | IDK-502 | **PRIMARY** essential accessibility flows (extends existing axe/keyboard/focus/reduced-motion coverage to new async states) | Screen-reader pass — the part no automated check replaces |
-| IDK-503 | None — this ticket is approval review | Consolidated curriculum, source/licence, editorial, rubric/scenario, privacy and runner threat-model review |
+| IDK-503 | None — this ticket is approval review | Consolidated curriculum, source/licence, editorial, rubric/scenario, privacy and runner/database-absence threat-model review |
 | IDK-504 | **PRIMARY** representative performance measurement harness — records distributions and outliers, publishes no threshold | Approver sets acceptance thresholds afterwards |
 | IDK-505 | Mechanical scan that all thirteen scheduled prototype mechanisms are absent from shipped source, plus the final `owner_id` schema sweep | Final MVP readiness, scope, recovery and unsupported-claim audit |
 | IDK-601 – IDK-604 | None — test obligations are defined by the separate future approval, not assumed now | — (each item's scope approval is a future decision, not a review scheduled now) |
@@ -2597,6 +2634,6 @@ One required automated test per implementation ticket by default; `None` where e
 - **Non-negotiable verification areas have exactly one primary owner** (Appendix 8, marked **PRIMARY**): publication approval gate IDK-102; deterministic roadmap IDK-106; atomic diagnostic confirmation IDK-107; transfer/delete/tombstones IDK-108; import mapping IDK-203; derived state with explicit now IDK-205; Practice timing IDK-302; Mock timing and exact draft IDK-303; durable jobs IDK-401; SSE plus authoritative GET IDK-402; disclosure and quarantine IDK-403; static/runtime separation IDK-405; runner lifecycle IDK-406; atomic canonical merge IDK-407; search isolation IDK-408; export/delete/redaction IDK-409; Alembic upgrades IDK-501; accessibility flows IDK-502; performance measurement IDK-504. E2E coverage is not duplicated; where an existing Playwright test asserts prototype behavior, the ticket marks it REPLACED and names the API-backed successor. Two assertion overlaps found in adversarial review were resolved by assigning a single owner: the dismissed/disabled-review zero-delta assertion belongs to IDK-206 (IDK-205 references it), and the delete-preflight stale-snapshot rejection belongs to IDK-409 (IDK-108 owns only the tombstone/downgrade transaction).
 - **Product name settled.** The product is **Yuno**. The prototype's inherited `Lattice` wordmark is renamed by IDK-103 (UI, markup, package metadata, test selector) and informs the export package name in IDK-409; the four localStorage prefixes and the export filename need no rename because IDK-107, IDK-303 and IDK-409 delete those paths. IDK-505 fails on any surviving `lattice` string. This is a resolved decision and correctly absent from Appendix 7.
 - **Adversarially reviewed.** Six independent refutation passes (requirement fidelity, Appendix H fidelity, sequencing/buildability, invented-claim discipline, verification adequacy, internal contradictions) were run against this document; the invented-claim pass returned no defects, and every defect the other five raised and that was verified against the file has been corrected here.
-- **Nothing was invented.** No performance threshold, provider CLI command or version range, source license, OS/toolchain matrix entry, retention or delete-recovery guarantee, sandbox or security property, readiness claim, or operational guarantee appears anywhere in this plan. Every such item is routed to a decision ticket in Appendix 7.
+- **Nothing is silently invented.** Approved policy values cite their attributed decision artifacts; unresolved performance, source, retention/delete, runner, privacy, and operational questions remain routed to the decision tickets still listed in Appendix 7. Implementation evidence never substitutes for a required approval, and approval never substitutes for activation evidence.
 - **Prototype removals are each owned exactly once.** localStorage persistence: IDK-107 removes the legacy key and the onboarding/roadmap slices, and IDK-303 deletes `LEARNING_STORAGE_KEY` once the last practice/mock/evidence slice is API-backed — the interim window is stated explicitly in IDK-107 rather than left implicit. Static-review fixture scoring (`evaluateCode`, `SIMULATION_LIMITATION`) → IDK-405. Practice fixture feedback (`practiceFeedback`, `PRACTICE_QUESTIONS`) → IDK-302. Mock fixture transcript state → IDK-303. Fixture evaluation gating (`MOCK_FIXTURE_DRAFT`, `reportKind`, `FIXTURE_REPORT`) → IDK-304. Client-only evidence/dispute state → IDK-208. Import regex parser → IDK-203. Single hardcoded course fixture and `src/shared/model.test.ts` → IDK-104. Static lesson copy (`LESSON_CONTEXT`) → IDK-201. `navigateApp` pushState/popstate shim → IDK-103. Simulated jobs page → IDK-401. Canonical-update localStorage simulation and `UPDATE_ROWS` → IDK-407. Bundled search fixture (`SEARCH_ITEMS`) → IDK-408. Prototype export/reset, the operations-side localStorage store (`lattice.operations.state.v1`, its legacy key, `hydrateOperationsState`, `useOperationsState`) and the network tripwire → IDK-409. IDK-505 verifies all thirteen targets are absent, and its own scope enumerates the same thirteen.
 - **Planning only.** This file is the sole artifact created. No application code, test, screenshot, dependency, migration, deployment, or other repository file was changed, and nothing was installed, migrated, published, deployed, or executed through a runner.
