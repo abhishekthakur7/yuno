@@ -34,6 +34,7 @@ from yuno.api.dependencies import (
     if_match,
     parse_if_match,
 )
+from yuno.api.provider_selection import authorize_provider_job
 from yuno.config import Settings
 from yuno.modules.data_lifecycle.service import delete_interview_bodies
 from yuno.modules.evidence_evaluation.domain import EvaluationRequest, RubricStatus
@@ -77,7 +78,6 @@ from yuno.modules.interview.service import (
 )
 from yuno.modules.learning_content.domain import TopicLayer
 from yuno.modules.learning_content.service import resolve_generation_context
-from yuno.modules.provider.service import require_disclosure
 from yuno.shared.application.jobs import (
     JobDispatcher,
     JobLane,
@@ -284,24 +284,26 @@ def post_interview_answer(
                     deduplicated=True,
                 )
             )
-        disclosure = require_disclosure(uow, owner_id)
-        return accepted_job(
-            _dispatch_practice(
-                dispatcher,
-                owner_id,
-                run,
-                key,
-                reserved.job_id,
-                disclosure.id,
-                settings,
-            )
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
+        ref = _dispatch_practice(
+            uow,
+            dispatcher,
+            owner_id,
+            run,
+            key,
+            reserved.job_id,
+            authorization.disclosure.id,
+            authorization.provider.value,
+            settings,
         )
+        uow.commit()
+        return accepted_job(ref)
 
     run = get_practice_run(uow, owner_id, run_id)
     bundle = get_bundle(uow, owner_id, run.bundle_id)
     item = next(value for value in bundle.items if value.id == run.bundle_item_id)
     assert item.topic_stable_id is not None
-    disclosure = require_disclosure(uow, owner_id)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     job_id = new_id()
     evidence = create_evidence(
         uow,
@@ -348,14 +350,21 @@ def post_interview_answer(
     )
     # Approval boundary: the immutable answer and evidence candidate are durable
     # before dispatch can invoke an external evaluator.
-    uow.commit()
     run = get_practice_run(uow, owner_id, run.id)
     assert run.active_answer_turn_id == answer_turn.id
-    return accepted_job(
-        _dispatch_practice(
-            dispatcher, owner_id, run, key, job_id, disclosure.id, settings
-        )
+    ref = _dispatch_practice(
+        uow,
+        dispatcher,
+        owner_id,
+        run,
+        key,
+        job_id,
+        authorization.disclosure.id,
+        authorization.provider.value,
+        settings,
     )
+    uow.commit()
+    return accepted_job(ref)
 
 
 @router.post("/interview-runs/{run_id}/pause", response_model=MockRunResponse)
@@ -429,17 +438,42 @@ def post_mock_complete(
             )
         reserved = JobRefResponse.model_validate_json(prior.response_json)
         current = dispatcher.get(owner_id, reserved.job_id)
-        return accepted_job(current or reserved)
+        if current is not None:
+            return accepted_job(current)
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
+        ref = _dispatch_mock_operation(
+            uow,
+            dispatcher,
+            owner_id,
+            run,
+            reserved.kind,
+            key,
+            reserved.job_id,
+            authorization.disclosure.id,
+            authorization.provider.value,
+            settings,
+        )
+        uow.commit()
+        return accepted_job(ref)
     if run.state.value == "completing":
         assert run.active_job_id is not None
         current = dispatcher.get(owner_id, run.active_job_id)
-        ref = current or JobRef(
-            run.active_job_id,
+        if current is not None:
+            return accepted_job(current)
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
+        ref = _dispatch_mock_operation(
+            uow,
+            dispatcher,
+            owner_id,
+            run,
             "evaluate_mock_final",
-            JobStatus.QUEUED,
-            run.updated_at,
-            deduplicated=True,
+            key,
+            run.active_job_id,
+            authorization.disclosure.id,
+            authorization.provider.value,
+            settings,
         )
+        uow.commit()
         return accepted_job(ref)
     validate_mock_completion(
         uow,
@@ -455,7 +489,7 @@ def post_mock_complete(
         raise DomainValidationError(
             "A Mock assessment must reference an approved topic."
         )
-    disclosure = require_disclosure(uow, owner_id)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     job_id = new_id()
     transcript = [
         {"kind": turn.kind.value, "body": turn.body} for turn in run.turns
@@ -496,24 +530,20 @@ def post_mock_complete(
             now_text(clock),
         )
     )
-    uow.commit()
-    return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                "evaluate_mock_final",
-                owner_id,
-                {"run_id": run.id},
-                dedupe_key=run.id,
-                idempotency_key=key,
-                requested_job_id=job_id,
-                goal_id=run.goal_id,
-                lane=JobLane.INTERACTIVE,
-                schema_version="provider-job-v1",
-                request_ref=f"InterviewRun:{run.id}",
-                disclosure_ref=disclosure.id,
-            )
-        )
+    ref = _dispatch_mock_operation(
+        uow,
+        dispatcher,
+        owner_id,
+        run,
+        "evaluate_mock_final",
+        key,
+        job_id,
+        authorization.disclosure.id,
+        authorization.provider.value,
+        settings,
     )
+    uow.commit()
+    return accepted_job(ref)
 
 
 @router.get("/interview-runs/{run_id}/report", response_model=MockReportResponse)
@@ -570,8 +600,24 @@ def post_interview_retry(
                 )
             reserved = JobRefResponse.model_validate_json(prior.response_json)
             current_job = dispatcher.get(owner_id, reserved.job_id)
-            return accepted_job(current_job or reserved)
-        disclosure = require_disclosure(uow, owner_id)
+            if current_job is not None:
+                return accepted_job(current_job)
+            authorization = authorize_provider_job(dispatcher, uow, owner_id)
+            ref = _dispatch_mock_operation(
+                uow,
+                dispatcher,
+                owner_id,
+                current,
+                reserved.kind,
+                key,
+                reserved.job_id,
+                authorization.disclosure.id,
+                authorization.provider.value,
+                settings,
+            )
+            uow.commit()
+            return accepted_job(ref)
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
         job_id = new_id()
         run, kind = reserve_mock_retry(uow, owner_id, run_id, job_id, clock=clock)
         reserved = JobRefResponse(
@@ -592,40 +638,36 @@ def post_interview_retry(
                 now_text(clock),
             )
         )
-        uow.commit()
-        payload = {
-            "run_id": run.id,
-            "turns_per_session_limit": settings.interview_turns_per_session_limit,
-            "bytes_per_session_limit": settings.interview_bytes_per_session_limit,
-        }
-        if kind == "generate_mock_next_turn":
-            payload["answer_turn_id"] = run.active_answer_turn_id
-        return accepted_job(
-            dispatcher.enqueue(
-                JobRequest(
-                    kind,
-                    owner_id,
-                    payload,
-                    dedupe_key=run.active_answer_turn_id,
-                    idempotency_key=key,
-                    requested_job_id=job_id,
-                    goal_id=run.goal_id,
-                    lane=JobLane.INTERACTIVE,
-                    schema_version="provider-job-v1",
-                    request_ref=f"InterviewRun:{run.id}",
-                    disclosure_ref=disclosure.id,
-                )
-            )
+        ref = _dispatch_mock_operation(
+            uow,
+            dispatcher,
+            owner_id,
+            run,
+            kind,
+            key,
+            job_id,
+            authorization.disclosure.id,
+            authorization.provider.value,
+            settings,
         )
-    disclosure = require_disclosure(uow, owner_id)
+        uow.commit()
+        return accepted_job(ref)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     job_id = new_id()
     run = reserve_evaluation_retry(uow, owner_id, run_id, job_id, clock=clock)
-    uow.commit()
-    return accepted_job(
-        _dispatch_practice(
-            dispatcher, owner_id, run, key, job_id, disclosure.id, settings
-        )
+    ref = _dispatch_practice(
+        uow,
+        dispatcher,
+        owner_id,
+        run,
+        key,
+        job_id,
+        authorization.disclosure.id,
+        authorization.provider.value,
+        settings,
     )
+    uow.commit()
+    return accepted_job(ref)
 
 
 @router.post(
@@ -872,16 +914,19 @@ def refreshers(
 
 
 def _dispatch_practice(
+    uow: InterviewUnitOfWork,
     dispatcher: JobDispatcher,
     owner_id: str,
     run: PracticeRun,
     key: str,
     job_id: str,
     disclosure_ref: str,
+    provider_name: str,
     settings: Settings,
 ):
     assert run.active_answer_turn_id is not None
-    return dispatcher.enqueue(
+    return dispatcher.reserve(
+        uow,
         JobRequest(
             "evaluate_practice_answer",
             owner_id,
@@ -899,7 +944,8 @@ def _dispatch_practice(
             schema_version="provider-job-v1",
             request_ref=f"InterviewRun:{run.id}",
             disclosure_ref=disclosure_ref,
-        )
+            provider_name=provider_name,
+        ),
     )
 
 
@@ -923,8 +969,24 @@ def _post_mock_answer(
             )
         reserved = JobRefResponse.model_validate_json(prior.response_json)
         current = dispatcher.get(owner_id, reserved.job_id)
-        return accepted_job(current or reserved)
-    disclosure_ref = require_disclosure(uow, owner_id).id
+        if current is not None:
+            return accepted_job(current)
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
+        ref = _dispatch_mock_operation(
+            uow,
+            dispatcher,
+            owner_id,
+            run,
+            reserved.kind,
+            key,
+            reserved.job_id,
+            authorization.disclosure.id,
+            authorization.provider.value,
+            settings,
+        )
+        uow.commit()
+        return accepted_job(ref)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     job_id = new_id()
     updated = submit_mock_answer(
         uow,
@@ -954,32 +1016,65 @@ def _post_mock_answer(
             now_text(clock),
         )
     )
+    ref = _dispatch_mock_operation(
+        uow,
+        dispatcher,
+        owner_id,
+        updated,
+        "generate_mock_next_turn",
+        key,
+        job_id,
+        authorization.disclosure.id,
+        authorization.provider.value,
+        settings,
+    )
     uow.commit()
-    return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                "generate_mock_next_turn",
-                owner_id,
-                {
-                    "run_id": updated.id,
-                    "answer_turn_id": updated.active_answer_turn_id,
-                    "turns_per_session_limit": (
-                        settings.interview_turns_per_session_limit
-                    ),
-                    "bytes_per_session_limit": (
-                        settings.interview_bytes_per_session_limit
-                    ),
-                },
-                dedupe_key=updated.active_answer_turn_id,
-                idempotency_key=key,
-                requested_job_id=job_id,
-                goal_id=updated.goal_id,
-                lane=JobLane.INTERACTIVE,
-                schema_version="provider-job-v1",
-                request_ref=f"InterviewRun:{updated.id}",
-                disclosure_ref=disclosure_ref,
-            )
-        )
+    return accepted_job(ref)
+
+
+def _dispatch_mock_operation(
+    uow: InterviewUnitOfWork,
+    dispatcher: JobDispatcher,
+    owner_id: str,
+    run: PracticeRun,
+    kind: str,
+    key: str,
+    job_id: str,
+    disclosure_ref: str,
+    provider_name: str,
+    settings: Settings,
+) -> JobRef:
+    if kind not in {"generate_mock_next_turn", "evaluate_mock_final"}:
+        raise DomainValidationError("The reserved Mock provider operation is invalid.")
+    payload: dict[str, object] = {
+        "run_id": run.id,
+        "turns_per_session_limit": settings.interview_turns_per_session_limit,
+        "bytes_per_session_limit": settings.interview_bytes_per_session_limit,
+    }
+    if kind == "generate_mock_next_turn":
+        if run.active_answer_turn_id is None:
+            raise DomainValidationError("The Mock next-turn reservation is incomplete.")
+        payload["answer_turn_id"] = run.active_answer_turn_id
+    return dispatcher.reserve(
+        uow,
+        JobRequest(
+            kind,
+            owner_id,
+            payload,
+            dedupe_key=(
+                run.active_answer_turn_id
+                if kind == "generate_mock_next_turn"
+                else run.id
+            ),
+            idempotency_key=key,
+            requested_job_id=job_id,
+            goal_id=run.goal_id,
+            lane=JobLane.INTERACTIVE,
+            schema_version="provider-job-v1",
+            request_ref=f"InterviewRun:{run.id}",
+            disclosure_ref=disclosure_ref,
+            provider_name=provider_name,
+        ),
     )
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from yuno.modules.provenance.domain import (
@@ -54,7 +54,12 @@ class SourceRepository(Protocol):
 
 
 class SourceRetrievalAdapter(Protocol):
-    def retrieve(self, request: SourceRetrievalRequest) -> SourceRetrievalResult: ...
+    def retrieve(
+        self,
+        request: SourceRetrievalRequest,
+        *,
+        cancelled: Callable[[], bool] = lambda: False,
+    ) -> SourceRetrievalResult: ...
 
 
 class ProvenanceUnitOfWork(UnitOfWork, Protocol):

@@ -227,9 +227,7 @@ def test_provider_backed_logs_emit_safe_ids_and_never_auth_environment_or_bodies
     assert all(
         item["correlation_id"] == "provider-job-correlation-test" for item in events
     )
-    assert events[-1]["diagnostic_classification"] == (
-        "provider-configuration-or-authentication"
-    )
+    assert events[-1]["diagnostic_classification"] == "authentication-unavailable"
     serialized = "\n".join(json.dumps(item) for item in events)
     for forbidden in (
         provider_secret,

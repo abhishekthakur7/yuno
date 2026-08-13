@@ -60,8 +60,8 @@ export async function deleteInterviewSessionBody(runId: string) {
   if (error) failure(error, response.status, 'The interview session body could not be deleted.')
 }
 
-export async function submitMockAnswer(runId: string, answer: string) {
-  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/answers', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } }, body: { answer } })
+export async function submitMockAnswer(runId: string, answer: string, idempotencyKey: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/answers', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': idempotencyKey } }, body: { answer } })
   if (error || !data) failure(error, response.status, 'The Mock answer could not be submitted.')
   return data
 }
@@ -72,8 +72,8 @@ export async function completeMockRun(runId: string, draft: string, idempotencyK
   return data
 }
 
-export async function retryMockRun(runId: string) {
-  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/retry-evaluation', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } } })
+export async function retryMockRun(runId: string, idempotencyKey: string) {
+  const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/retry-evaluation', { params: { path: { run_id: runId }, header: { 'Idempotency-Key': idempotencyKey } } })
   if (error || !data) failure(error, response.status, 'The Mock operation could not be retried.')
   return data
 }
@@ -110,18 +110,18 @@ export async function requestPracticeHint(runId: string) {
   return data
 }
 
-export async function submitPracticeAnswer(runId: string, answer: string) {
+export async function submitPracticeAnswer(runId: string, answer: string, idempotencyKey: string) {
   const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/answers', {
-    params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    params: { path: { run_id: runId }, header: { 'Idempotency-Key': idempotencyKey } },
     body: { answer },
   })
   if (error || !data) failure(error, response.status, 'The Practice answer could not be submitted.')
   return data
 }
 
-export async function retryPracticeEvaluation(runId: string) {
+export async function retryPracticeEvaluation(runId: string, idempotencyKey: string) {
   const { data, error, response } = await client.POST('/api/v1/interview-runs/{run_id}/retry-evaluation', {
-    params: { path: { run_id: runId }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    params: { path: { run_id: runId }, header: { 'Idempotency-Key': idempotencyKey } },
   })
   if (error || !data) failure(error, response.status, 'The Practice evaluation could not be retried.')
   return data

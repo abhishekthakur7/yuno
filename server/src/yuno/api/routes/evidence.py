@@ -31,6 +31,7 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.api.provider_selection import authorize_provider_job
 from yuno.config import Settings
 from yuno.modules.evidence_evaluation.domain import (
     EvaluationRequest,
@@ -52,7 +53,6 @@ from yuno.modules.evidence_evaluation.service import (
     perform_assessment,
     request_reevaluation,
 )
-from yuno.modules.provider.service import require_disclosure
 from yuno.shared.application.jobs import (
     JobDispatcher,
     JobLane,
@@ -218,7 +218,27 @@ def post_assess(
             )
         reserved = JobRefResponse.model_validate_json(prior.response_json)
         current = dispatcher.get(owner_id, reserved.job_id)
-        replay = current or JobRef(**reserved.model_dump())
+        if current is None:
+            authorization = authorize_provider_job(dispatcher, uow, owner_id)
+            current = dispatcher.reserve(
+                uow,
+                JobRequest(
+                    "assess_evidence",
+                    owner_id,
+                    payload,
+                    evidence.id,
+                    key,
+                    requested_job_id=reserved.job_id,
+                    goal_id=evidence.goal_id,
+                    lane=JobLane.INTERACTIVE,
+                    schema_version="provider-job-v1",
+                    request_ref=f"Evidence:{evidence.id}",
+                    disclosure_ref=authorization.disclosure.id,
+                    provider_name=authorization.provider.value,
+                ),
+            )
+            uow.commit()
+        replay = current
         return accepted_job(
             JobRef(
                 replay.job_id,
@@ -229,27 +249,14 @@ def post_assess(
                 lane=replay.lane,
             )
         )
-    disclosure = require_disclosure(uow, owner_id)
-    ref = dispatcher.enqueue(
-        JobRequest(
-            "assess_evidence",
-            owner_id,
-            payload,
-            evidence.id,
-            key,
-            goal_id=evidence.goal_id,
-            lane=JobLane.INTERACTIVE,
-            schema_version="provider-job-v1",
-            request_ref=f"Evidence:{evidence.id}",
-            disclosure_ref=disclosure.id,
-        )
-    )
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
+    job_id = new_id()
     response = JobRefResponse(
-        job_id=ref.job_id,
-        kind=ref.kind,
-        status=ref.status,
-        enqueued_at=ref.enqueued_at,
-        deduplicated=ref.deduplicated,
+        job_id=job_id,
+        kind="assess_evidence",
+        status=JobStatus.QUEUED,
+        enqueued_at=now_text(SystemClock()),
+        deduplicated=False,
     )
     uow.evidence.add_idempotency(
         EvidenceEvaluationIdempotencyRecord(
@@ -261,6 +268,23 @@ def post_assess(
             response.model_dump_json(),
             now_text(SystemClock()),
         )
+    )
+    ref = dispatcher.reserve(
+        uow,
+        JobRequest(
+            "assess_evidence",
+            owner_id,
+            payload,
+            evidence.id,
+            key,
+            requested_job_id=job_id,
+            goal_id=evidence.goal_id,
+            lane=JobLane.INTERACTIVE,
+            schema_version="provider-job-v1",
+            request_ref=f"Evidence:{evidence.id}",
+            disclosure_ref=authorization.disclosure.id,
+            provider_name=authorization.provider.value,
+        ),
     )
     uow.commit()
     return accepted_job(ref)
@@ -348,7 +372,7 @@ def post_reevaluate(
         if request is None:
             raise RuntimeError("The re-evaluation idempotency reservation is invalid.")
     else:
-        disclosure = require_disclosure(uow, owner_id)
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
         job_id = new_id()
         request = request_reevaluation(
             uow, owner_id, assessment_id, body.dispute_id, job_id=job_id
@@ -368,12 +392,15 @@ def post_reevaluate(
                 False,
             )
         )
-        uow.commit()
+        ref = None
+    if prior is not None:
+        ref = dispatcher.get(owner_id, request.job_id)
 
-    ref = dispatcher.get(owner_id, request.job_id)
     if ref is None and request.status.value == "requested":
-        disclosure = require_disclosure(uow, owner_id)
-        ref = dispatcher.enqueue(
+        if prior is not None:
+            authorization = authorize_provider_job(dispatcher, uow, owner_id)
+        ref = dispatcher.reserve(
+            uow,
             JobRequest(
                 "reevaluate_assessment",
                 owner_id,
@@ -385,9 +412,11 @@ def post_reevaluate(
                 lane=JobLane.INTERACTIVE,
                 schema_version="provider-job-v1",
                 request_ref=f"ReevaluationRequest:{request.id}",
-                disclosure_ref=disclosure.id,
-            )
+                disclosure_ref=authorization.disclosure.id,
+                provider_name=authorization.provider.value,
+            ),
         )
+        uow.commit()
     elif ref is None:
         ref = JobRef(
             request.job_id,

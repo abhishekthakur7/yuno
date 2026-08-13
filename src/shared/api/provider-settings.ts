@@ -32,6 +32,14 @@ export function providerCapabilitiesQueryOptions() {
   })
 }
 
+export async function refreshProviderCapabilities() {
+  const { data, error, response } = await client.GET('/api/v1/provider-capabilities', {
+    params: { query: { refresh: true } },
+  })
+  if (error || !data) failure(error, response.status, 'Provider capabilities could not be refreshed.')
+  return data
+}
+
 export async function acceptDisclosure(disclosure: Disclosure): Promise<Disclosure> {
   const { data, error, response } = await client.POST('/api/v1/disclosures/{category}/accept', {
     params: { path: { category: disclosure.category } },

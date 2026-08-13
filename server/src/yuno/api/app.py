@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
 from tempfile import gettempdir
 
 from fastapi import APIRouter, FastAPI
+from sqlalchemy import text
 
-from yuno.api.contracts import ErrorResponse, JobRefResponse
+from yuno.api.contracts import ErrorResponse
 from yuno.api.errors import register_exception_handlers
 from yuno.api.middleware import CorrelationIdMiddleware
 from yuno.api.provider_runtime import (
@@ -19,8 +21,8 @@ from yuno.api.provider_runtime import (
     ProviderGenerationAdapter,
     ProviderMockInterviewAdapter,
     ProviderTutorAdapter,
-    UnavailableProviderPort,
 )
+from yuno.api.provider_selection import ProviderAwareJobDispatcher
 from yuno.api.routes.canonical import router as canonical_router
 from yuno.api.routes.canonical_updates import router as canonical_updates_router
 from yuno.api.routes.data_lifecycle import router as data_lifecycle_router
@@ -66,9 +68,42 @@ from yuno.modules.jobs_events.service import DurableJobDispatcher
 from yuno.modules.learning_content.service import run_generation, run_tutor_turn_job
 from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
-from yuno.modules.provenance.adapters import HttpSourceRetrievalAdapter
+from yuno.modules.provenance.adapters import (
+    HttpSourceRetrievalAdapter,
+    remove_unreferenced_snapshots,
+)
 from yuno.modules.provenance.service import run_source_retrieval_job
-from yuno.modules.provider.service import require_disclosure
+from yuno.modules.provider.adapters import (
+    FileSecureOutputStore,
+    LocalProcessPort,
+    remove_unreferenced_provider_outputs,
+)
+from yuno.modules.provider.claude import (
+    CLAUDE_ADAPTER_VERSION,
+    CLAUDE_CONTRACT_VERSION,
+    CLAUDE_ENVIRONMENT_ALLOWLIST,
+    CLAUDE_MODEL,
+    ClaudeCapabilityClassification,
+    ClaudeCliAdapter,
+    discover_claude,
+)
+from yuno.modules.provider.codex import (
+    CODEX_ENVIRONMENT_ALLOWLIST,
+    CodexProviderAdapter,
+    discover_codex,
+)
+from yuno.modules.provider.domain import (
+    ProviderCapability,
+    ProviderCapabilityState,
+    ProviderName,
+    ProviderTimers,
+)
+from yuno.modules.provider.registry import (
+    ProviderRegistry,
+    authentication_capability,
+    missing_capability,
+    resolve_safe_executable,
+)
 from yuno.modules.runner.adapters import LocalRunnerProcessPort, LocalTempWorkspace
 from yuno.modules.runner.repository import RunnerRepository
 from yuno.modules.runner.service import execute_runner_job
@@ -103,6 +138,16 @@ from yuno.unit_of_work import (
     create_transaction_unit_of_work_factory,
     create_unit_of_work_factory,
 )
+
+
+class _CancellableSourceAdapter:
+    def __init__(self, adapter, cancelled: Callable[[], bool]) -> None:
+        self._adapter = adapter
+        self._cancelled = cancelled
+
+    def retrieve(self, request):
+        return self._adapter.retrieve(request, cancelled=self._cancelled)
+
 
 API_PREFIX = "/api/v1"
 RETENTION_INTERVAL_SECONDS = 3600
@@ -318,7 +363,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except JobPreparedFailure:
                     raise
                 except Exception as exc:
-                    raise JobPreparedFailure(f"{type(exc).__name__}: {exc}") from exc
+                    raise JobPreparedFailure("job-operation-failed") from exc
                 if published is None:
                     if not execution.request.request_ref:
                         raise RuntimeError(
@@ -365,7 +410,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     def replay(*_args, **_kwargs):
                         if self.failure is not None:
                             raise JobPreparedFailure(
-                                f"{type(self.failure).__name__}: {self.failure}"
+                                "external-operation-failed"
                             ) from self.failure
                         return self.value
 
@@ -429,7 +474,109 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     hash_payload(published),
                 )
 
-            app.state.provider_port = UnavailableProviderPort()
+            provider_process = LocalProcessPort()
+            provider_store = FileSecureOutputStore(
+                resolved_settings.provider_quarantine_root
+            )
+            provider_timers = ProviderTimers(
+                resolved_settings.provider_first_output_seconds,
+                resolved_settings.provider_inactivity_seconds,
+                resolved_settings.provider_absolute_seconds,
+            )
+            provider_environment = {
+                key: value
+                for key in set(
+                    CODEX_ENVIRONMENT_ALLOWLIST + CLAUDE_ENVIRONMENT_ALLOWLIST
+                )
+                if (value := os.getenv(key)) is not None
+            }
+
+            def codex_discovery():
+                if not resolved_settings.provider_capability_discovery_enabled:
+                    return authentication_capability(ProviderName.CODEX), None
+                executable = resolve_safe_executable(
+                    resolved_settings.provider_codex_executable
+                )
+                if executable is None:
+                    return missing_capability(ProviderName.CODEX), None
+                capability = discover_codex(
+                    str(executable),
+                    provider_process,
+                    timers=provider_timers,
+                    source_environment=provider_environment,
+                )
+                if capability.state is not ProviderCapabilityState.CONFIGURED:
+                    return capability, None
+                return capability, CodexProviderAdapter(
+                    executable=str(executable),
+                    temp_root=Path(gettempdir()),
+                    timers=provider_timers,
+                    process_port=provider_process,
+                    secure_output_store=provider_store,
+                    source_environment=provider_environment,
+                )
+
+            def claude_discovery():
+                if not resolved_settings.provider_capability_discovery_enabled:
+                    return authentication_capability(ProviderName.CLAUDE), None
+                discovered = discover_claude(
+                    str(resolved_settings.provider_claude_executable),
+                    process_port=provider_process,
+                    probe_timers=provider_timers,
+                    source_environment=provider_environment,
+                )
+                state = {
+                    ClaudeCapabilityClassification.EXECUTABLE_MISSING: (
+                        ProviderCapabilityState.EXECUTABLE_MISSING
+                    ),
+                    ClaudeCapabilityClassification.UNSUPPORTED_VERSION: (
+                        ProviderCapabilityState.UNSUPPORTED_VERSION
+                    ),
+                    ClaudeCapabilityClassification.AUTHENTICATION_UNAVAILABLE: (
+                        ProviderCapabilityState.AUTHENTICATION_UNAVAILABLE
+                    ),
+                    ClaudeCapabilityClassification.CONFIGURED: (
+                        ProviderCapabilityState.CONFIGURED
+                    ),
+                }[discovered.classification]
+                if state is ProviderCapabilityState.EXECUTABLE_MISSING:
+                    return missing_capability(ProviderName.CLAUDE), None
+                if state is ProviderCapabilityState.UNSUPPORTED_VERSION:
+                    return ProviderCapability(
+                        ProviderName.CLAUDE,
+                        state,
+                        "The installed CLI version or command surface is unsupported.",
+                        "Install a supported CLI version, then refresh.",
+                    ), None
+                if state is ProviderCapabilityState.AUTHENTICATION_UNAVAILABLE:
+                    return authentication_capability(ProviderName.CLAUDE), None
+                assert discovered.executable is not None
+                capability = ProviderCapability(
+                    ProviderName.CLAUDE,
+                    state,
+                    model=CLAUDE_MODEL,
+                    adapter_version=CLAUDE_ADAPTER_VERSION,
+                    contract_version=CLAUDE_CONTRACT_VERSION,
+                )
+                return capability, ClaudeCliAdapter(
+                    executable=discovered.executable,
+                    process_port=provider_process,
+                    secure_output_store=provider_store,
+                    source_environment=provider_environment,
+                    timers=provider_timers,
+                    temp_root=Path(gettempdir()),
+                )
+
+            app.state.provider_registry = ProviderRegistry(
+                {
+                    ProviderName.CODEX: codex_discovery,
+                    ProviderName.CLAUDE: claude_discovery,
+                }
+            )
+            app.state.provider_registry.refresh()
+            provider_dispatcher = ProviderAwareJobDispatcher(
+                dispatcher, uow_factory, app.state.provider_registry
+            )
             source_retrieval_adapter = HttpSourceRetrievalAdapter(
                 resolved_settings.source_snapshot_root
             )
@@ -569,7 +716,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             request, completion_uow_factory, adapter
                         )
                     ),
-                    lambda _execution: app.state.source_retrieval_adapter,
+                    lambda execution: _CancellableSourceAdapter(
+                        app.state.source_retrieval_adapter,
+                        execution.cancel_requested,
+                    ),
                     "retrieve",
                 ),
             )
@@ -600,57 +750,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             dispatcher.register(
                 "delete_goal", job_handler("delete_goal", _complete_delete)
             )
-
-            with uow_factory() as reservation_uow:
-                pending_hands_on = reservation_uow.evidence.list_pending_idempotency(
-                    "submit_hands_on:"
-                )
-            for reservation in pending_hands_on:
-                try:
-                    saved = JobRefResponse.model_validate_json(
-                        reservation.response_json
-                    )
-                    if reservation.request_ref is None or saved.result_ref is None:
-                        continue
-                    with uow_factory() as reservation_uow:
-                        artifact = reservation_uow.hands_on.get_artifact_by_evidence(
-                            reservation.owner_id, reservation.request_ref
-                        )
-                        disclosure = require_disclosure(
-                            reservation_uow, reservation.owner_id
-                        )
-                    if artifact is None:
-                        continue
-                    dispatcher.enqueue(
-                        JobRequest(
-                            "review_hands_on_artifact",
-                            reservation.owner_id,
-                            {
-                                "artifact_id": artifact.id,
-                                "rubric_id": saved.result_ref,
-                            },
-                            artifact.id,
-                            reservation.idempotency_key,
-                            requested_job_id=saved.job_id,
-                            goal_id=artifact.goal_id,
-                            lane=JobLane.INTERACTIVE,
-                            schema_version="hands-on-review-v1",
-                            request_ref=f"HandsOnArtifact:{artifact.id}",
-                            disclosure_ref=disclosure.id,
-                        )
-                    )
-                    with uow_factory() as reservation_uow:
-                        reservation_uow.evidence.complete_idempotency(
-                            reservation.owner_id,
-                            reservation.operation,
-                            reservation.idempotency_key,
-                            saved.model_copy(
-                                update={"deduplicated": True}
-                            ).model_dump_json(),
-                        )
-                        reservation_uow.commit()
-                except Exception:  # noqa: BLE001,S112 - durable reservation remains pending
-                    continue
 
             with session_factory() as runner_session:
                 runner_repo = RunnerRepository(runner_session)
@@ -685,6 +784,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                 except Exception:  # noqa: BLE001,S112 - durable reservation remains queued
                     continue
+            with session_factory() as reconciliation_session:
+                referenced_snapshots = set(
+                    reconciliation_session.scalars(
+                        text("SELECT content_ref FROM source_snapshot_bodies")
+                    )
+                )
+                referenced_provider_outputs = set(
+                    reconciliation_session.scalars(
+                        text("SELECT raw_output_ref FROM schema_quarantine_bodies")
+                    )
+                )
+            remove_unreferenced_snapshots(
+                resolved_settings.source_snapshot_root, referenced_snapshots
+            )
+            remove_unreferenced_provider_outputs(
+                resolved_settings.provider_quarantine_root,
+                referenced_provider_outputs,
+            )
             dispatcher.start()
 
             # Startup reconciliation and its one-hour runner janitor run first;
@@ -722,7 +839,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.engine = engine
             app.state.session_factory = session_factory
             app.state.uow_factory = uow_factory
-            app.state.dispatcher = dispatcher
+            app.state.dispatcher = provider_dispatcher
             app.state.settings = resolved_settings
             app.state.head_revision = head_revision
             app.state.clock = SystemClock()

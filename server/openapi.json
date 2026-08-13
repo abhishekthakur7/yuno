@@ -6300,6 +6300,17 @@
             ],
             "title": "Contract Version"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "provider": {
             "$ref": "#/components/schemas/ProviderName"
           },
@@ -6314,6 +6325,17 @@
             ],
             "title": "Reason"
           },
+          "recovery_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Action"
+          },
           "state": {
             "$ref": "#/components/schemas/ProviderCapabilityState"
           }
@@ -6322,6 +6344,8 @@
           "provider",
           "state",
           "reason",
+          "recovery_action",
+          "model",
           "adapter_version",
           "contract_version"
         ],
@@ -6330,8 +6354,10 @@
       },
       "ProviderCapabilityState": {
         "enum": [
-          "configured",
-          "unavailable"
+          "executable-missing",
+          "unsupported-version",
+          "authentication-unavailable",
+          "configured"
         ],
         "title": "ProviderCapabilityState",
         "type": "string"
@@ -13816,6 +13842,18 @@
     "/api/v1/provider-capabilities": {
       "get": {
         "operationId": "capabilities_api_v1_provider_capabilities_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

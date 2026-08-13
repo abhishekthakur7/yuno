@@ -17,7 +17,6 @@ from yuno.modules.canonical.domain import (
     TopicIdentity,
 )
 from yuno.modules.learning_content.domain import (
-    GENERATION_CONTRACT_VERSION,
     GENERATION_SCHEMA_VERSION,
     GenerateRequest,
     GenerateResult,
@@ -171,7 +170,7 @@ class _RefresherGenerationAdapter:
             body=self.body,
             provider=self.provider,
             model=self.model,
-            contract_version=GENERATION_CONTRACT_VERSION,
+            contract_version="fixture-provider-contract-v1",
             schema_version=GENERATION_SCHEMA_VERSION,
             generated_at=now_text(SystemClock()),
             provenance_refs=self.refs,

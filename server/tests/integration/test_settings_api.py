@@ -10,7 +10,9 @@ from tests.integration.test_evidence_evaluation import (
     _arrange,
 )
 from tests.integration.test_progress import FixedClock
+from tests.provider_fakes import DomainFakeProviderPort, configure_provider_port_fake
 from yuno.modules.evidence_evaluation.service import perform_assessment
+from yuno.modules.provider.domain import ProviderName
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 
 
@@ -51,6 +53,12 @@ def test_progress_display_setting_persists_without_mutating_learning_data(
     assert initial.json()["row_version"] == 1
     assert initial.json()["provider_selection"] is None
     assert initial.json()["accessibility"] == {"reduced_motion": False}
+
+    configure_provider_port_fake(
+        client,
+        DomainFakeProviderPort(FakeEvaluationAdapter(), ProviderName.CLAUDE),
+        ProviderName.CLAUDE,
+    )
 
     changed = client.patch(
         "/api/v1/settings",
@@ -112,6 +120,20 @@ def test_invalid_settings_are_rejected_without_changing_stored_version(
         )
         assert response.status_code == 422, (body, response.text)
 
+    assert client.get("/api/v1/settings").json() == initial
+
+
+def test_unavailable_provider_selection_is_rejected_without_version_change(
+    client: TestClient,
+) -> None:
+    initial = client.get("/api/v1/settings").json()
+    response = client.patch(
+        "/api/v1/settings",
+        headers={"If-Match": str(initial["row_version"])},
+        json={"provider_selection": "codex"},
+    )
+    assert response.status_code == 503
+    assert response.json()["current_state"] == "authentication-unavailable"
     assert client.get("/api/v1/settings").json() == initial
 
 

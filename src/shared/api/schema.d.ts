@@ -3864,16 +3864,20 @@ export interface components {
             adapter_version: string | null;
             /** Contract Version */
             contract_version: string | null;
+            /** Model */
+            model: string | null;
             provider: components["schemas"]["ProviderName"];
             /** Reason */
             reason: string | null;
+            /** Recovery Action */
+            recovery_action: string | null;
             state: components["schemas"]["ProviderCapabilityState"];
         };
         /**
          * ProviderCapabilityState
          * @enum {string}
          */
-        ProviderCapabilityState: "configured" | "unavailable";
+        ProviderCapabilityState: "executable-missing" | "unsupported-version" | "authentication-unavailable" | "configured";
         /**
          * ProviderName
          * @enum {string}
@@ -7943,7 +7947,9 @@ export interface operations {
     };
     capabilities_api_v1_provider_capabilities_get: {
         parameters: {
-            query?: never;
+            query?: {
+                refresh?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

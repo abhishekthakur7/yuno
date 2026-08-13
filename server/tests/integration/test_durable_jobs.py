@@ -342,9 +342,7 @@ def test_owner_scoped_jobs_api_exposes_configuration_and_authoritative_state(
     client, uow_factory
 ) -> None:
     owner = _owner(uow_factory)
-    queued = client.app.state.dispatcher.enqueue(
-        JobRequest("generate_topic_content", owner, {"attempt_id": "missing"})
-    )
+    queued = client.app.state.dispatcher.enqueue(JobRequest("delete_goal", owner, {}))
     assert queued.status is JobStatus.QUEUED
     terminal = wait_for_job(client, queued.job_id, "failed")
     assert terminal["retryable"] is True

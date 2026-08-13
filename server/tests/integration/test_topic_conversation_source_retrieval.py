@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from tests.integration.test_generated_content_api import _goal, _source
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import install_provider_port_fake
 from yuno.modules.provenance.domain import (
     SourceAvailability,
     SourceRetrievalRequest,
@@ -55,8 +56,14 @@ class FakeRetriever:
     calls: int = 0
     fail: bool = False
 
-    def retrieve(self, request: SourceRetrievalRequest) -> SourceRetrievalResult:
+    def retrieve(
+        self,
+        request: SourceRetrievalRequest,
+        *,
+        cancelled=lambda: False,
+    ) -> SourceRetrievalResult:
         self.calls += 1
+        assert not cancelled()
         if self.fail:
             raise RuntimeError("synthetic retrieval failure")
         return SourceRetrievalResult(
@@ -72,7 +79,7 @@ def test_topic_get_is_read_only_and_explicit_tutor_turn_persists_reply(
 ):
     goal_id, topic_id = _goal(client, uow_factory, suffix="tutor-conversation")
     provider = FakeProviderPort()
-    client.app.state.provider_port = provider
+    install_provider_port_fake(client, provider)
 
     empty = client.get(f"/api/v1/goals/{goal_id}/topics/{topic_id}/conversation")
     assert empty.status_code == 200

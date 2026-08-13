@@ -23,7 +23,6 @@ from yuno.modules.evidence_evaluation.service import (
     perform_assessment,
     request_reevaluation,
 )
-from yuno.shared.application.jobs import JobRef, JobRequest, JobStatus
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import (
@@ -559,7 +558,7 @@ def test_evidence_reads_link_active_assessment_and_dispute_reevaluation_history(
     ]
 
 
-def test_reevaluation_persists_job_identity_before_dispatch(
+def test_reevaluation_atomically_persists_request_and_queued_job(
     client, uow_factory: UnitOfWorkFactory
 ) -> None:
     owner_id, _evidence, _rubric, evaluation_request = _arrange(uow_factory)
@@ -569,28 +568,8 @@ def test_reevaluation_persists_job_identity_before_dispatch(
         dispute = create_dispute(uow, owner_id, assessment.id, "Recheck this.")
         uow.commit()
 
-    class InspectingDispatcher:
-        def enqueue(self, request: JobRequest) -> JobRef:
-            assert request.requested_job_id is not None
-            with uow_factory() as uow:
-                persisted = uow.evidence.get_reevaluation_request(
-                    request.owner_id, str(request.payload["request_id"])
-                )
-                assert persisted is not None
-                assert persisted.status.value == "requested"
-                assert persisted.job_id == request.requested_job_id
-            return JobRef(
-                request.requested_job_id,
-                request.kind,
-                JobStatus.QUEUED,
-                "2026-08-12T00:00:00Z",
-            )
-
-        def get(self, owner_id: str, job_id: str) -> JobRef | None:
-            del owner_id, job_id
-            return None
-
-    client.app.state.dispatcher = InspectingDispatcher()
+    install_provider_fake(client, adapter)
+    accept_provider_disclosure(client)
     response = client.post(
         f"/api/v1/assessments/{assessment.id}/reevaluate",
         headers={"Idempotency-Key": "persist-job-before-dispatch"},
@@ -604,10 +583,11 @@ def test_reevaluation_persists_job_identity_before_dispatch(
         assert persisted is not None
         assert persisted.job_id == response.json()["job_id"]
         assert persisted.status.value == "requested"
+    assert client.get(f"/api/v1/jobs/{response.json()['job_id']}").status_code == 200
 
 
-def test_reevaluation_retry_redispatches_a_durable_request_after_enqueue_failure(
-    client, uow_factory: UnitOfWorkFactory
+def test_reevaluation_reservation_failure_rolls_back_domain_and_job(
+    client, uow_factory: UnitOfWorkFactory, monkeypatch
 ) -> None:
     owner_id, _evidence, _rubric, evaluation_request = _arrange(uow_factory)
     with uow_factory() as uow:
@@ -617,69 +597,30 @@ def test_reevaluation_retry_redispatches_a_durable_request_after_enqueue_failure
         dispute = create_dispute(uow, owner_id, assessment.id, "Retry dispatch.")
         uow.commit()
 
-    class RecoveringDispatcher:
-        def __init__(self) -> None:
-            self.requests: list[JobRequest] = []
-
-        def enqueue(self, request: JobRequest) -> JobRef:
-            self.requests.append(request)
-            if len(self.requests) == 1:
-                raise RuntimeError("dispatcher unavailable before enqueue")
-            assert request.requested_job_id is not None
-            return JobRef(
-                request.requested_job_id,
-                request.kind,
-                JobStatus.QUEUED,
-                "2026-08-12T00:00:00Z",
-            )
-
-        def get(self, owner_id: str, job_id: str) -> JobRef | None:
-            del owner_id, job_id
-            return None
-
-    dispatcher = RecoveringDispatcher()
-    client.app.state.dispatcher = dispatcher
+    install_provider_fake(client, FakeEvaluationAdapter())
+    accept_provider_disclosure(client)
     path = f"/api/v1/assessments/{assessment.id}/reevaluate"
     headers = {"Idempotency-Key": "recover-reevaluation-dispatch"}
     body = {"dispute_id": dispute.id}
+    original_reserve = client.app.state.dispatcher.reserve
 
-    with pytest.raises(RuntimeError, match="dispatcher unavailable"):
+    def fail_reserve(_uow, _request):
+        raise RuntimeError("job reservation unavailable")
+
+    monkeypatch.setattr(client.app.state.dispatcher, "reserve", fail_reserve)
+    with pytest.raises(RuntimeError, match="job reservation unavailable"):
         client.post(path, headers=headers, json=body)
 
     with uow_factory() as uow:
-        durable = uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id)
-        assert durable is not None and durable.status.value == "requested"
-        durable_id = durable.id
-        job_id = durable.job_id
+        assert uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id) is None
 
-    with uow_factory() as uow:
-        second_dispute = create_dispute(
-            uow, owner_id, assessment.id, "Changed request body."
-        )
-        uow.commit()
-    changed = client.post(path, headers=headers, json={"dispute_id": second_dispute.id})
-    assert changed.status_code == 409
-
+    monkeypatch.setattr(client.app.state.dispatcher, "reserve", original_reserve)
     recovered = client.post(path, headers=headers, json=body)
     assert recovered.status_code == 202
-    assert recovered.json()["job_id"] == job_id
-    assert [request.payload["request_id"] for request in dispatcher.requests] == [
-        durable_id,
-        durable_id,
-    ]
     with uow_factory() as uow:
-        assert (
-            len(
-                [
-                    item
-                    for item in (
-                        uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id),
-                    )
-                    if item is not None
-                ]
-            )
-            == 1
-        )
+        durable = uow.evidence.get_reevaluation_for_dispute(owner_id, dispute.id)
+        assert durable is not None
+        assert durable.job_id == recovered.json()["job_id"]
 
 
 def test_reevaluation_rollback_tombstone_rejection_and_terminal_history_guards(

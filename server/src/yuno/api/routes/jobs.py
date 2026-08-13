@@ -41,9 +41,9 @@ def _response(ref: JobRef) -> JobRefResponse:
 def _attempt_response(attempt: JobAttempt) -> JobAttemptResponse:
     return JobAttemptResponse(
         attempt_number=attempt.attempt_number,
-        process_identity=attempt.process_identity,
-        pid=attempt.pid,
-        pgid=attempt.pgid,
+        process_identity=None,
+        pid=None,
+        pgid=None,
         temp_path=None,
         started_at=attempt.started_at,
         ended_at=attempt.ended_at,

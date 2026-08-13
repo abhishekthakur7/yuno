@@ -271,19 +271,17 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 ### IDK-006 — Frame the provider CLI version/authentication-discovery decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame the remaining unresolved part of provider operations — supported Codex/Claude CLI version ranges and how installation/authentication are discovered safely — given Appendix H D7 already resolves transport, timeout, environment, cancellation, and output-contract mechanics.
+- Status: Approved — decision version 1.0 recorded 2026-08-13
+- Objective: Record the approved Codex/Claude CLI version ranges and the safe installation/authentication discovery policy, completing Appendix H D7's provider transport decision.
 - User-visible outcome: None directly; determines what "provider unavailable/misconfigured" detection can safely report.
 - PRD traceability: AI-02 (contributing)
-- Appendix H decisions: D7 (transport/timeout/env/cancellation resolved; version/auth-discovery specifics remain open).
+- Appendix H decisions: D7 (transport, timeout, environment, cancellation, version, and authentication discovery resolved by decision version 1.0).
 - Owning module: provider
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q7, partially resolved; IMPLEMENTATION_SPEC §12.3 Q6): "Which Codex and Claude CLI versions are supported, and how are installation and authentication discovered safely?"
+  - Resolved question (PRD §14 Q7; IMPLEMENTATION_SPEC §12.3 Q6): the supported ranges, exact commands, fixed models, environment policy, timers, and safe discovery procedure are recorded in `docs/decisions/IDK-006-provider-cli-support.md`.
   - Evidence required: supported CLI version ranges for Codex 5.6 Terra/high and Claude, and a safe (non-secret-leaking) authentication-discovery procedure consistent with D7's env-allowlist and redaction rules (spec §8.5).
-  - Affected tickets and phases: gates Section 4 provider adapter implementation (IDK-403); does not block any ticket in my sections, since Sections 1–2 contain no live provider invocation (IDK-207 is explicitly cache/provenance/staleness only, fake-adapter-backed).
-  - Allowed preliminary work: none required within Sections 0–2.
-  - Stop point: no provider adapter may be marked "configured" in production until version ranges and auth discovery are approved (Phase 4 exit gate G6).
+  - Affected tickets and phases: gate G6 is satisfied for IDK-403 by decision version 1.0; implementation and security/privacy evidence remain required before configured capability may ship.
 - Out of scope:
   - CLI subprocess transport mechanics (resolved by D7, implemented in Section 4).
   - Generated-content cache/provenance contract (IDK-207).
@@ -292,18 +290,18 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - UX routes and states: None in my sections.
 - Implementation notes: None.
 - Acceptance criteria:
-  - A documented open version/auth-discovery question exists; no specific CLI command, version, or auth flow is declared supported.
+  - Decision version 1.0 records every required provider/version/command/model/discovery/environment/timer/cancellation/schema/recovery/evidence row and is mechanically enforced by IDK-403.
 - Minimum required tests:
-  - Automated: None — decision framing carries no automated test.
-  - Manual: Engineering owner approves the version matrix and auth-discovery procedure.
-  - Existing coverage reused: None.
+  - Automated: IDK-403 provider discovery, adapter, security, capability-cache, and wiring tests demonstrate the adopted matrix.
+  - Manual: Engineering owner approved decision version 1.0 on 2026-08-13.
+  - Existing coverage reused: official primary CLI references and read-only local CLI help/version/status probes recorded in the decision artifact.
 - Failure and recovery:
-  - Unresolved: provider capability reports "unavailable/unconfigured" rather than inventing a supported version.
+  - Missing executable, unsupported version/command surface, and unavailable authentication remain distinct fail-closed capability states with fixed recovery guidance.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (engineering owner per PRD §13). Required artifact: an approved provider CLI version matrix and authentication-discovery procedure.
+  - Approved by the engineering owner on 2026-08-13. Artifact: `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed with the IDK-403/404 implementation.
 
 ### IDK-007 — Frame the runner enablement and resource-posture decision
 
@@ -1551,7 +1549,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-403 — CLI provider port: disclosure gate and schema quarantine
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Blocked by IDK-006
+- Status: Complete — activated under approved IDK-006 decision version 1.0
 - Objective: Deliver the D7 CLI-subprocess provider port for Codex 5.6 Terra/high (default) and Claude (alternative) with no-shell argv construction, stdin/temp-file context delivery, per-provider environment allowlist, three configurable timers, process-group cancellation/timeout, pinned per-adapter output contracts, and mandatory PRV-01 disclosure-before-enqueue with schema quarantine for invalid output.
 - User-visible outcome: Before any provider-backed action first runs, the learner sees and accepts a network/provider disclosure; a misconfigured or unauthenticated provider is reported as a recoverable configuration error rather than a generic timeout; invalid model output never becomes a lesson, evaluation, or governed mutation — it is quarantined and surfaced as a retryable failure.
 - PRD traceability: AI-01 (primary), AI-02 (primary), PRV-01 (primary), PRV-02 (primary), NFR-05 (primary), NFR-09 (primary).
@@ -1563,19 +1561,19 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - Prompt/context delivered via stdin or a restricted temporary file only — never argv (which leaks into process listings and logs).
   - Unused stdin closed to `/dev/null`; mandatory provider-specific non-interactive configuration.
   - Per-provider environment variable allowlist, distinct from the runner's separate minimal allowlist (RUN-02's environment policy is IDK-406's, not duplicated here).
-  - Three configurable timers — first-output heartbeat, inactivity timeout, absolute cap — implemented as server configuration with numeric values left TBD pending IDK-006.
-  - No-first-output is classified as a recoverable provider configuration/authentication error, distinct from a generic timeout classification.
-  - Cancel and timeout kill the process group and descendants; timeout-truncated output is classified retryable-with-diagnostics, never schema-quarantined.
-  - Each adapter pins an explicit output contract version (e.g., JSONL events plus final-line JSON); only schema-validated output crosses the port.
+  - Three fixed, typed timers approved by IDK-006 — 20 seconds to first valid JSON event, 180 seconds of event inactivity, and a 1,200 second absolute cap.
+  - No-first-output, inactivity timeout, and absolute timeout have distinct fixed classifications.
+  - Cancel and timeout kill the process group and descendants; failed and timeout-truncated streams are discarded after reduction to a safe classification and are never schema-quarantined.
+  - Each adapter pins an explicit versioned event-stream output contract; only schema-validated output crosses the port.
   - Invalid output is written to `schema_quarantines` and can never become a `generated_artifacts`, `assessments`, evidence, or any governed mutation.
   - PID/PGID/temp path persisted at spawn (`provider_requests`); startup verifies recorded process-start identity before signalling, reporting cleanup failure rather than killing a reused PID.
   - PRV-01 disclosure check before enqueue: `GET /disclosures`; `POST /disclosures/{category}/accept`; `POST .../revoke`; missing/unaccepted disclosure returns `412` at enqueue, before any job is created.
-  - `GET /provider-capabilities` reports configured/unavailable per provider — never assumes availability.
+  - `GET /provider-capabilities` reports `executable-missing`, `unsupported-version`, `authentication-unavailable`, or `configured` per provider — never assumes availability.
   - PRV-02 data minimization: only the categories listed in spec §8.5 (required learner context, selected evidence/answers, approved import excerpts, canonical/source context, requested output schema, operation metadata) are sent; redaction categories (credentials/tokens/cookies/auth headers, provider auth env values, AWS keys/connection secrets, unrelated env vars, avoidable absolute paths/usernames, raw prompt/transcript/artifact bodies in ordinary logs, quarantined raw output) never appear in ordinary logs.
 - Out of scope:
   - Which specific generation/evaluation call sites use this port (IDK-404 wires callers).
   - The runner's separate subprocess policy (IDK-406) — the low-level subprocess utility is shared per D7, but the runner's own environment/limits are IDK-406's.
-  - Exact provider CLI commands, supported version ranges, and installation/authentication-discovery steps — TBD, IDK-006; not invented here.
+  - Exact commands, version ranges, model behavior, environment policy, and authentication discovery are approved in `docs/decisions/IDK-006-provider-cli-support.md`.
 - Data and invariants:
   - `provider_requests`: owner/goal/job, purpose, adapter/contract versions, context-ref hash, disclosure ref, PID/PGID/temp path, lifecycle/diagnostic; raw prompt is never a normal log field (only a redacted or securely-referenced form is retained per PRV-02).
   - `schema_quarantines`: request, raw-output secure ref/hash, expected schema version, validation errors, timestamp; a `schema_quarantines` row can never be joined into a result, evidence, or any governed-state write path — enforced at the repository boundary, not just by convention.
@@ -1583,34 +1581,34 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 - API/domain/event contracts:
   - `GenerateRequest`/`GenerateResult` and `EvaluationRequest`/`EvaluationResult` per spec §5.3 — result is `succeeded`/`failed`/`quarantined`, never a bare raw string.
   - Enqueue without a prior disclosure acceptance for the relevant category → `412`.
-  - `GET /provider-capabilities` → `configured` or `unavailable` per provider, never inferred from a successful past call alone.
+  - `GET /provider-capabilities` → one of the four fixed capability states per provider, never inferred from a successful past call alone.
 - UX routes and states:
   - Applies to `/app/topic-studio`, `/app/practice`, `/app/mock`, `/app/interview-hub` wherever a provider-backed action is offered — `idle, preparing, waiting-for-disclosure, queued, running, succeeded, failed, cancelled` (Appendix D model/source request states).
   - `/app/settings` provider/network disclosure panel reads the same `network_disclosures`/`provider-capabilities` this ticket exposes (IDK-409 owns the Settings page itself).
 - Implementation notes:
-  - The heartbeat/inactivity/absolute-cap timers are read from configuration, not hardcoded, so IDK-006's eventual values require no code change to the adapter.
+  - The heartbeat/inactivity/absolute-cap timers are validated as the exact approved policy values by typed configuration.
   - Adapter and runner share the same low-level "spawn, capture, kill process group" subprocess utility per D7, but each owns its own environment allowlist and policy object — no cross-import of policy between `provider` and `runner` modules.
 - Acceptance criteria:
   - A fake adapter test proves no shell is invoked (argv array only) and prompt/context never appears in the constructed argv.
   - An enqueue attempt without a prior disclosure acceptance for the operation's category returns `412` and creates no job.
   - Output that fails schema validation is written to `schema_quarantines` and is unreachable from any `generated_artifacts`/`assessments`/evidence query.
-  - A simulated no-first-output condition is classified as a provider-configuration/authentication error, distinct from an inactivity-timeout or absolute-cap classification.
+  - A simulated no-first-output condition is classified as `no-first-output`, distinct from `inactivity-timeout` and `absolute-timeout`.
   - Cancel/timeout kills the full process group including a spawned child, verified via the fake `ProcessPort`.
 - Minimum required tests:
   - Automated: Provider fake-adapter test — argv/stdin/env construction (no shell, no prompt-in-argv), the `412` disclosure gate before enqueue, the three timer classifications (heartbeat/inactivity/absolute) resolving to distinct outcomes, process-group cancellation, and invalid output landing in `schema_quarantines` and never becoming a result/evidence/governed mutation. This is the primary disclosure/schema-quarantine test for the codebase; no other ticket duplicates it.
   - Manual: Privacy reviewer inspects a captured `provider_requests` diagnostic record and confirms every PRV-02 redaction category is absent (part of G6/G11 review).
   - Existing coverage reused: None — no prior test exercises a real provider adapter.
 - Failure and recovery:
-  - An unavailable provider (missing CLI, failed auth) reports `provider-capabilities: unavailable` and any dependent action shows a recoverable error, never a generic crash.
-  - Timeout-truncated output is retained as retryable diagnostic material distinct from a quarantine record; retry re-attempts the same request under the job's dedupe key per IDK-401's cache-checked-rerun typing for generation.
+  - A missing executable, unsupported CLI, or unavailable authentication reports its exact fixed capability state and any dependent action shows a recoverable error, never a generic crash.
+  - Timeout-truncated output is discarded after the fixed retryable classification is recorded; retry re-attempts the same request under the job's dedupe key per IDK-401's cache-checked-rerun typing for generation.
 - Removal/replacement: None. No existing provider integration prototype exists to remove; the Settings page's current "Providers and network... Not connected" static text is replaced by IDK-409's disclosure UI, not by this ticket.
-- Approval gate: Blocked by IDK-006 (provider CLI versions and authentication discovery) — the three timer values and the exact CLI invocation/auth-discovery steps cannot be finalized until IDK-006 resolves; the port, disclosure gate, and quarantine mechanism are fully specified and testable against a fake adapter without that decision.
-- Estimate: TBD; implementation team to estimate after approval.
+- Approval gate: Satisfied by `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.0; implementation evidence is mapped in `docs/provider/IDK-403-404-acceptance-map.md`.
+- Estimate: Completed with the IDK-006/403/404 implementation.
 
 ### IDK-404 — Wire live generation, evaluation, tutor conversation, and source retrieval
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete — live local CLI composition and deterministic wiring coverage recorded
 - Objective: Connect Practice, Mock, topic-tutor conversation, and disclosed source retrieval to the real two-lane job engine (IDK-401) and the validated CLI provider port (IDK-403), honoring the D3 cache contract owned by IDK-207, so interview and learning flows stop depending on fakes/local reducers and run against live generation and evaluation.
 - User-visible outcome: A learner's Practice submission, Mock turn, topic-tutor question, and any explicit "regenerate" or source-retrieval action now actually enqueue and complete through the real job/provider pipeline; nothing changes in the approved UX itself — only the data path underneath becomes live.
 - PRD traceability: CNT-03 (contributing), CNT-04 (contributing), AI-01 (contributing), LRN-02 (contributing — topic tutor conversation wiring).
@@ -1620,7 +1618,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 - Scope:
   - Replace the fake evaluator/generator test doubles used by IDK-302's and IDK-303's interview-turn flows with real interactive-lane job enqueues that call through IDK-403's provider port, for: Practice answer evaluation, Mock next-turn generation, Mock final evaluation, and topic-tutor conversation turns.
   - Wire `POST /topics/{topicId}/generate` and `POST /artifacts/{id}/regenerate` (background-lane generation jobs) to the D3 cache key `(canonical_graph_version, topic_id, goal_id, layer, topic_mapped_approved_imports_hash, prompt_template_version)` exactly as IDK-207 defines it — this ticket enqueues against that key and single-flights per key; it does not alter the key's shape, its staleness-comparison rule, or the "regeneration only via explicit action or a key-changing event" invariant.
-  - Wire disclosed source retrieval (`GET /sources`, `GET /sources/{id}`, snapshot fetch) as an explicit, disclosure-gated background-lane operation — never silently triggered by a page view or a generation job as a side effect.
+  - Wire disclosed source retrieval as an explicit `POST /sources/{sourceId}/retrieve` background-lane operation — never silently triggered by a page view, generation job, or cache-key change.
   - Withdrawn/unavailable sources retain their stored status and last known provenance through this wiring; a retrieval attempt against a withdrawn source does not attempt to re-fetch it silently.
   - Route Practice/Mock/tutor/generation results through IDK-403's schema-validated contract only — no direct consumption of unvalidated provider output anywhere in this ticket's call sites.
 - Out of scope:
@@ -1631,9 +1629,9 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 - Data and invariants:
   - Every call site this ticket touches enqueues through `jobs`/`job_results` (IDK-401) and reads results through IDK-403's `GenerateResult`/`EvaluationResult` contracts; no call site bypasses either.
   - Generation calls at a given cache key remain single-flighted: two near-simultaneous Practice/tutor/refresher requests against the same key produce one job, not two.
-  - Source retrieval writes `source_snapshots` only through the disclosed, explicit path; no background job independently decides to fetch a source without a preceding explicit trigger (regeneration request, explicit "fetch source" action, or a key-changing event already approved elsewhere).
+  - Source retrieval writes `source_snapshots` only through the separately disclosed, explicit source-retrieval POST; no provider generation/regeneration or key-changing event fetches a source as a side effect.
 - API/domain/event contracts:
-  - Reuses IDK-401's `POST /jobs/*`, IDK-402's `GET /events`, IDK-403's provider contracts, and IDK-207's cache-key contract without modification; this ticket adds no new endpoint.
+  - Reuses IDK-401's job contracts, IDK-402's `GET /events`, IDK-403's provider contracts, and IDK-207's cache-key contract; source retrieval remains its own explicit POST contract and disclosure category.
   - Topic-tutor conversation turns are persisted as `learning_content` conversation entries linked to the topic, following the same schema-validated-output-only rule as generation/evaluation.
 - UX routes and states:
   - `/app/topic-studio` (tutor conversation, generation/regeneration), `/app/practice`, `/app/mock`, `/app/interview-hub` (refresher generation) — states are unchanged from IDK-301/302/303/IDK-201's definitions; this ticket only makes `queued/running/succeeded/failed` reflect real work instead of a fake.
@@ -1644,7 +1642,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - A Practice submission actually produces a `provider_requests` row and a schema-validated `EvaluationResult` reaching `interview_turn_results`, with no fake/local evaluator remaining in the production call path.
   - A Mock next-turn request and final-evaluation request both traverse the real job/provider pipeline identically to Practice's evaluation path.
   - Two concurrent regenerate requests for the same topic/goal/layer/graph-version/imports-hash/template-version produce exactly one `generated_artifacts` row and one job.
-  - A source retrieval never occurs as a side effect of merely opening a topic page; it occurs only from an explicit regenerate/fetch action or an already-approved key-changing event.
+  - A source retrieval never occurs as a side effect of opening a topic page, provider regeneration, or a key-changing event; it occurs only from the explicit source-retrieval POST.
 - Minimum required tests:
   - Automated: Integration test — a Practice submission (or topic-tutor turn) enqueued through the real two-lane job system resolves via the schema-validated provider port and produces a cache-keyed result matching the shapes IDK-207 and IDK-403 already define; the test asserts the wiring path only (enqueue → real job claim → real provider call → validated result → visible to the caller), not the cache-key invariant or the schema-quarantine invariant themselves, which remain owned by IDK-207 and IDK-403 respectively.
   - Manual: Reviewer confirms, via the real (non-fake) provider adapter in a local configured environment, that opening a topic page performs no network call and that only an explicit regenerate action does.
@@ -1653,8 +1651,8 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - A provider or job failure surfaces through the same `failed-recoverable` states IDK-302/303/401/403 already define; this ticket introduces no new failure classification.
   - If source retrieval fails, the source's prior status/provenance is retained unchanged (per spec §6.5), not marked withdrawn or unavailable solely because one fetch attempt failed.
 - Removal/replacement: None new — this ticket removes whatever fake/local evaluator or generator stand-ins IDK-302/303 introduced for their own testing, replacing them with the real call sites; it does not itself own deletion of any prototype UI or localStorage artifact already assigned elsewhere.
-- Approval gate: Inherits IDK-403's Blocked-by-IDK-006 constraint for any environment that requires a real provider CLI to be configured; the wiring code itself is written and tested against IDK-403's fake adapter and does not independently require a new gate.
-- Estimate: TBD; implementation team to estimate after approval.
+- Approval gate: Satisfied through the approved IDK-006 policy and completed IDK-403 port; deterministic fake-provider integration tests remain authoritative and no paid live invocation is required.
+- Estimate: Completed with the IDK-006/403/404 implementation.
 
 ### IDK-405 — Hands-on lifecycle and static/runtime separation
 
@@ -2346,7 +2344,7 @@ Every dependency points backward to a decision ticket or a lower-numbered implem
 | IDK-003 | 0 | Ready | — |
 | IDK-004 | 0 | Ready | — |
 | IDK-005 | 0 | Ready | — |
-| IDK-006 | 0 | Ready | — |
+| IDK-006 | 0 | Approved | — |
 | IDK-007 | 0 | Ready | — |
 | IDK-008 | 0 | Ready | — |
 | IDK-009 | 0 | Ready | — |
@@ -2374,8 +2372,8 @@ Every dependency points backward to a decision ticket or a lower-numbered implem
 | IDK-304 | 3 | Blocked by IDK-009 | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
 | IDK-401 | 4 | Ready | IDK-101 |
 | IDK-402 | 4 | Ready | IDK-101, IDK-401 |
-| IDK-403 | 4 | Blocked by IDK-006 | IDK-006, IDK-101, IDK-401 |
-| IDK-404 | 4 | Ready | IDK-207, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-403 |
+| IDK-403 | 4 | Complete | IDK-006, IDK-101, IDK-401 |
+| IDK-404 | 4 | Complete | IDK-207, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-403 |
 | IDK-405 | 4 | Blocked by IDK-004, IDK-009 | IDK-004, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
 | IDK-406 | 4 | Blocked by IDK-005, IDK-007 | IDK-005, IDK-007, IDK-401, IDK-405 |
 | IDK-407 | 4 | Ready | IDK-101, IDK-102, IDK-106, IDK-201 |
@@ -2534,7 +2532,6 @@ Nothing below has been answered, and no ticket's acceptance criteria assume an a
 | Approved sources, licenses, snapshot/cache/withdrawal/replacement rules | IDK-003 | Real citations in IDK-207/IDK-201; content release |
 | Learner-facing mid/senior/staff competency descriptions | IDK-004 | Onboarding copy (IDK-104/IDK-105); scenario role metadata (IDK-405) |
 | Supported OS, Java/Python versions, build tools, unsupported configurations | IDK-005 | Runner capability claims (IDK-406) |
-| Supported Codex/Claude CLI versions; safe installation and authentication discovery | IDK-006 | Provider adapter activation and timer values (IDK-403) |
 | Runner enablement posture; wall-time/process/memory/CPU/output/temp-storage limits and cleanup posture | IDK-007 | Runner activation (IDK-406) |
 | Database exercise posture — learner-supplied connection only, or product-managed instance | IDK-008 | Optional relational-connector capability (IDK-406) |
 | Representative assessment scenarios, rubric versions, role-level breadth, and the derived-state rule version | IDK-009 | Production Practice/Mock/report content (IDK-302, IDK-304, IDK-405); authoritative rule version (IDK-205); review scheduling parameters (IDK-206) |

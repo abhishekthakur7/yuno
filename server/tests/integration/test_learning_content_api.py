@@ -6,6 +6,7 @@ from urllib.parse import quote
 from fastapi.testclient import TestClient
 
 from tests.job_assertions import wait_for_job
+from tests.provider_fakes import install_provider_fake
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -20,6 +21,13 @@ from yuno.modules.profiles_goals.service import create_goal
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.ids import new_id
+
+
+class FailingGenerationAdapter:
+    model = "fixture-generation-failure"
+
+    def generate(self, _request):
+        raise RuntimeError("synthetic provider failure")
 
 
 def _inline(value: str) -> str:
@@ -158,6 +166,7 @@ def test_generation_contract_returns_job_ref_without_claiming_content(
     client: TestClient, uow_factory: UnitOfWorkFactory
 ) -> None:
     _graph_id, topic_id, goal_id = _seed(uow_factory)
+    install_provider_fake(client, FailingGenerationAdapter())
     accepted = client.post(
         "/api/v1/disclosures/provider-generation/accept",
         json={"disclosure_version": "provider-network-v1"},

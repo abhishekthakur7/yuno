@@ -17,6 +17,7 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.api.provider_selection import authorize_provider_job
 from yuno.config import Settings
 from yuno.modules.evidence_evaluation.domain import EvidenceEvaluationIdempotencyRecord
 from yuno.modules.hands_on.ports import HandsOnUnitOfWork
@@ -24,8 +25,8 @@ from yuno.modules.hands_on.service import (
     complete_static_review,
     get_lifecycle,
     prepare_submission,
+    validate_submission_payload,
 )
-from yuno.modules.provider.service import require_disclosure
 from yuno.shared.application.jobs import JobDispatcher, JobLane, JobRequest
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import IdempotencyConflictError
@@ -144,11 +145,16 @@ def submit_hands_on(
         if saved.result_ref is None:
             raise RuntimeError("The reserved hands-on rubric is unavailable.")
         rubric_id = saved.result_ref
-        disclosure = require_disclosure(uow, owner_id)
-        uow.commit()
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
     else:
-        disclosure = require_disclosure(uow, owner_id)
         answer = body.cross_question_response
+        validate_submission_payload(
+            body.artifact,
+            answer.question_id if answer else None,
+            answer.response if answer else None,
+            max_payload_bytes=settings.evidence_payload_max_bytes,
+        )
+        authorization = authorize_provider_job(dispatcher, uow, owner_id)
         artifact, rubric = prepare_submission(
             uow,
             owner_id,
@@ -185,9 +191,9 @@ def submit_hands_on(
                 False,
             )
         )
-        uow.commit()
         saved = response
-    ref = dispatcher.enqueue(
+    ref = dispatcher.reserve(
+        uow,
         JobRequest(
             "review_hands_on_artifact",
             owner_id,
@@ -199,8 +205,9 @@ def submit_hands_on(
             lane=JobLane.INTERACTIVE,
             schema_version="hands-on-review-v1",
             request_ref=f"HandsOnArtifact:{artifact.id}",
-            disclosure_ref=disclosure.id,
-        )
+            disclosure_ref=authorization.disclosure.id,
+            provider_name=authorization.provider.value,
+        ),
     )
     if needs_completion:
         uow.evidence.complete_idempotency(
@@ -209,7 +216,7 @@ def submit_hands_on(
             key,
             saved.model_copy(update={"deduplicated": True}).model_dump_json(),
         )
-        uow.commit()
+    uow.commit()
     return accepted_job(ref)
 
 

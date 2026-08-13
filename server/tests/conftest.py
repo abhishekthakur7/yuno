@@ -65,6 +65,7 @@ def settings(migrated_database_url: str, tmp_path) -> Settings:
         database_url=migrated_database_url,
         structured_log_directory=tmp_path / "logs",
         export_privacy_review_approved=True,
+        provider_capability_discovery_enabled=False,
     )
 
 

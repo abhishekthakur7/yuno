@@ -86,24 +86,12 @@ def prepare_submission(
     max_payload_bytes: int,
     retained_owner_limit: int,
 ):
-    content = artifact_content.strip()
-    if not content:
-        raise DomainValidationError("artifact must not be blank.")
-    if (question_id is None) != (question_response is None):
-        raise DomainValidationError(
-            "question_id and response must be supplied together."
-        )
-    if question_response is not None and not question_response.strip():
-        raise DomainValidationError("cross-question response must not be blank.")
-    response = question_response.strip() if question_response is not None else ""
-    retained_bytes = len(content.encode("utf-8", errors="strict")) + len(
-        response.encode("utf-8", errors="strict")
+    content, response = validate_submission_payload(
+        artifact_content,
+        question_id,
+        question_response,
+        max_payload_bytes=max_payload_bytes,
     )
-    if retained_bytes > max_payload_bytes:
-        raise EvidenceTooLargeError(
-            "A hands-on revision and its cross-question response may contain at most "
-            f"{max_payload_bytes} UTF-8 bytes in total."
-        )
     _goal, topic, role, level, constraints = scenario_for(
         uow, owner_id, goal_id, topic_id
     )
@@ -182,6 +170,34 @@ def prepare_submission(
     )
     uow.hands_on.add_artifact(artifact)
     return artifact, rubric
+
+
+def validate_submission_payload(
+    artifact_content: str,
+    question_id: str | None,
+    question_response: str | None,
+    *,
+    max_payload_bytes: int,
+) -> tuple[str, str]:
+    content = artifact_content.strip()
+    if not content:
+        raise DomainValidationError("artifact must not be blank.")
+    if (question_id is None) != (question_response is None):
+        raise DomainValidationError(
+            "question_id and response must be supplied together."
+        )
+    if question_response is not None and not question_response.strip():
+        raise DomainValidationError("cross-question response must not be blank.")
+    response = question_response.strip() if question_response is not None else ""
+    retained_bytes = len(content.encode("utf-8", errors="strict")) + len(
+        response.encode("utf-8", errors="strict")
+    )
+    if retained_bytes > max_payload_bytes:
+        raise EvidenceTooLargeError(
+            "A hands-on revision and its cross-question response may contain at most "
+            f"{max_payload_bytes} UTF-8 bytes in total."
+        )
+    return content, response
 
 
 def complete_static_review(

@@ -156,6 +156,7 @@ test.beforeEach(async ({ page }) => {
     provider_selection: null,
     row_version: 1,
   }
+  let providerDisclosureAccepted = false
   const lifecyclePolicy: DataLifecyclePolicy = {
     policy_version: '1.0', import_original_max_bytes: 10_485_760, import_retained_owner_limit: 100,
     import_statements_per_import_limit: 10_000, import_unreviewed_owner_limit: 50_000,
@@ -748,6 +749,28 @@ test.beforeEach(async ({ page }) => {
       result_hash: 'hands-on-review-hash-e2e',
     } })
   })
+  await page.route('**/api/v1/jobs/practice-job-*', async route => {
+    const jobId = new URL(route.request().url()).pathname.split('/').at(-1)!
+    await route.fulfill({ json: {
+      job_id: jobId, kind: 'evaluate_practice_answer', status: 'succeeded',
+      enqueued_at: '2026-08-12T00:07:00Z', deduplicated: false, lane: 'interactive',
+      retryable: false, failure_reference: null, result_ref: `PracticeResult:${jobId}`,
+      result_hash: `practice-result-hash-${jobId}`,
+    } })
+  })
+  await page.route('**/api/v1/jobs/mock-final-evaluation-e2e-1', route => route.fulfill({ json: {
+    job_id: 'mock-final-evaluation-e2e-1', kind: 'evaluate_mock_final', status: 'running',
+    enqueued_at: '2026-08-12T00:08:00Z', deduplicated: false, lane: 'interactive',
+    retryable: false, failure_reference: null, result_ref: null, result_hash: null,
+  } }))
+  await page.route('**/api/v1/jobs/*generation-job-e2e-1', route => {
+    const jobId = new URL(route.request().url()).pathname.split('/').at(-1)!
+    return route.fulfill({ json: {
+      job_id: jobId, kind: 'generate_topic_content', status: 'running',
+      enqueued_at: '2026-08-12T00:02:00Z', deduplicated: false, lane: 'background',
+      retryable: true, failure_reference: null, result_ref: null, result_hash: null,
+    } })
+  })
   await page.route('**/api/v1/diagnostics', async route => {
     if (route.request().method() !== 'POST') {
       await route.fulfill({ status: 405, json: { message: 'Method not allowed' } })
@@ -991,11 +1014,15 @@ test.beforeEach(async ({ page }) => {
     } })
   })
   await page.route('**/api/v1/provider-capabilities', route => route.fulfill({ json: [
-    { provider: 'codex', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null },
-    { provider: 'claude', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null },
+    { provider: 'codex', state: 'configured', reason: null, recovery_action: null, model: 'gpt-5.6-terra', adapter_version: 'codex-cli-adapter-v1', contract_version: 'codex-jsonl-agent-message-v1' },
+    { provider: 'claude', state: 'authentication-unavailable', reason: 'The CLI did not confirm local authentication and configuration.', recovery_action: 'Complete the CLI\'s local sign-in, then refresh.', model: null, adapter_version: null, contract_version: null },
   ] }))
+  await page.route('**/api/v1/disclosures/provider-generation/accept', async route => {
+    providerDisclosureAccepted = true
+    await route.fulfill({ json: { id: 'provider-disclosure-e2e', category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: '2026-08-13T00:01:00Z', revoked_at: null } })
+  })
   await page.route('**/api/v1/disclosures', route => route.fulfill({ json: [
-    { id: null, category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: null, revoked_at: null },
+    { id: providerDisclosureAccepted ? 'provider-disclosure-e2e' : null, category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: providerDisclosureAccepted ? '2026-08-13T00:01:00Z' : null, revoked_at: null },
     { id: null, category: 'source-retrieval', operation: 'Explicit authoritative source retrieval', destination: 'Approved canonical URL', data_categories: ['source URL', 'operation metadata'], disclosure_version: 'source-network-v1', accepted_at: null, revoked_at: null },
   ] }))
 })
@@ -1534,6 +1561,20 @@ test('progress display persists as presentation-only and leaves learning APIs un
   await expect(page.locator('[data-progress-display="simple"]')).toBeVisible()
   const after = await learningApiSnapshot(page, seeded.id, seeded.active_assessment_id)
   expect(after).toEqual(before)
+})
+
+test('Settings exposes truthful provider recovery, selection, and disclosure separation', async ({ page, diagnostics }) => {
+  void diagnostics
+  await open(page, '/app/settings')
+  const selector = page.getByRole('combobox', { name: 'Preferred provider' })
+  await expect(selector.getByRole('option', { name: /claude · authentication-unavailable/i })).toHaveAttribute('disabled', '')
+  await selector.selectOption('codex')
+  await expect(page.getByText('Provider selection saved.')).toBeVisible()
+  await expect(page.getByText(/Disclosure acceptance is not provider authentication/i)).toBeVisible()
+  await expect(page.getByText(/Complete the CLI's local sign-in, then refresh/i)).toBeVisible()
+  await page.getByRole('button', { name: 'Accept disclosure' }).first().click()
+  await expect(page.getByText(/Not accepted; future network enqueues in this category are blocked/i)).toHaveCount(1)
+  await expect(selector).toHaveValue('codex')
 })
 
 test('server-parsed imports stay exact and untrusted while learner decisions remain personal', async ({ page, diagnostics }) => {

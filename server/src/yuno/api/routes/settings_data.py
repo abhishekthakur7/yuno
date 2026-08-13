@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from yuno.api.contracts import (
     DataLifecyclePolicyResponse,
@@ -20,6 +20,7 @@ from yuno.api.dependencies import (
     parse_if_match,
 )
 from yuno.config import Settings
+from yuno.modules.provider.domain import ProviderName
 from yuno.modules.settings_data.domain import OwnerSettings
 from yuno.modules.settings_data.ports import SettingsUnitOfWork
 from yuno.modules.settings_data.service import (
@@ -98,7 +99,12 @@ def update_settings(
     uow: Annotated[SettingsUnitOfWork, Depends(get_unit_of_work)],
     match: Annotated[str, Depends(if_match)],
     clock: Annotated[Clock, Depends(get_clock)],
+    request: Request,
 ) -> OwnerSettingsResponse:
+    if body.provider_selection is not None:
+        request.app.state.provider_registry.require_adapter(
+            ProviderName(body.provider_selection.value)
+        )
     updated = patch_owner_settings(
         uow,
         owner_id,

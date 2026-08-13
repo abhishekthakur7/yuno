@@ -37,6 +37,7 @@ class JobRequest:
     schema_version: str = "1"
     request_ref: str | None = None
     disclosure_ref: str | None = None
+    provider_name: str | None = None
     confirmation_ref: str | None = None
     correlation_id: str = field(default_factory=new_id)
     request_id: str = field(default_factory=new_id)
@@ -126,6 +127,8 @@ class JobDispatcher(Protocol):
     """Single-flight non-terminal jobs and reject conflicting idempotency keys."""
 
     def enqueue(self, request: JobRequest) -> JobRef: ...
+
+    def reserve(self, transaction: Any, request: JobRequest) -> JobRef: ...
 
     def get(self, owner_id: str, job_id: str) -> JobRef | None: ...
 

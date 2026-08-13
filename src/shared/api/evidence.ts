@@ -117,11 +117,11 @@ export async function requestAssessmentReevaluation(
   return data
 }
 
-export async function retrieveSource(sourceId: string): Promise<JobRef> {
+export async function retrieveSource({ sourceId, idempotencyKey }: { sourceId: string; idempotencyKey: string }): Promise<JobRef> {
   const { data, error, response } = await client.POST('/api/v1/sources/{source_id}/retrieve', {
     params: {
       path: { source_id: sourceId },
-      header: { 'Idempotency-Key': crypto.randomUUID() },
+      header: { 'Idempotency-Key': idempotencyKey },
     },
   })
   if (error || !data) failure(error, response.status, 'Source retrieval could not be started.')

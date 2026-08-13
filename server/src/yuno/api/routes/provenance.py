@@ -23,6 +23,7 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.api.provider_selection import selected_provider_metadata
 from yuno.modules.learning_content.service import resolve_generation_context
 from yuno.modules.provenance.domain import SourceAvailability
 from yuno.modules.provenance.service import (
@@ -133,23 +134,23 @@ def retrieve_source(
         disclosure_version="source-network-v1",
     )
     command, _ = reserve_source_retrieval(uow, owner_id, source_id, key, new_id())
-    uow.commit()
-    return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                "retrieve_source_snapshot",
-                owner_id,
-                {"source_id": source_id},
-                dedupe_key=source_id,
-                idempotency_key=key,
-                requested_job_id=command.job_id,
-                lane=JobLane.BACKGROUND,
-                schema_version="source-snapshot-v1",
-                request_ref=f"Source:{source_id}",
-                disclosure_ref=disclosure.id,
-            )
-        )
+    ref = dispatcher.reserve(
+        uow,
+        JobRequest(
+            "retrieve_source_snapshot",
+            owner_id,
+            {"source_id": source_id},
+            dedupe_key=source_id,
+            idempotency_key=key,
+            requested_job_id=command.job_id,
+            lane=JobLane.BACKGROUND,
+            schema_version="source-snapshot-v1",
+            request_ref=f"Source:{source_id}",
+            disclosure_ref=disclosure.id,
+        ),
     )
+    uow.commit()
+    return accepted_job(ref)
 
 
 @router.get("/claims/{claim_id}", response_model=ClaimResponse)
@@ -219,13 +220,15 @@ def artifact_provenance(
             }
         )
         evidence_hash = snapshot.evidence_state_hash
-    adapter = request.app.state.provider_port
+    provider, model = selected_provider_metadata(
+        uow, owner_id, request.app.state.provider_registry
+    )
     current_hash = hash_payload(
         {
             "profile_hash": profile_hash,
             "evidence_state_hash": evidence_hash,
-            "provider": getattr(adapter, "provider", snapshot.provider),
-            "model": getattr(adapter, "model", snapshot.model),
+            "provider": provider or snapshot.provider,
+            "model": model or snapshot.model,
             "schema": snapshot.schema_version,
             "contract": snapshot.contract_version,
         }

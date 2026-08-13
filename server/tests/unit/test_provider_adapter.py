@@ -4,254 +4,21 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import replace
 from itertools import chain, repeat
 
 import pytest
 
-from yuno.api.provider_runtime import MappingValidator
 from yuno.modules.provider import adapters as provider_adapters
-from yuno.modules.provider.adapters import CliProviderAdapter, LocalProcessPort
+from yuno.modules.provider.adapters import (
+    FileSecureOutputStore,
+    LocalProcessPort,
+    remove_unreferenced_provider_outputs,
+)
 from yuno.modules.provider.domain import (
-    ProcessOutcome,
     ProviderFailureClassification,
-    ProviderInput,
-    ProviderName,
-    ProviderResultState,
     ProviderTimers,
 )
 from yuno.modules.provider.ports import ProcessSpec
-
-
-class MemoryStore:
-    def __init__(self) -> None:
-        self.values = []
-
-    def put(self, raw_output: bytes) -> str:
-        self.values.append(raw_output)
-        return "secure-provider-output:hash"
-
-
-class FakeProcess:
-    def __init__(self, outcome: ProcessOutcome) -> None:
-        self.outcome = outcome
-        self.spec = None
-        self.cancelled = False
-
-    def run(self, spec, *, on_spawn, cancelled):
-        self.spec = spec
-        self.cancelled = cancelled()
-        on_spawn(self.outcome.pid, self.outcome.pgid, self.outcome.process_identity)
-        return self.outcome
-
-
-class ObjectValidator:
-    def validate(self, value):
-        if not isinstance(value, dict) or "answer" not in value:
-            raise ValueError("answer is required")
-        return value
-
-
-def _request() -> ProviderInput:
-    return ProviderInput(
-        owner_id="owner",
-        goal_id=None,
-        job_id="job",
-        purpose="evaluation",
-        context={"private": "prompt body"},
-        context_ref_hash="context-hash",
-        disclosure_id="disclosure",
-        output_schema_version="evaluation-v1",
-    )
-
-
-def _adapter(outcome: ProcessOutcome):
-    process = FakeProcess(outcome)
-    store = MemoryStore()
-    adapter = CliProviderAdapter(
-        provider=ProviderName.CODEX,
-        model="fixture-model",
-        argv=("fixture-provider", "--non-interactive"),
-        adapter_version="fixture-adapter-v1",
-        contract_version="final-json-v1",
-        allowed_environment=("ALLOWED",),
-        timers=ProviderTimers(1, 2, 3),
-        process_port=process,
-        secure_output_store=store,
-        source_environment={"ALLOWED": "yes", "SECRET": "never"},
-    )
-    return adapter, process, store
-
-
-def _outcome(**changes) -> ProcessOutcome:
-    return replace(
-        ProcessOutcome(7, 7, "7:start", b'{"answer":"ok"}\n', b"", 0, True),
-        **changes,
-    )
-
-
-def test_adapter_uses_argv_stdin_and_allowlisted_environment() -> None:
-    adapter, process, _ = _adapter(_outcome())
-    result = adapter.invoke(
-        _request(), ObjectValidator(), on_spawn=lambda *_: None, cancelled=lambda: False
-    )
-    assert result.state is ProviderResultState.SUCCEEDED
-    assert process.spec.argv == ("fixture-provider", "--non-interactive")
-    assert process.spec.environment == {"ALLOWED": "yes"}
-    assert b"prompt body" in process.spec.stdin
-    assert all("prompt body" not in argument for argument in process.spec.argv)
-
-
-@pytest.mark.parametrize(
-    ("classification", "first_output"),
-    [
-        (ProviderFailureClassification.CONFIGURATION_OR_AUTHENTICATION, False),
-        (ProviderFailureClassification.INACTIVITY_TIMEOUT, True),
-        (ProviderFailureClassification.ABSOLUTE_TIMEOUT, True),
-    ],
-)
-def test_three_timer_failures_remain_distinct(classification, first_output) -> None:
-    adapter, _, store = _adapter(
-        _outcome(
-            timed_out=classification, first_output_seen=first_output, truncated=True
-        )
-    )
-    result = adapter.invoke(
-        _request(), ObjectValidator(), on_spawn=lambda *_: None, cancelled=lambda: False
-    )
-    assert result.failure_classification is classification
-    assert result.retryable is True
-    assert result.diagnostic_ref == "secure-provider-output:hash"
-    assert store.values
-
-
-def test_invalid_output_is_stored_but_never_crosses_port() -> None:
-    adapter, _, store = _adapter(_outcome(stdout=b'{"wrong":true}\n'))
-    result = adapter.invoke(
-        _request(), ObjectValidator(), on_spawn=lambda *_: None, cancelled=lambda: False
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert result.payload is None
-    assert result.quarantine is not None
-    assert result.quarantine.raw_output_ref == "secure-provider-output:hash"
-    assert store.values == [b'{"wrong":true}\n']
-
-
-def test_malformed_nested_evaluation_is_quarantined_inside_provider_port() -> None:
-    raw = (
-        b'{"state":"feedback-ready","dimensions":[{"dimension_id":"design",'
-        b'"outcome":"pass","rationale":"ok","evidence_refs":"not-a-list"}],'
-        b'"facts":[],"trade_offs":[],"citations":[],"ambiguities":[],'
-        b'"feedback":"ok","warnings":[],"limitation_labels":[]}\n'
-    )
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("evaluation"),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert result.payload is None
-    assert store.values == [raw]
-
-
-def test_evaluation_duplicate_dimensions_are_quarantined_inside_provider_port() -> None:
-    raw = (
-        b'{"state":"feedback-ready","dimensions":['
-        b'{"dimension_id":"design","outcome":"pass","rationale":"ok","evidence_refs":[]},'
-        b'{"dimension_id":"design","outcome":"pass","rationale":"ok","evidence_refs":[]}],'
-        b'"facts":[],"trade_offs":[],"citations":[],"ambiguities":[],'
-        b'"feedback":"ok","warnings":[],"limitation_labels":[]}\n'
-    )
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("evaluation", expected_dimension_ids=("design",)),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert store.values == [raw]
-
-
-def test_evaluation_wrong_expected_dimension_is_quarantined_inside_provider_port() -> (
-    None
-):
-    raw = (
-        b'{"state":"feedback-ready","dimensions":['
-        b'{"dimension_id":"wrong","outcome":"pass","rationale":"ok","evidence_refs":[]}],'
-        b'"facts":[],"trade_offs":[],"citations":[],"ambiguities":[],'
-        b'"feedback":"ok","warnings":[],"limitation_labels":[]}\n'
-    )
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("evaluation", expected_dimension_ids=("design",)),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert store.values == [raw]
-
-
-def test_generation_accepts_json_provenance_pairs_and_typed_claims() -> None:
-    raw = (
-        b'{"body":"lesson","provenance_refs":[["source","snapshot"]],'
-        b'"warnings":[],"claims":[{"claim_text":"Current fact",'
-        b'"claim_type":"time-or-version-dependent","sensitive":false,'
-        b'"citations":[{"source_id":"source","source_snapshot_id":"snapshot",'
-        b'"locator":"p. 1","support_kind":"direct","note":null}]}]}\n'
-    )
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("topic-generation"),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.SUCCEEDED
-    assert result.payload["provenance_refs"] == [["source", "snapshot"]]
-    assert store.values == []
-
-
-def test_generation_blank_duplicate_nested_values_are_quarantined() -> None:
-    raw = (
-        b'{"body":"lesson","provenance_refs":[["source","snapshot"],'
-        b'["source","snapshot"]],"warnings":[],"claims":[]}\n'
-    )
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("topic-generation"),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert store.values == [raw]
-
-
-def test_malformed_tutor_payload_is_quarantined_inside_provider_port() -> None:
-    raw = b'{"body":"   ","provenance_references":[],"warnings":[]}\n'
-    adapter, _, store = _adapter(_outcome(stdout=raw))
-    result = adapter.invoke(
-        _request(),
-        MappingValidator("tutor-turn"),
-        on_spawn=lambda *_: None,
-        cancelled=lambda: False,
-    )
-    assert result.state is ProviderResultState.QUARANTINED
-    assert result.payload is None
-    assert store.values == [raw]
-
-
-def test_cancellation_is_non_retryable() -> None:
-    adapter, _, _ = _adapter(_outcome(cancelled=True))
-    result = adapter.invoke(
-        _request(), ObjectValidator(), on_spawn=lambda *_: None, cancelled=lambda: True
-    )
-    assert result.failure_classification is ProviderFailureClassification.CANCELLED
-    assert result.retryable is False
 
 
 @pytest.mark.parametrize("trigger", ["cancel", "absolute-timeout"])
@@ -389,3 +156,107 @@ def test_local_process_bounded_drain_reads_more_than_one_chunk() -> None:
         cancelled=lambda: False,
     )
     assert outcome.stdout == expected
+
+
+def test_local_process_requires_a_valid_json_event_for_first_output() -> None:
+    outcome = LocalProcessPort().run(
+        ProcessSpec(
+            (
+                sys.executable,
+                "-c",
+                (
+                    "import sys,time; print('not-json', flush=True); "
+                    "print('token=must-not-count', file=sys.stderr, flush=True); "
+                    "time.sleep(1)"
+                ),
+            ),
+            None,
+            {},
+            ProviderTimers(0.05, 1, 2),
+            json_event_heartbeat=True,
+        ),
+        on_spawn=lambda *_: None,
+        cancelled=lambda: False,
+    )
+    assert outcome.first_output_seen is False
+    assert outcome.timed_out is ProviderFailureClassification.NO_FIRST_OUTPUT
+
+
+def test_local_process_classifies_inactivity_after_first_valid_json_event() -> None:
+    outcome = LocalProcessPort().run(
+        ProcessSpec(
+            (
+                sys.executable,
+                "-c",
+                (
+                    'import time; print(\'{"type":"turn.started"}\', flush=True); '
+                    "time.sleep(1)"
+                ),
+            ),
+            None,
+            {},
+            ProviderTimers(1, 0.05, 2),
+            json_event_heartbeat=True,
+        ),
+        on_spawn=lambda *_: None,
+        cancelled=lambda: False,
+    )
+    assert outcome.first_output_seen is True
+    assert outcome.timed_out is ProviderFailureClassification.INACTIVITY_TIMEOUT
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_local_process_enforces_per_stream_output_limits(stream) -> None:
+    program = (
+        "import sys; sys.stdout.buffer.write(b'x'*4096); sys.stdout.flush()"
+        if stream == "stdout"
+        else "import sys; sys.stderr.buffer.write(b'x'*4096); sys.stderr.flush()"
+    )
+    outcome = LocalProcessPort().run(
+        ProcessSpec(
+            (sys.executable, "-c", program),
+            None,
+            {},
+            ProviderTimers(1, 2, 3),
+            stdout_limit_bytes=1024,
+            stderr_limit_bytes=1024,
+        ),
+        on_spawn=lambda *_: None,
+        cancelled=lambda: False,
+    )
+    assert outcome.timed_out is ProviderFailureClassification.OUTPUT_LIMIT
+    assert len(getattr(outcome, stream)) == 1024
+
+
+def test_secure_output_store_validates_existing_private_content(tmp_path) -> None:
+    root = tmp_path / "quarantine"
+    store = FileSecureOutputStore(root)
+    reference = store.put(b"invalid provider payload")
+    assert store.put(b"invalid provider payload") == reference
+    path = root / reference.removeprefix("secure-provider-output:")
+    path.chmod(0o644)
+    with pytest.raises(RuntimeError, match="not a private file"):
+        store.put(b"invalid provider payload")
+
+
+def test_secure_output_store_rejects_symlink_root(tmp_path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(ValueError, match="real directory"):
+        FileSecureOutputStore(link)
+
+
+def test_unreferenced_quarantine_cleanup_preserves_committed_private_files(
+    tmp_path,
+) -> None:
+    store = FileSecureOutputStore(tmp_path / "quarantine")
+    retained = store.put(b"retained invalid provider payload")
+    orphaned = store.put(b"orphaned invalid provider payload")
+
+    assert remove_unreferenced_provider_outputs(store.root, {retained}) == 1
+    assert (store.root / retained.rsplit(":", 1)[1]).read_bytes() == (
+        b"retained invalid provider payload"
+    )
+    assert not (store.root / orphaned.rsplit(":", 1)[1]).exists()

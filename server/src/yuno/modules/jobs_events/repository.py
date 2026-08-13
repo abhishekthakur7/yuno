@@ -70,6 +70,7 @@ class JobRepository:
             payload_hash=hash_payload(request.payload),
             request_ref=request.request_ref,
             disclosure_ref=request.disclosure_ref,
+            provider_name=request.provider_name,
             confirmation_ref=request.confirmation_ref,
             correlation_id=request.correlation_id,
             request_id=request.request_id,
@@ -383,6 +384,8 @@ class JobRepository:
         *,
         substitution_ref: str | None,
         confirmation_ref: str | None,
+        provider_name: str | None,
+        disclosure_ref: str | None,
         event_type: str,
     ) -> None:
         timestamp = now_text(self.clock)
@@ -393,6 +396,10 @@ class JobRepository:
             None,
         )
         row.substitution_ref, row.confirmation_ref = substitution_ref, confirmation_ref
+        if provider_name is not None:
+            row.provider_name = provider_name
+        if disclosure_ref is not None:
+            row.disclosure_ref = disclosure_ref
         row.queued_at, row.updated_at = timestamp, timestamp
         row.priority = 100
         self.add_event(row, event_type)

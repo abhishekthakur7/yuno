@@ -38,6 +38,14 @@ export async function getJob(jobId: string): Promise<Job> {
   return data
 }
 
+export function jobQueryOptions(jobId: string | null) {
+  return queryOptions({
+    queryKey: ['jobs', jobId],
+    enabled: Boolean(jobId),
+    queryFn: () => getJob(jobId!),
+  })
+}
+
 export async function cancelJob(jobId: string) {
   const { data, error, response } = await client.POST('/api/v1/jobs/{job_id}/cancel', { params: { path: { job_id: jobId } } })
   if (error || !data) throw new ApiError(error?.message ?? 'Failed to cancel job', response.status)

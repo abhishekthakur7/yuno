@@ -9,9 +9,8 @@ from yuno.shared.domain.errors import DomainValidationError
 from yuno.shared.domain.hashing import hash_payload
 
 EMPTY_IMPORTS_HASH = hash_payload([])
-FIXTURE_PROMPT_TEMPLATE_VERSION = "fixture-v0"
+PROMPT_TEMPLATE_VERSION = "provider-prompt-v1"
 GENERATION_SCHEMA_VERSION = "generate-result-v1"
-GENERATION_CONTRACT_VERSION = "fixture-v0"
 
 
 class TopicLayer(StrEnum):

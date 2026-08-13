@@ -114,6 +114,8 @@ class ProviderCapabilityResponse(BaseModel):
     provider: ProviderName
     state: ProviderCapabilityState
     reason: str | None
+    recovery_action: str | None
+    model: str | None
     adapter_version: str | None
     contract_version: str | None
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -11,6 +12,8 @@ import {
   sourceQueryOptions,
   type Assessment,
 } from './api/evidence'
+import { jobQueryOptions } from './api/jobs'
+import { useJobEvents } from './job-events'
 
 export function useEvidence(goalId: string | null, requestedEvidenceId: string | null = null) {
   const queryClient = useQueryClient()
@@ -55,10 +58,24 @@ export function useEvidence(goalId: string | null, requestedEvidenceId: string |
       requestAssessmentReevaluation(id, { dispute_id: disputeId }),
     onSuccess: refreshDerivedReads,
   })
+  const sourceIntentKeys = useRef(new Map<string, string>())
   const sourceRetrieval = useMutation({
-    mutationFn: retrieveSource,
+    mutationFn: (sourceId: string) => retrieveSource({
+      sourceId,
+      idempotencyKey: sourceIntentKeys.current.get(sourceId) ?? (() => {
+        const key = crypto.randomUUID()
+        sourceIntentKeys.current.set(sourceId, key)
+        return key
+      })(),
+    }),
     onSuccess: (_job, sourceId) => queryClient.invalidateQueries({ queryKey: ['sources', sourceId] }),
   })
+  const sourceJobId = sourceRetrieval.data?.job_id ?? null
+  useJobEvents([sourceJobId])
+  const sourceJob = useQuery(jobQueryOptions(sourceJobId))
+  useEffect(() => {
+    if (sourceJob.data && ['succeeded', 'failed', 'cancelled'].includes(sourceJob.data.status) && sourceRetrieval.variables) sourceIntentKeys.current.delete(sourceRetrieval.variables)
+  }, [sourceJob.data, sourceRetrieval.variables])
 
   const sources = {
     queries: sourceQueries,
@@ -87,6 +104,7 @@ export function useEvidence(goalId: string | null, requestedEvidenceId: string |
     dispute,
     reevaluate,
     sourceRetrieval,
+    sourceJob,
   }
 }
 

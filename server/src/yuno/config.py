@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIB = 1024 * 1024
@@ -63,9 +63,17 @@ class Settings(BaseSettings):
 
     background_job_age_promotion_seconds: Literal[300] = 300
     job_janitor_retention_seconds: Literal[3600] = 3600
-    provider_first_output_seconds: float | None = None
-    provider_inactivity_seconds: float | None = None
-    provider_absolute_seconds: float | None = None
+    provider_policy_version: Literal["1.0"] = "1.0"
+    provider_capability_discovery_enabled: bool = True
+    provider_environment_policy_version: Literal["provider-env-v1"] = "provider-env-v1"
+    provider_codex_executable: Path = Path("/opt/homebrew/bin/codex")
+    provider_claude_executable: Path = Path("/opt/homebrew/bin/claude")
+    provider_codex_model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
+    provider_codex_reasoning_effort: Literal["high"] = "high"
+    provider_claude_model: Literal["claude-sonnet-4-6"] = "claude-sonnet-4-6"
+    provider_first_output_seconds: Literal[20.0] = 20.0
+    provider_inactivity_seconds: Literal[180.0] = 180.0
+    provider_absolute_seconds: Literal[1200.0] = 1200.0
     source_snapshot_root: Path = Path("./yuno-source-snapshots")
     provider_quarantine_root: Path = Field(
         default=Path.home()
@@ -96,6 +104,13 @@ class Settings(BaseSettings):
     runner_java_version_prefix: str | None = None
     runner_python_command: str | None = None
     runner_relational_connector: Literal["configured"] | None = None
+
+    @field_validator("provider_codex_executable", "provider_claude_executable")
+    @classmethod
+    def provider_executable_is_absolute(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("Provider executable paths must be absolute.")
+        return value
 
 
 @lru_cache

@@ -88,6 +88,9 @@ export function JobEventsProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['interview-runs'] }),
       queryClient.invalidateQueries({ queryKey: ['imports'] }),
       queryClient.invalidateQueries({ queryKey: ['goals'] }),
+      queryClient.invalidateQueries({ queryKey: ['sources'] }),
+      queryClient.invalidateQueries({ queryKey: ['artifacts'] }),
+      queryClient.invalidateQueries({ queryKey: ['assessments'] }),
     ])
     return reads.every(result => result.status === 'fulfilled')
   }, [queryClient])

@@ -24,7 +24,6 @@ from yuno.modules.evidence_evaluation.domain import (
     EvaluationResult,
 )
 from yuno.modules.learning_content.domain import (
-    GENERATION_CONTRACT_VERSION,
     GENERATION_SCHEMA_VERSION,
     GeneratedCitation,
     GeneratedClaim,
@@ -33,22 +32,15 @@ from yuno.modules.learning_content.domain import (
     TutorRequest,
     TutorResult,
 )
-from yuno.modules.provider.domain import ProviderInput, ProviderResultState
+from yuno.modules.provider.domain import (
+    ProviderInput,
+    ProviderName,
+    ProviderResultState,
+)
 from yuno.modules.provider.service import execute_provider
 from yuno.shared.application.jobs import JobExecution
 from yuno.shared.domain.errors import DomainValidationError, UnavailableError
 from yuno.shared.domain.hashing import hash_payload
-
-
-class UnavailableProviderPort:
-    provider = "codex"
-    adapter_version = "unavailable"
-    contract_version = "unavailable"
-
-    def invoke(self, *_args, **_kwargs):
-        raise UnavailableError(
-            "Provider CLI version and authentication discovery are not approved."
-        )
 
 
 class CitationPayload(BaseModel):
@@ -269,12 +261,7 @@ class MappingValidator:
         self.expected_dimension_ids = expected_dimension_ids
 
     def validate(self, value: object):
-        model = {
-            "topic-generation": GenerationPayload,
-            "evaluation": EvaluationPayload,
-            "mock-next-turn": MockQuestionPayload,
-            "tutor-turn": TutorPayload,
-        }[self.purpose]
+        model = self._model()
         payload = TypeAdapter(model).validate_python(value, strict=True)
         if isinstance(payload, EvaluationPayload) and self.expected_dimension_ids:
             actual = {item.dimension_id for item in payload.dimensions}
@@ -284,11 +271,24 @@ class MappingValidator:
                 )
         return payload.model_dump(mode="json")
 
+    def json_schema(self):
+        return TypeAdapter(self._model()).json_schema()
+
+    def json_schema_text(self) -> str:
+        import json
+
+        return json.dumps(self.json_schema(), sort_keys=True, separators=(",", ":"))
+
+    def _model(self):
+        return {
+            "topic-generation": GenerationPayload,
+            "evaluation": EvaluationPayload,
+            "mock-next-turn": MockQuestionPayload,
+            "tutor-turn": TutorPayload,
+        }[self.purpose]
+
 
 class ProviderGenerationAdapter:
-    provider = "codex"
-    model = "configured-provider"
-
     def __init__(self, app, execution: JobExecution) -> None:
         self._app = app
         self._execution = execution
@@ -307,7 +307,7 @@ class ProviderGenerationAdapter:
                 body=str(payload["body"]),
                 provider=result.provider.value,
                 model=result.model or "unknown",
-                contract_version=GENERATION_CONTRACT_VERSION,
+                contract_version=result.contract_version,
                 schema_version=GENERATION_SCHEMA_VERSION,
                 generated_at=result.timestamp
                 or self._app.state.clock.now().isoformat().replace("+00:00", "Z"),
@@ -437,12 +437,22 @@ def _execute(
     expected_dimension_ids: tuple[str, ...] = (),
 ):
     request = execution.request
-    if not request.disclosure_ref or not request.requested_job_id:
+    if (
+        not request.disclosure_ref
+        or not request.requested_job_id
+        or not request.provider_name
+    ):
         raise DomainValidationError("Provider job omitted its disclosure reference.")
+    try:
+        provider = ProviderName(request.provider_name)
+    except ValueError as exc:
+        raise DomainValidationError(
+            "Provider job has an invalid provider pin."
+        ) from exc
     context = asdict(value)
     result = execute_provider(
         app.state.uow_factory,
-        app.state.provider_port,
+        app.state.provider_registry.require_adapter(provider),
         ProviderInput(
             owner_id=request.owner_id,
             goal_id=request.goal_id,
@@ -466,5 +476,9 @@ def _execute(
             if result.failure_classification
             else result.state.value
         )
-        raise UnavailableError(f"Provider operation did not succeed: {classification}.")
+        raise UnavailableError(
+            "The provider operation did not succeed.",
+            current_state=classification,
+            recovery_action="Retry the job or review the provider status in Settings.",
+        )
     return result

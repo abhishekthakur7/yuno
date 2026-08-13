@@ -39,7 +39,10 @@ from yuno.shared.domain.errors import (
 )
 from yuno.shared.domain.hashing import hash_payload
 from yuno.shared.domain.ids import new_id
-from yuno.shared.infrastructure.processes import process_identity
+from yuno.shared.infrastructure.processes import (
+    process_identity,
+    terminate_process_group,
+)
 from yuno.shared.infrastructure.structured_logging import log_event
 
 _INTERACTIVE_KINDS = {
@@ -164,6 +167,18 @@ class DurableJobDispatcher:
         self._ownership_file = lock_file
 
     def enqueue(self, request: JobRequest) -> JobRef:
+        with self._transition_lock, self._sessions() as session:
+            ref = self.reserve(session, request)
+            session.commit()
+            row = JobRepository(session, self._clock).get(request.owner_id, ref.job_id)
+            if row is not None:
+                self._log_transition(row, "enqueued")
+        with self._wake:
+            self._wake.notify_all()
+        return ref
+
+    def reserve(self, session: Session, request: JobRequest) -> JobRef:
+        """Write a queued job into the caller's transaction without executing it."""
         if request.kind not in self._handlers:
             raise DomainValidationError(
                 f"No handler is registered for job kind {request.kind!r}."
@@ -179,7 +194,7 @@ class DurableJobDispatcher:
             if request.kind in _INTERACTIVE_KINDS
             else JobLane.BACKGROUND
         )
-        with self._transition_lock, self._sessions() as session:
+        with self._transition_lock:
             repo = JobRepository(session, self._clock)
             if request.idempotency_key:
                 existing = repo.find_idempotency(
@@ -203,13 +218,13 @@ class DurableJobDispatcher:
                     f"The configured pending-job cap ({pending_cap}) has been reached.",
                     recovery_action="Wait for a pending job to finish or cancel one.",
                 )
+            savepoint = session.begin_nested()
             try:
                 row = repo.enqueue(request, lane)
                 self._audit(session, row, "enqueued", None, row.state)
-                session.commit()
-                self._log_transition(row, "enqueued")
+                savepoint.commit()
             except IntegrityError:
-                session.rollback()
+                savepoint.rollback()
                 if request.dedupe_key and (
                     existing := repo.find_active_dedupe(
                         request.owner_id, request.kind, request.dedupe_key
@@ -217,8 +232,6 @@ class DurableJobDispatcher:
                 ):
                     return as_ref(existing, deduplicated=True)
                 raise
-        with self._wake:
-            self._wake.notify_all()
         return as_ref(row)
 
     def get(self, owner_id: str, job_id: str) -> JobRef | None:
@@ -264,6 +277,8 @@ class DurableJobDispatcher:
         *,
         substitution_ref: str | None = None,
         confirmation_ref: str | None = None,
+        provider_name: str | None = None,
+        disclosure_ref: str | None = None,
     ) -> JobRef:
         with self._transition_lock, self._sessions() as session:
             repo = JobRepository(session, self._clock)
@@ -296,6 +311,8 @@ class DurableJobDispatcher:
                 row,
                 substitution_ref=substitution_ref,
                 confirmation_ref=confirmation_ref,
+                provider_name=provider_name,
+                disclosure_ref=disclosure_ref,
                 event_type={
                     "idempotent": "idempotent-rerun",
                     "generation": "cache-checked-rerun",
@@ -370,6 +387,7 @@ class DurableJobDispatcher:
                 schema_version=row.schema_version,
                 request_ref=row.request_ref,
                 disclosure_ref=row.disclosure_ref,
+                provider_name=row.provider_name,
                 confirmation_ref=row.confirmation_ref,
                 correlation_id=row.correlation_id,
                 request_id=row.request_id,
@@ -651,7 +669,7 @@ class DurableJobDispatcher:
                 )
             elif attempt.pgid is not None:
                 try:
-                    os.killpg(attempt.pgid, signal.SIGTERM)
+                    terminate_process_group(attempt.pgid)
                 except OSError as exc:
                     diagnostics.append(f"cleanup failed: {type(exc).__name__}")
         if attempt.temp_path:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -23,6 +24,10 @@ from yuno.api.dependencies import (
     get_unit_of_work,
     idempotency_key,
 )
+from yuno.api.provider_selection import (
+    authorize_provider_job,
+    selected_provider_metadata,
+)
 from yuno.modules.learning_content.domain import (
     GenerationAttempt,
     LayerDocument,
@@ -37,7 +42,6 @@ from yuno.modules.learning_content.service import (
     reserve_generation,
     reserve_tutor_turn,
 )
-from yuno.modules.provider.service import require_disclosure
 from yuno.shared.application.jobs import JobDispatcher, JobLane, JobRef, JobRequest
 from yuno.shared.domain.errors import NotFoundError
 from yuno.shared.domain.ids import new_id
@@ -78,14 +82,16 @@ def get_topic_layers(
     goal = uow.profiles_goals.get_goal(owner_id, goal_id)
     if goal is None:
         raise NotFoundError(f"Goal '{goal_id}' was not found.")
-    adapter = request.app.state.provider_port
+    provider, model = selected_provider_metadata(
+        uow, owner_id, request.app.state.provider_registry
+    )
     layers = list_layers(
         uow,
         owner_id,
         goal_id,
         topic_id,
-        getattr(adapter, "provider", None),
-        getattr(adapter, "model", None),
+        provider,
+        model,
     )
     return TopicLayersResponse(
         goal_id=goal_id,
@@ -108,7 +114,9 @@ def get_topic_layer(
     uow: Annotated[LearningContentUnitOfWork, Depends(get_unit_of_work)],
     request: Request,
 ) -> TopicLayerResponse:
-    adapter = request.app.state.provider_port
+    provider, model = selected_provider_metadata(
+        uow, owner_id, request.app.state.provider_registry
+    )
     return _layer_response(
         next(
             item
@@ -117,8 +125,8 @@ def get_topic_layer(
                 owner_id,
                 goal_id,
                 topic_id,
-                getattr(adapter, "provider", None),
-                getattr(adapter, "model", None),
+                provider,
+                model,
             )
             if item.layer is layer
         )
@@ -171,7 +179,8 @@ def post_topic_conversation(
         if current is not None:
             return accepted_job(current)
     list_topic_conversation(uow, owner_id, goal_id, topic_id)
-    disclosure = require_disclosure(uow, owner_id)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
+    disclosure = authorization.disclosure
     turn, _ = reserve_tutor_turn(
         uow,
         owner_id,
@@ -181,26 +190,27 @@ def post_topic_conversation(
         key,
         new_id(),
     )
-    uow.commit()
     assert turn.job_id is not None
-    return accepted_job(
-        dispatcher.enqueue(
-            JobRequest(
-                "tutor_turn",
-                owner_id,
-                {"learner_turn_id": turn.id},
-                dedupe_key=turn.id,
-                idempotency_key=key,
-                requested_job_id=turn.job_id,
-                goal_id=goal_id,
-                lane=JobLane.INTERACTIVE,
-                schema_version="tutor-turn-v1",
-                request_ref=f"TopicConversationTurn:{turn.id}",
-                disclosure_ref=disclosure.id,
-                run_id=f"{goal_id}:{topic_id}",
-            )
-        )
+    ref = dispatcher.reserve(
+        uow,
+        JobRequest(
+            "tutor_turn",
+            owner_id,
+            {"learner_turn_id": turn.id},
+            dedupe_key=turn.id,
+            idempotency_key=key,
+            requested_job_id=turn.job_id,
+            goal_id=goal_id,
+            lane=JobLane.INTERACTIVE,
+            schema_version="tutor-turn-v1",
+            request_ref=f"TopicConversationTurn:{turn.id}",
+            disclosure_ref=disclosure.id,
+            provider_name=authorization.provider.value,
+            run_id=f"{goal_id}:{topic_id}",
+        ),
     )
+    uow.commit()
+    return accepted_job(ref)
 
 
 @router.post(
@@ -220,20 +230,41 @@ def generate_topic_layer(
     replay = find_generation_replay(uow, owner_id, goal_id, topic_id, layer, key)
     if replay is not None:
         if replay[2]:
-            ref, _, _ = reserve_generation(uow, owner_id, goal_id, topic_id, layer, key)
+            current = dispatcher.get(owner_id, replay[0].job_id)
+            if current is not None:
+                return accepted_job(replace(current, deduplicated=True))
+            authorization = authorize_provider_job(dispatcher, uow, owner_id)
+            ref = _reserve_generation_job(
+                uow,
+                replay[0],
+                replay[1],
+                True,
+                dispatcher,
+                owner_id,
+                key,
+                authorization.disclosure.id,
+                authorization.provider.value,
+            )
             uow.commit()
             return accepted_job(ref)
         return accepted_job(replay[0])
-    disclosure = require_disclosure(uow, owner_id)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     ref, attempt, dispatch = reserve_generation(
         uow, owner_id, goal_id, topic_id, layer, key
     )
-    uow.commit()
-    return accepted_job(
-        _enqueue_generation(
-            ref, attempt, dispatch, dispatcher, owner_id, key, disclosure.id
-        )
+    accepted = _reserve_generation_job(
+        uow,
+        ref,
+        attempt,
+        dispatch,
+        dispatcher,
+        owner_id,
+        key,
+        authorization.disclosure.id,
+        authorization.provider.value,
     )
+    uow.commit()
+    return accepted_job(accepted)
 
 
 @router.post(
@@ -262,19 +293,25 @@ def regenerate_artifact(
     )
     if replay is not None:
         if replay[2]:
-            ref, _, _ = reserve_generation(
+            current = dispatcher.get(owner_id, replay[0].job_id)
+            if current is not None:
+                return accepted_job(replace(current, deduplicated=True))
+            authorization = authorize_provider_job(dispatcher, uow, owner_id)
+            ref = _reserve_generation_job(
                 uow,
+                replay[0],
+                replay[1],
+                True,
+                dispatcher,
                 owner_id,
-                artifact.goal_id,
-                artifact.topic_stable_id,
-                artifact.layer,
                 key,
-                force=True,
+                authorization.disclosure.id,
+                authorization.provider.value,
             )
             uow.commit()
             return accepted_job(ref)
         return accepted_job(replay[0])
-    disclosure = require_disclosure(uow, owner_id)
+    authorization = authorize_provider_job(dispatcher, uow, owner_id)
     ref, attempt, dispatch = reserve_generation(
         uow,
         owner_id,
@@ -284,15 +321,23 @@ def regenerate_artifact(
         key,
         force=True,
     )
-    uow.commit()
-    return accepted_job(
-        _enqueue_generation(
-            ref, attempt, dispatch, dispatcher, owner_id, key, disclosure.id
-        )
+    accepted = _reserve_generation_job(
+        uow,
+        ref,
+        attempt,
+        dispatch,
+        dispatcher,
+        owner_id,
+        key,
+        authorization.disclosure.id,
+        authorization.provider.value,
     )
+    uow.commit()
+    return accepted_job(accepted)
 
 
-def _enqueue_generation(
+def _reserve_generation_job(
+    uow: LearningContentUnitOfWork,
     ref: JobRef,
     attempt: GenerationAttempt,
     dispatch: bool,
@@ -300,10 +345,12 @@ def _enqueue_generation(
     owner_id: str,
     key: str,
     disclosure_ref: str,
+    provider_name: str,
 ) -> JobRef:
     if not dispatch:
         return ref
-    return dispatcher.enqueue(
+    return dispatcher.reserve(
+        uow,
         JobRequest(
             "generate_topic_content",
             owner_id,
@@ -316,7 +363,8 @@ def _enqueue_generation(
             schema_version="provider-job-v1",
             request_ref=f"GenerationAttempt:{attempt.id}",
             disclosure_ref=disclosure_ref,
-        )
+            provider_name=provider_name,
+        ),
     )
 
 

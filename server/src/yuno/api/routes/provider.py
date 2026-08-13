@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from yuno.api.contracts import (
     DisclosureAcceptRequest,
@@ -12,7 +12,6 @@ from yuno.api.contracts import (
     ProviderCapabilityResponse,
 )
 from yuno.api.dependencies import get_clock, get_owner_id, get_unit_of_work
-from yuno.modules.provider.domain import ProviderCapabilityState, ProviderName
 from yuno.modules.provider.ports import ProviderUnitOfWork
 from yuno.modules.provider.service import accept_disclosure, revoke_disclosure
 from yuno.shared.domain.clock import Clock
@@ -113,18 +112,25 @@ def revoke(
 
 
 @router.get("/provider-capabilities", response_model=list[ProviderCapabilityResponse])
-def capabilities() -> list[ProviderCapabilityResponse]:
-    # IDK-006 is unresolved: no CLI/version/auth combination may be represented
-    # as configured until that explicit decision is approved.
+def capabilities(
+    request: Request, refresh: Annotated[bool, Query()] = False
+) -> list[ProviderCapabilityResponse]:
+    values = (
+        request.app.state.provider_registry.refresh()
+        if refresh
+        else request.app.state.provider_registry.capabilities()
+    )
     return [
         ProviderCapabilityResponse(
-            provider=provider,
-            state=ProviderCapabilityState.UNAVAILABLE,
-            reason="Provider CLI version and authentication discovery are not approved.",
-            adapter_version=None,
-            contract_version=None,
+            provider=value.provider,
+            state=value.state,
+            reason=value.reason,
+            recovery_action=value.recovery_action,
+            model=value.model,
+            adapter_version=value.adapter_version,
+            contract_version=value.contract_version,
         )
-        for provider in ProviderName
+        for value in values
     ]
 
 

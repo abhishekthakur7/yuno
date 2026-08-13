@@ -195,11 +195,20 @@ def execute_provider(
         lifecycle="preparing",
     )
 
-    def record_spawn(pid: int, pgid: int, identity: str) -> None:
+    def record_spawn(
+        pid: int, pgid: int, identity: str, temp_path: str | None = None
+    ) -> None:
         with uow_factory() as uow:
-            uow.provider.mark_spawned(provider_request_id, pid, pgid, identity)
+            uow.provider.mark_spawned(
+                provider_request_id, pid, pgid, identity, temp_path
+            )
             uow.commit()
-        record_runtime(pid=pid, pgid=pgid, process_identity=identity)
+        record_runtime(
+            pid=pid,
+            pgid=pgid,
+            process_identity=identity,
+            temp_path=temp_path,
+        )
 
     try:
         result = adapter.invoke(
@@ -208,7 +217,19 @@ def execute_provider(
             on_spawn=record_spawn,
             cancelled=cancelled,
         )
-    except (FileNotFoundError, UnavailableError):
+    except FileNotFoundError:
+        result = ProviderResult(
+            state=ProviderResultState.FAILED,
+            provider=ProviderName(adapter.provider),
+            model=None,
+            contract_version=adapter.contract_version,
+            schema_version=request.output_schema_version,
+            payload=None,
+            result_hash=None,
+            failure_classification=ProviderFailureClassification.EXECUTABLE_MISSING,
+            retryable=True,
+        )
+    except UnavailableError:
         result = ProviderResult(
             state=ProviderResultState.FAILED,
             provider=ProviderName(adapter.provider),
@@ -218,7 +239,7 @@ def execute_provider(
             payload=None,
             result_hash=None,
             failure_classification=(
-                ProviderFailureClassification.CONFIGURATION_OR_AUTHENTICATION
+                ProviderFailureClassification.AUTHENTICATION_UNAVAILABLE
             ),
             retryable=True,
         )

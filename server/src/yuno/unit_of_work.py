@@ -190,6 +190,11 @@ class SqlAlchemyUnitOfWork:
         session = self._require_session()
         return bool(session.info.get(_WRITE_OPEN_KEY, False))
 
+    @property
+    def session(self) -> Session:
+        """Expose the active composition-root session for atomic job reservation."""
+        return self._require_session()
+
     def _require_session(self) -> Session:
         if self._session is None:
             raise RuntimeError(

@@ -11,7 +11,11 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.job_assertions import wait_for_job
-from tests.provider_fakes import accept_provider_disclosure, install_provider_fake
+from tests.provider_fakes import (
+    accept_provider_disclosure,
+    install_provider_fake,
+    install_provider_port_fake,
+)
 from yuno.modules.canonical.domain import (
     CanonicalGraphVersion,
     CanonicalVersionStatus,
@@ -22,7 +26,6 @@ from yuno.modules.canonical.domain import (
 )
 from yuno.modules.imports.domain import TopicImportHash
 from yuno.modules.learning_content.domain import (
-    GENERATION_CONTRACT_VERSION,
     GENERATION_SCHEMA_VERSION,
     GeneratedCitation,
     GeneratedClaim,
@@ -74,7 +77,7 @@ def test_live_provider_wiring_enqueues_claims_records_and_publishes(
                 timestamp="2026-08-14T12:00:00Z",
             )
 
-    client.app.state.provider_port = ValidatingProvider()
+    install_provider_port_fake(client, ValidatingProvider())
     response = _generate(client, goal_id, topic_id, key="provider-wiring")
     assert response.status_code == 202
     wait_for_job(client, response, "succeeded")
@@ -103,6 +106,21 @@ def test_generation_without_disclosure_does_not_reserve_attempt_or_job(
     assert revoked.status_code == 200
     response = _generate(client, goal_id, topic_id, key="disclosure-gate")
     assert response.status_code == 412
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(text("SELECT count(*) FROM artifact_generation_attempts"))
+            == 0
+        )
+        assert connection.scalar(text("SELECT count(*) FROM jobs")) == 0
+
+
+def test_generation_without_selected_provider_is_fail_closed_before_reservation(
+    client, engine, uow_factory
+) -> None:
+    goal_id, topic_id = _goal(client, uow_factory, suffix="no-provider")
+    response = _generate(client, goal_id, topic_id, key="no-provider")
+    assert response.status_code == 503
+    assert response.json()["current_state"] == "provider-not-selected"
     with engine.connect() as connection:
         assert (
             connection.scalar(text("SELECT count(*) FROM artifact_generation_attempts"))
@@ -238,7 +256,7 @@ class FakeGenerationAdapter:
             body=self.body,
             provider=self.provider,
             model=self.model,
-            contract_version=GENERATION_CONTRACT_VERSION,
+            contract_version="fixture-provider-contract-v1",
             schema_version=GENERATION_SCHEMA_VERSION,
             generated_at="2026-08-12T12:00:00.000000Z",
             claims=(
@@ -755,7 +773,7 @@ def test_invalid_generation_result_rolls_back_artifact_snapshot_claims_and_citat
                 body="This body must never become visible.",
                 provider=self.provider,
                 model=self.model,
-                contract_version=GENERATION_CONTRACT_VERSION,
+                contract_version="fixture-provider-contract-v1",
                 schema_version=GENERATION_SCHEMA_VERSION,
                 generated_at="2026-08-12T12:00:00.000000Z",
                 claims=(
@@ -829,7 +847,7 @@ def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_con
                 body="Schema-invalid output must remain quarantined.",
                 provider=self.provider,
                 model=self.model,
-                contract_version=GENERATION_CONTRACT_VERSION,
+                contract_version="fixture-provider-contract-v1",
                 schema_version="unsupported-schema-v999",
                 generated_at="2026-08-14T12:00:00.000000Z",
                 claims=(GeneratedClaim("Routine but wrong schema.", "routine"),),

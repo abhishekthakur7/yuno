@@ -26,6 +26,7 @@ beforeEach(() => {
     progress: query({ coverage: { classification: 'partial', definition: 'Coverage', uncertainty: 'One artifact.', supporting_evidence_refs: ['evidence-1'] }, proficiency: { classification: 'partial', definition: 'Proficiency', uncertainty: 'Limited.', supporting_evidence_refs: [] }, retention: { classification: 'unverified', definition: 'Retention', uncertainty: 'Not retested.', supporting_evidence_refs: [] }, readiness: { classification: 'partial', definition: 'Readiness', uncertainty: 'Transfer needed.', supporting_evidence_refs: [] } }),
     dispute: { mutate: vi.fn(), isPending: false, isError: false }, reevaluate: { mutate: vi.fn(), isPending: false, isError: false },
     sourceRetrieval: { mutate: vi.fn(), isPending: false, isError: false },
+    sourceJob: query(undefined),
   }
   mocks.settings = { settings: query({ progress_display: 'detailed' }), saveProgressDisplay: { mutate: vi.fn(), isPending: false, isError: false } }
 })

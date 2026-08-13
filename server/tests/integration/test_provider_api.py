@@ -78,10 +78,13 @@ def test_capabilities_fail_closed_and_disclosure_lifecycle(client) -> None:
     capabilities = client.get("/api/v1/provider-capabilities")
     assert capabilities.status_code == 200
     assert {item["provider"] for item in capabilities.json()} == {"codex", "claude"}
-    assert {item["state"] for item in capabilities.json()} == {"unavailable"}
+    assert {item["state"] for item in capabilities.json()} == {
+        "authentication-unavailable"
+    }
     assert all(item["adapter_version"] is None for item in capabilities.json())
     assert all(item["contract_version"] is None for item in capabilities.json())
-    assert all("not approved" in item["reason"] for item in capabilities.json())
+    assert all(item["reason"] for item in capabilities.json())
+    assert all(item["recovery_action"] for item in capabilities.json())
 
     accepted = client.post(
         "/api/v1/disclosures/provider-generation/accept",
@@ -114,6 +117,25 @@ def test_capabilities_fail_closed_and_disclosure_lifecycle(client) -> None:
     assert reaccepted.status_code == 200
     assert reaccepted.json()["revoked_at"] is None
     assert reaccepted.json()["id"] == accepted.json()["id"]
+
+
+def test_capability_reads_use_cache_and_refresh_is_explicit(client) -> None:
+    registry = client.app.state.provider_registry
+    calls = {provider: 0 for provider in ProviderName}
+    original = dict(registry._discoveries)  # noqa: SLF001
+
+    for provider, discovery in original.items():
+
+        def counted(discovery=discovery, provider=provider):
+            calls[provider] += 1
+            return discovery()
+
+        registry._discoveries[provider] = counted  # noqa: SLF001
+
+    assert client.get("/api/v1/provider-capabilities").status_code == 200
+    assert calls == {provider: 0 for provider in ProviderName}
+    assert client.get("/api/v1/provider-capabilities?refresh=true").status_code == 200
+    assert calls == {provider: 1 for provider in ProviderName}
 
 
 def test_disclosure_definition_is_server_owned_and_precedes_enqueue(client) -> None:
@@ -215,6 +237,6 @@ def test_unavailable_provider_is_a_recoverable_configuration_failure(client) -> 
 
     assert result.state is ProviderResultState.FAILED
     assert result.failure_classification is (
-        ProviderFailureClassification.CONFIGURATION_OR_AUTHENTICATION
+        ProviderFailureClassification.AUTHENTICATION_UNAVAILABLE
     )
     assert result.retryable is True

@@ -44,6 +44,10 @@ class JobRow(Base):
             name="state_valid",
         ),
         CheckConstraint("retryable IN (0,1)", name="retryable_valid"),
+        CheckConstraint(
+            "provider_name IS NULL OR provider_name IN ('codex','claude')",
+            name="provider_name_valid",
+        ),
         CheckConstraint("attempt >= 0", name="attempt_nonnegative"),
         CheckConstraint("priority >= 0", name="priority_nonnegative"),
         UniqueConstraint("id", "owner_id", name="uq_jobs_id_owner"),
@@ -78,6 +82,7 @@ class JobRow(Base):
     payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
     request_ref: Mapped[str | None] = mapped_column(Text)
     disclosure_ref: Mapped[str | None] = mapped_column(Text)
+    provider_name: Mapped[str | None] = mapped_column(Text)
     confirmation_ref: Mapped[str | None] = mapped_column(Text)
     correlation_id: Mapped[str] = mapped_column(Text, nullable=False)
     request_id: Mapped[str] = mapped_column(Text, nullable=False)

@@ -14,8 +14,10 @@ class ProviderName(StrEnum):
 
 
 class ProviderCapabilityState(StrEnum):
+    EXECUTABLE_MISSING = "executable-missing"
+    UNSUPPORTED_VERSION = "unsupported-version"
+    AUTHENTICATION_UNAVAILABLE = "authentication-unavailable"
     CONFIGURED = "configured"
-    UNAVAILABLE = "unavailable"
 
 
 class ProviderResultState(StrEnum):
@@ -25,10 +27,16 @@ class ProviderResultState(StrEnum):
 
 
 class ProviderFailureClassification(StrEnum):
-    CONFIGURATION_OR_AUTHENTICATION = "provider-configuration-or-authentication"
+    EXECUTABLE_MISSING = "executable-missing"
+    UNSUPPORTED_VERSION = "unsupported-version"
+    AUTHENTICATION_UNAVAILABLE = "authentication-unavailable"
+    NO_FIRST_OUTPUT = "no-first-output"
     INACTIVITY_TIMEOUT = "inactivity-timeout"
     ABSOLUTE_TIMEOUT = "absolute-timeout"
+    NONZERO_EXIT = "nonzero-exit"
+    PROVIDER_REPORTED_FAILURE = "provider-reported-failure"
     PROCESS_FAILED = "process-failed"
+    OUTPUT_LIMIT = "output-limit"
     CANCELLED = "cancelled"
     SCHEMA_INVALID = "schema-invalid"
 
@@ -56,6 +64,8 @@ class ProviderCapability:
     provider: ProviderName
     state: ProviderCapabilityState
     reason: str | None = None
+    recovery_action: str | None = None
+    model: str | None = None
     adapter_version: str | None = None
     contract_version: str | None = None
 

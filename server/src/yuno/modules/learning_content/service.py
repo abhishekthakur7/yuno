@@ -8,9 +8,8 @@ from urllib.parse import unquote
 
 from yuno.modules.learning_content.domain import (
     EMPTY_IMPORTS_HASH,
-    FIXTURE_PROMPT_TEMPLATE_VERSION,
-    GENERATION_CONTRACT_VERSION,
     GENERATION_SCHEMA_VERSION,
+    PROMPT_TEMPLATE_VERSION,
     ArtifactState,
     Capability,
     Checkpoint,
@@ -393,7 +392,7 @@ def resolve_generation_context(
         goal_id,
         layer,
         imports_hash,
-        FIXTURE_PROMPT_TEMPLATE_VERSION,
+        PROMPT_TEMPLATE_VERSION,
     )
     profile = uow.profiles_goals.get_profile(owner_id)
     evidence = uow.evidence.list_evidence(owner_id, goal_id)
@@ -453,7 +452,12 @@ def reserve_generation(
                 "The Idempotency-Key was reused with a different generation request."
             )
         attempt = uow.learning_content.get_attempt(owner_id, prior.attempt_id)
-        return _job_ref(attempt, True), attempt, False
+        return (
+            _job_ref(attempt, True),
+            attempt,
+            attempt.status
+            in {GenerationAttemptStatus.QUEUED, GenerationAttemptStatus.RUNNING},
+        )
     if uow.learning_content.get_idempotency_by_key(owner_id, idempotency_key):
         raise IdempotencyConflictError(
             "The Idempotency-Key was reused for another generation operation."
@@ -617,7 +621,12 @@ def find_generation_replay(
                 "The Idempotency-Key was reused with a different generation request."
             )
         attempt = uow.learning_content.get_attempt(owner_id, prior.attempt_id)
-        return _job_ref(attempt, True), attempt, False
+        return (
+            _job_ref(attempt, True),
+            attempt,
+            attempt.status
+            in {GenerationAttemptStatus.QUEUED, GenerationAttemptStatus.RUNNING},
+        )
     if uow.learning_content.get_idempotency_by_key(owner_id, idempotency_key):
         raise IdempotencyConflictError(
             "The Idempotency-Key was reused for another generation operation."
@@ -635,10 +644,10 @@ def find_generation_replay(
         return None
     active = uow.learning_content.get_active_attempt(owner_id, artifact.id)
     if active:
-        return _job_ref(active, True), active, True
+        return None
     if artifact.body is not None and not force:
         attempt = uow.learning_content.get_attempt(owner_id, artifact.last_attempt_id)
-        return _job_ref(attempt, True), attempt, True
+        return _job_ref(attempt, True), attempt, False
     return None
 
 
@@ -689,7 +698,7 @@ def run_generation(
             raise DomainValidationError("Generated body must not be blank.")
         if (
             result.schema_version != GENERATION_SCHEMA_VERSION
-            or result.contract_version != GENERATION_CONTRACT_VERSION
+            or not result.contract_version.strip()
         ):
             timestamp = now_text(SystemClock())
             with uow_factory() as uow:

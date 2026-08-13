@@ -228,7 +228,7 @@ def test_submit_rejects_combined_artifact_and_response_over_byte_limit_atomicall
             assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
 
 
-def test_submit_reservation_recovers_enqueue_failure_without_duplicate_evidence(
+def test_submit_job_reservation_failure_rolls_back_domain_writes(
     client, uow_factory, monkeypatch
 ):
     topic_id, goal_id = _arrange(uow_factory)
@@ -236,19 +236,21 @@ def test_submit_reservation_recovers_enqueue_failure_without_duplicate_evidence(
     accept_provider_disclosure(client)
     lifecycle_url = f"/api/v1/goals/{goal_id}/topics/{topic_id}/hands-on"
     body = {"artifact": "Persist the immutable revision before durable dispatch."}
-    original_enqueue = client.app.state.dispatcher.enqueue
+    original_reserve = client.app.state.dispatcher.reserve
 
-    def fail_enqueue(_request):
-        raise RuntimeError("simulated enqueue failure")
+    def fail_reserve(_uow, _request):
+        raise RuntimeError("simulated reservation failure")
 
-    monkeypatch.setattr(client.app.state.dispatcher, "enqueue", fail_enqueue)
-    with pytest.raises(RuntimeError, match="simulated enqueue failure"):
+    monkeypatch.setattr(client.app.state.dispatcher, "reserve", fail_reserve)
+    with pytest.raises(RuntimeError, match="simulated reservation failure"):
         client.post(
             f"{lifecycle_url}/submit",
             headers={"Idempotency-Key": "recover-submit"},
             json=body,
         )
-    monkeypatch.setattr(client.app.state.dispatcher, "enqueue", original_enqueue)
+    assert client.get(lifecycle_url).json()["artifacts"] == []
+    assert client.get(f"/api/v1/goals/{goal_id}/evidence").json() == []
+    monkeypatch.setattr(client.app.state.dispatcher, "reserve", original_reserve)
 
     recovered = client.post(
         f"{lifecycle_url}/submit",

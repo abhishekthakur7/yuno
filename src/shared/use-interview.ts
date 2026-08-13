@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
@@ -30,6 +31,8 @@ import {
   type MockRun,
   type MockRunCreate,
 } from './api/interview'
+import { jobQueryOptions } from './api/jobs'
+import { useJobEvents } from './job-events'
 
 export function useInterview(goalId: string | null) {
   const queryClient = useQueryClient()
@@ -80,10 +83,22 @@ export function useMockRun(runId: string | null, onRun: (runId: string) => void)
   const create = useMutation({ mutationFn: (body: MockRunCreate) => createMockRun(body), onSuccess: accept })
   const pause = useMutation({ mutationFn: (draft: string) => pauseMockRun(runId!, draft), onSuccess: accept })
   const resume = useMutation({ mutationFn: () => resumeMockRun(runId!), onSuccess: accept })
-  const answer = useMutation({ mutationFn: (value: string) => submitMockAnswer(runId!, value), onSuccess: () => void refresh() })
+  const answerKey = useRef(crypto.randomUUID())
+  const retryKey = useRef(crypto.randomUUID())
+  const answer = useMutation({ mutationFn: (value: string) => submitMockAnswer(runId!, value, answerKey.current), onSuccess: () => void refresh() })
   const complete = useMutation({ mutationFn: ({ draft, idempotencyKey }: { draft: string; idempotencyKey: string }) => completeMockRun(runId!, draft, idempotencyKey), onSuccess: () => void refresh() })
-  const retry = useMutation({ mutationFn: () => retryMockRun(runId!), onSuccess: () => void refresh() })
-  return { run, create, pause, resume, answer, complete, retry }
+  const retry = useMutation({ mutationFn: () => retryMockRun(runId!, retryKey.current), onSuccess: () => void refresh() })
+  const completeJobId = complete.data && 'job_id' in complete.data ? complete.data.job_id : null
+  const activeJobId = retry.data?.job_id ?? completeJobId ?? answer.data?.job_id ?? run.data?.active_job_id ?? null
+  useJobEvents([activeJobId])
+  const activeJob = useQuery(jobQueryOptions(activeJobId))
+  useEffect(() => {
+    if (!activeJob.data || !['succeeded', 'failed', 'cancelled'].includes(activeJob.data.status)) return
+    if (answer.data?.job_id === activeJob.data.job_id) answerKey.current = crypto.randomUUID()
+    if (retry.data?.job_id === activeJob.data.job_id) retryKey.current = crypto.randomUUID()
+    void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] })
+  }, [activeJob.data, answer.data, queryClient, retry.data, runId])
+  return { run, create, pause, resume, answer, complete, retry, activeJob }
 }
 
 export function useMockReport(runId: string | null, enabled = true) {
@@ -99,8 +114,19 @@ export function usePracticeRun(runId: string | null, onRun: (runId: string) => v
   }
   const create = useMutation({ mutationFn: (body: PracticeRunCreate) => createPracticeRun(body), onSuccess: accept })
   const hint = useMutation({ mutationFn: () => requestPracticeHint(runId!), onSuccess: accept })
-  const submit = useMutation({ mutationFn: (answer: string) => submitPracticeAnswer(runId!, answer), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] }) })
-  const retry = useMutation({ mutationFn: () => retryPracticeEvaluation(runId!), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] }) })
+  const submitKey = useRef(crypto.randomUUID())
+  const retryKey = useRef(crypto.randomUUID())
+  const submit = useMutation({ mutationFn: (answer: string) => submitPracticeAnswer(runId!, answer, submitKey.current), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] }) })
+  const retry = useMutation({ mutationFn: () => retryPracticeEvaluation(runId!, retryKey.current), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] }) })
+  const activeJobId = retry.data?.job_id ?? submit.data?.job_id ?? run.data?.active_job_id ?? null
+  useJobEvents([activeJobId])
+  const activeJob = useQuery(jobQueryOptions(activeJobId))
+  useEffect(() => {
+    if (!activeJob.data || !['succeeded', 'failed', 'cancelled'].includes(activeJob.data.status)) return
+    if (submit.data?.job_id === activeJob.data.job_id) submitKey.current = crypto.randomUUID()
+    if (retry.data?.job_id === activeJob.data.job_id) retryKey.current = crypto.randomUUID()
+    void queryClient.invalidateQueries({ queryKey: ['interview-runs', runId] })
+  }, [activeJob.data, queryClient, retry.data, runId, submit.data])
   const cancel = useMutation({ mutationFn: () => cancelPracticeEvaluation(runId!), onSuccess: accept })
-  return { run, create, hint, submit, retry, cancel }
+  return { run, create, hint, submit, retry, cancel, activeJob }
 }

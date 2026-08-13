@@ -69,7 +69,7 @@ function settingsRead(request: Request) {
   if (request.url.endsWith('/goals/goal-1/review-preferences')) return json(reviewPreferences)
   if (request.url.endsWith('/settings/data-lifecycle-policy')) return json(lifecyclePolicy)
   if (request.url.endsWith('/settings') && request.method === 'GET') return json(settings)
-  if (request.url.endsWith('/provider-capabilities')) return json([{ provider: 'codex', state: 'configured', reason: null, adapter_version: '1', contract_version: '1' }, { provider: 'claude', state: 'unavailable', reason: 'Not configured', adapter_version: null, contract_version: null }])
+  if (request.url.includes('/provider-capabilities')) return json([{ provider: 'codex', state: 'configured', reason: null, recovery_action: null, model: 'gpt-5.6-terra', adapter_version: 'codex-cli-adapter-v1', contract_version: 'codex-jsonl-agent-message-v1' }, { provider: 'claude', state: 'authentication-unavailable', reason: 'The CLI did not confirm local authentication and configuration.', recovery_action: 'Complete the CLI\'s local sign-in, then refresh.', model: null, adapter_version: null, contract_version: null }])
   if (request.url.endsWith('/disclosures')) return json([{ id: null, category: 'provider-generation', operation: 'Provider generation', destination: 'Selected model provider', data_categories: ['prompt reference', 'operation metadata'], disclosure_version: 'provider-network-v1', accepted_at: null, revoked_at: null }])
   return null
 }
@@ -207,6 +207,33 @@ describe('server-backed settings and data lifecycle', () => {
     await waitFor(() => expect(disclosureAccepted).toBe(true))
     expect(screen.queryByRole('button', { name: /Export JSON/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Reset local pages/i })).not.toBeInTheDocument()
+  })
+
+  it('selects only a configured provider and keeps authentication separate from disclosure', async () => {
+    let providerPatch: unknown = null
+    let refreshes = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      const read = settingsRead(request)
+      if (request.url.includes('/provider-capabilities?refresh=true')) refreshes += 1
+      if (read) return read
+      if (request.url.endsWith('/settings') && request.method === 'PATCH') {
+        providerPatch = await request.json()
+        return json({ ...settings, provider_selection: 'codex', row_version: 2 })
+      }
+      return json({}, 404)
+    }))
+    renderSettings()
+
+    const selector = await screen.findByRole('combobox', { name: 'Preferred provider' })
+    expect(within(selector).getByRole('option', { name: /claude · authentication-unavailable/i })).toBeDisabled()
+    await userEvent.selectOptions(selector, 'codex')
+    await waitFor(() => expect(providerPatch).toEqual({ provider_selection: 'codex' }))
+    expect(await screen.findByText('Provider selection saved.')).toBeInTheDocument()
+    expect(screen.getByText(/Disclosure acceptance is not provider authentication/i)).toBeInTheDocument()
+    expect(screen.getByText(/Complete the CLI's local sign-in, then refresh/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh provider status' }))
+    await waitFor(() => expect(refreshes).toBe(1))
   })
 
   it('exposes the approved limits, lifecycle guarantees, and local export download', async () => {

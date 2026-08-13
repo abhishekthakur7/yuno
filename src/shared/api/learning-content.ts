@@ -52,9 +52,9 @@ export function topicConversationQueryOptions(goalId: string | null, topicId: st
   })
 }
 
-export async function sendTutorTurn(goalId: string, topicId: string, message: string) {
+export async function sendTutorTurn(goalId: string, topicId: string, message: string, idempotencyKey: string) {
   const { data, error, response } = await client.POST('/api/v1/goals/{goal_id}/topics/{topic_id}/conversation', {
-    params: { path: { goal_id: goalId, topic_id: topicId }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    params: { path: { goal_id: goalId, topic_id: topicId }, header: { 'Idempotency-Key': idempotencyKey } },
     body: { message },
   })
   if (error || !data) throw new ApiError(error?.message ?? 'The tutor message could not be sent.', response.status)
@@ -73,17 +73,17 @@ export function artifactProvenanceQueryOptions(artifactId: string | null) {
   })
 }
 
-export async function generateTopicLayer(goalId: string, topicId: string, layer: TopicLayerName) {
+export async function generateTopicLayer(goalId: string, topicId: string, layer: TopicLayerName, idempotencyKey: string) {
   const { data, error, response } = await client.POST('/api/v1/goals/{goal_id}/topics/{topic_id}/generate', {
-    params: { path: { goal_id: goalId, topic_id: topicId }, query: { layer }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    params: { path: { goal_id: goalId, topic_id: topicId }, query: { layer }, header: { 'Idempotency-Key': idempotencyKey } },
   })
   if (error || !data) throw new ApiError(error?.message ?? 'Content generation could not be started.', response.status)
   return data
 }
 
-export async function regenerateArtifact(artifactId: string) {
+export async function regenerateArtifact(artifactId: string, idempotencyKey: string) {
   const { data, error, response } = await client.POST('/api/v1/artifacts/{artifact_id}/regenerate', {
-    params: { path: { artifact_id: artifactId }, header: { 'Idempotency-Key': crypto.randomUUID() } },
+    params: { path: { artifact_id: artifactId }, header: { 'Idempotency-Key': idempotencyKey } },
   })
   if (error || !data) throw new ApiError(error?.message ?? 'Content regeneration could not be started.', response.status)
   return data

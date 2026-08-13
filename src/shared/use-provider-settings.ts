@@ -4,6 +4,7 @@ import {
   acceptDisclosure,
   disclosuresQueryOptions,
   providerCapabilitiesQueryOptions,
+  refreshProviderCapabilities,
   revokeDisclosure,
 } from './api/provider-settings'
 
@@ -14,5 +15,9 @@ export function useProviderSettings() {
   const refreshDisclosures = () => queryClient.invalidateQueries({ queryKey: ['disclosures'] })
   const accept = useMutation({ mutationFn: acceptDisclosure, onSuccess: refreshDisclosures })
   const revoke = useMutation({ mutationFn: revokeDisclosure, onSuccess: refreshDisclosures })
-  return { disclosures, capabilities, accept, revoke }
+  const refreshCapabilities = useMutation({
+    mutationFn: refreshProviderCapabilities,
+    onSuccess: data => queryClient.setQueryData(['provider-capabilities'], data),
+  })
+  return { disclosures, capabilities, accept, revoke, refreshCapabilities }
 }

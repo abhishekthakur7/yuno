@@ -23,6 +23,14 @@ class ProcessSpec:
     stdin: bytes | None
     environment: Mapping[str, str]
     timers: ProviderTimers
+    cwd: str | None = None
+    json_event_heartbeat: bool = False
+    stdout_limit_bytes: int = 2 * 1024 * 1024
+    stderr_limit_bytes: int = 64 * 1024
+
+    def __post_init__(self) -> None:
+        if self.stdout_limit_bytes <= 0 or self.stderr_limit_bytes <= 0:
+            raise ValueError("Process output limits must be positive.")
 
 
 class ProcessPort(Protocol):
@@ -37,6 +45,8 @@ class ProcessPort(Protocol):
 
 class OutputValidator(Protocol):
     def validate(self, value: object) -> Mapping[str, Any]: ...
+
+    def json_schema(self) -> Mapping[str, Any]: ...
 
 
 class SecureOutputStore(Protocol):
@@ -53,7 +63,7 @@ class ProviderPort(Protocol):
         request: ProviderInput,
         validator: OutputValidator,
         *,
-        on_spawn: Callable[[int, int, str], None],
+        on_spawn: Callable[[int, int, str, str | None], None],
         cancelled: Callable[[], bool],
     ) -> ProviderResult: ...
 
@@ -69,7 +79,12 @@ class ProviderRepository(Protocol):
     ) -> NetworkDisclosure | None: ...
     def create_request(self, **values: object) -> str: ...
     def mark_spawned(
-        self, request_id: str, pid: int, pgid: int, process_identity: str
+        self,
+        request_id: str,
+        pid: int,
+        pgid: int,
+        process_identity: str,
+        temp_path: str | None,
     ) -> None: ...
     def finish_request(
         self, request_id: str, lifecycle: str, diagnostic: str | None

@@ -126,7 +126,12 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
         return row.id
 
     def mark_spawned(
-        self, request_id: str, pid: int, pgid: int, process_identity: str
+        self,
+        request_id: str,
+        pid: int,
+        pgid: int,
+        process_identity: str,
+        temp_path: str | None,
     ) -> None:
         row = self._session.get(ProviderRequestRow, request_id)
         if row is None:
@@ -139,11 +144,12 @@ class SqlAlchemyProviderRepository(SqlAlchemyRepository):
         body.pid = pid
         body.pgid = pgid
         body.process_identity = process_identity
+        body.temp_path = temp_path
         row.body_hash = _body_hash(
             pid=pid,
             pgid=pgid,
             process_identity=process_identity,
-            temp_path=body.temp_path,
+            temp_path=temp_path,
         )
         row.lifecycle = "running"
         row.started_at = now_text(SystemClock())
