@@ -1,12 +1,12 @@
 # IDK-010 — Size, retention, and data-lifecycle policy
 
-Phase 0, blocking decision. This document frames the product/privacy decision and the evidence required to approve it. It adopts no limit, duration, export format, recovery promise, backup posture, or support-access policy.
+Phase 0, blocking decision. This document records the approved product/privacy limits, retention schedule, export contract, deletion and backup posture, and logging/support policy. Approval does not claim enforcement before the engineering gaps and privacy-review evidence are complete.
 
 ## 1. Status
 
-Open / awaiting product and privacy approval.
+Approved as policy version 1.0 on 2026-08-13; engineering enforcement and privacy-review evidence remain pending.
 
-Owner: product/privacy owner, per PRD §13. Approver identity is TBD. This document does not name an approver.
+Owner and approver: product/privacy owner, per PRD §13. Approval was recorded through the project conversation using section 14.7's exact approval statement.
 
 ## 2. The question
 
@@ -43,18 +43,18 @@ Every row requires an approved numeric value and unit, an enforcement point, the
 
 | Category | Decision required | Approved value / unit | Scope | Rejection behavior | Evidence / rationale |
 | --- | --- | --- | --- | --- | --- |
-| Import originals | Maximum bytes per import and maximum retained imports | | | | |
-| Import statements | Maximum statements per import and pending/unreviewed statements | | | | |
-| Evidence and artifacts | Maximum payload bytes and retained item count | | | | |
-| Generated content | Maximum body bytes and retained versions/items | | | | |
-| Interview transcripts | Maximum turns and bytes per session and per owner | | | | |
-| Runner input | Maximum declared files and aggregate input bytes | | | | |
-| Runner output | Maximum stdout/stderr bytes per stream and per run | | | | |
-| Runner temporary storage | Maximum bytes and file count per run | | | | |
-| Pending overlay proposals | Maximum pending proposals per goal | | | | |
-| Pending jobs | Maximum queued/running jobs per owner | | | | |
+| Import originals | Maximum bytes per import and maximum retained imports | 10 MiB/item; 100/owner | Item and owner | `413 import-too-large` or `409 import-count-limit`; no partial write | Protect local SQLite/disk use while accommodating text imports |
+| Import statements | Maximum statements per import and pending/unreviewed statements | 10,000/import; 50,000 unreviewed/owner | Import and owner | Reject parsed set atomically | Bound parse/review work and database growth |
+| Evidence and artifacts | Maximum payload bytes and retained item count | 10 MiB/item; 10,000/owner | Item and owner | `413 evidence-too-large` or `409 evidence-count-limit`; prior evidence unchanged | Bound learner-content storage |
+| Generated content | Maximum body bytes and retained versions/items | 2 MiB/body; 5,000/owner | Body and owner | `generated-content-limit`; no partial artifact | Generated content is text-dominant and reproducible |
+| Interview transcripts | Maximum turns and bytes per session and per owner | 1,000 turns and 10 MiB/session; 200 sessions/owner | Session and owner | Preserve current run; require export/deletion before continuing | Bound sensitive transcript volume |
+| Runner input | Maximum declared files and aggregate input bytes | 100 files; 10 MiB/run | Run | Reject before process creation | Bound pre-spawn work and disk use |
+| Runner output | Maximum stdout/stderr bytes per stream and per run | 1 MiB/stream; 2 MiB/run | Stream and run | Truncate with explicit marker and terminal limit classification | Prevent output-driven exhaustion |
+| Runner temporary storage | Maximum bytes and file count per run | 256 MiB; 10,000 files/run | Run | Cancel safely and clean workspace | Bound local execution storage |
+| Pending overlay proposals | Maximum pending proposals per goal | 25/goal | Goal | `409 pending-cap-exceeded`; no insert | Retains tested engineering value as approved policy |
+| Pending jobs | Maximum queued/running jobs per owner | 100/owner | Owner | `429 pending-job-cap`; no reservation | Retains tested engineering value as approved policy |
 
-The current engineering defaults in `server/src/yuno/config.py` are test and development values, not proposals or approved production values. In particular, `overlay_proposal_pending_cap = 25` and `pending_job_cap = 100` must not be treated as policy approval.
+The pre-existing engineering defaults in `server/src/yuno/config.py` did not themselves establish policy. Policy version 1.0 now independently approves `overlay_proposal_pending_cap = 25` and `pending_job_cap = 100`; every other default must still be reconciled with this document.
 
 ## 6. Retention and expiry decisions
 
@@ -62,20 +62,20 @@ For each category, specify when the clock starts, whether retention is time- or 
 
 | Category | Decision required | Approved duration / count | Clock starts | Expiry action | Surviving metadata |
 | --- | --- | --- | --- | --- | --- |
-| Abandoned diagnostics | Session expiry | | | | |
-| Completed diagnostics | Session and answer retention | | | | |
-| Imports and originals | Original, parsed, and reviewed data retention | | | | |
-| Generated artifacts | Content and provenance retention | | | | |
-| Practice and Mock transcripts | Active, completed, cancelled, and draft retention | | | | |
-| Job records | Terminal job and attempt retention | | | | |
-| Job events / SSE | Event retention and maximum replay window | | | | |
-| Runner output | Output-chunk retention | | | | |
-| Runner temporary files | Success, failure, cancellation, crash, and startup-janitor cleanup timing | | | | |
-| Export operations | Operation metadata and generated package retention | | | | |
-| Delete operations | Operation metadata, impact snapshot, and audit retention | | | | |
-| Structured logs | Rotation size, total retention, and disposal behavior | | | | |
+| Abandoned diagnostics | Session expiry | 30 days | Last update | Expire; remove seed/answer bodies | ID, `expired` state, version refs, timestamps, hashes |
+| Completed diagnostics | Session and answer retention | Until goal deletion | Goal deletion | Remove seed/answer bodies | Minimal status, version refs, timestamps, hashes |
+| Imports and originals | Original, parsed, and reviewed data retention | Until import or parent-goal deletion | Explicit delete | Remove original/corrected text atomically | IDs, parser version, hashes, decisions, timestamps, audit facts |
+| Generated artifacts | Content and provenance retention | Until parent-goal deletion | Goal deletion | Remove bodies/references atomically | IDs, versions, hashes, provenance, timestamps, audit facts |
+| Practice and Mock transcripts | Active, completed, cancelled, and draft retention | Draft/active: 30 days inactivity; terminal: until session or goal deletion | Last activity or explicit delete | Remove raw turns/drafts/answers/feedback | IDs, state, versions, timestamps, hashes, audit facts |
+| Job records | Terminal job and attempt retention | 30 days | Terminal timestamp | Purge operational payloads, diagnostics, attempts, results after reconciliation | Domain result and audit records |
+| Job events / SSE | Event retention and maximum replay window | 7 days or newest 10,000/owner, whichever is smaller | Event timestamp/count cap | Expire oldest terminal events | No event-body archive; GET remains authoritative |
+| Runner output | Output-chunk retention | 7 days | Terminal timestamp | Delete chunks/referenced output | State, limit classification, hashes, timestamps, audit facts |
+| Runner temporary files | Success, failure, cancellation, crash, and startup-janitor cleanup timing | Immediate on terminal path; 1-hour crash/startup janitor | Terminal state or last verified process activity | Delete workspace | Runner record and safe cleanup classification |
+| Export operations | Operation metadata and generated package retention | Package: 24 hours; metadata/hash: 30 days | Completion | Delete package, then operation metadata | No package copy or archive |
+| Delete operations | Operation metadata, impact snapshot, and audit retention | Lifetime of local database | Entire-installation erasure | Removed only with database | IDs, hashes, scope, status, timestamps |
+| Structured logs | Rotation size, total retention, and disposal behavior | 14 days or 50 MiB; five 10 MiB files | Event time and aggregate cap | Delete expired/oldest file | No secondary archive |
 
-Queue-age promotion and janitor timing also require approved values. The current engineering defaults `background_job_age_promotion_seconds = 300` and `job_janitor_retention_seconds = 86400` demonstrate the mechanism only and are not approved policy.
+Queue-age promotion is approved at 5 minutes. Terminal runner-workspace janitor retention is approved at 1 hour; the current 24-hour engineering placeholder must be replaced.
 
 ## 7. Export decision
 
@@ -83,40 +83,40 @@ The approver must record all of the following as one internally consistent expor
 
 | Item | Decision required | Approved decision | Evidence / rationale |
 | --- | --- | --- | --- |
-| Package format | Container and manifest representation | | |
-| Format identifier | Stable product-qualified format name | | |
-| Initial version | Exact version string and compatibility meaning | | |
-| Filename convention | Exact deterministic or timestamped convention | | |
-| Text encoding | Manifest and referenced text encoding | | |
-| Integrity | Required hashes/checksums and what they cover | | |
-| Inventory | Required profile, goals, overlays, evidence, notebook, reviews, imports, generated artifacts, and provenance fields | | |
-| Tombstones | Exact unavailable marker and retained metadata | | |
-| Missing referenced content | Exact unavailable marker and reason vocabulary | | |
-| Interview transcripts | Included, excluded, or separately consented; state-by-state rules | | |
-| Raw import originals | Included or excluded and why | | |
-| Quarantined provider output | Included or excluded and why | | |
-| Runner output | Included or excluded and why | | |
-| Package storage | Location, permissions, at-rest protection, and cleanup | | |
-| Delivery | How the learner receives or inspects a completed package | | |
-| Version evolution | Backward-read guarantees, migration posture, and deprecation rules | | |
+| Package format | Container and manifest representation | One canonical UTF-8 JSON document | Simplest portable local representation |
+| Format identifier | Stable product-qualified format name | `yuno-portable-export` | Distinguishes product and contract |
+| Initial version | Exact version string and compatibility meaning | `1.0` | Major is compatibility boundary; minor is additive |
+| Filename convention | Exact deterministic or timestamped convention | `yuno-export-v1-YYYYMMDDTHHMMSSZ.json`, UTC completion time | Stable, sortable, and local-only |
+| Text encoding | Manifest and referenced text encoding | UTF-8 without BOM; sorted keys; no insignificant whitespace | Deterministic representation |
+| Integrity | Required hashes/checksums and what they cover | SHA-256 of canonical top-level `data`, recorded in `integrity` | Detects package alteration |
+| Inventory | Required profile, goals, overlays, evidence, notebook, reviews, imports, generated artifacts, and provenance fields | Envelope plus all categories listed in section 14.3 | Matches PRD portable-representation scope |
+| Tombstones | Exact unavailable marker and retained metadata | Stable IDs/safe metadata, `availability: unavailable`, reason `tombstoned` | Never fabricate or silently omit |
+| Missing referenced content | Exact unavailable marker and reason vocabulary | `tombstoned`, `source-missing`, `raw-original-excluded`, `policy-excluded` | Stable machine-readable reasons |
+| Interview transcripts | Included, excluded, or separately consented; state-by-state rules | Raw bodies excluded from v1; safe run metadata plus `policy-excluded` marker | Privacy-minimizing MVP scope |
+| Raw import originals | Included or excluded and why | Excluded; reviewed metadata plus `raw-original-excluded` marker | Avoid exporting untrusted/raw input by default |
+| Quarantined provider output | Included or excluded and why | Raw output excluded; safe ID/hash/schema/classification only | Quarantine cannot become trusted output |
+| Runner output | Included or excluded and why | Bodies excluded; safe logical filenames/hashes/versions/state/classifications only | Avoid exporting execution bodies by default |
+| Package storage | Location, permissions, at-rest protection, and cleanup | Local database package body for 24 hours; no secondary copy; learner controls downloads | Short operational lifetime |
+| Delivery | How the learner receives or inspects a completed package | Owner-scoped local API download | No network transfer or remote store |
+| Version evolution | Backward-read guarantees, migration posture, and deprecation rules | Semantic versioning; major for breaking changes, minor for additive optional fields; reject unsupported major | Explicit compatibility boundary |
 
-Until this table is approved and configured, production export remains fail-closed. The implementation's fixture version is test evidence only.
+This table is approved but not fully configured or enforced. Production export remains fail-closed until section 14.6's export gaps are implemented and privacy-review evidence passes.
 
 ## 8. Delete, recovery, and backup decision
 
 | Item | Decision required | Approved decision | Evidence / rationale |
 | --- | --- | --- | --- |
-| Delete meaning | Logical tombstone, physical removal, or staged combination by data category | | |
-| Recovery window | Duration and exact recoverable scope, or an explicit no-recovery guarantee | | |
-| Recovery authority | Who can initiate recovery and how identity/intent is verified | | |
-| Physical purge | Trigger, schedule, retry behavior, and failure visibility | | |
-| Cross-goal effects | Required treatment of transferred evidence and dependent LearningState | | |
-| Audit survival | Which non-content audit facts survive deletion and for how long | | |
-| Local backups | Whether backups exist, where they are stored, and how they are protected | | |
-| Backup inclusion | Which data, tombstones, logs, exports, and secrets are included or excluded | | |
-| Backup retention | Number/age of retained backups and deletion propagation | | |
-| Restore | Supported restore scope, verification, failure behavior, and user messaging | | |
-| Lost-device / corrupt-database posture | Explicit guarantee or explicit absence of guarantee | | |
+| Delete meaning | Logical tombstone, physical removal, or staged combination by data category | Irreversible goal tombstone plus removal of goal-owned sensitive bodies and app-managed files; minimal integrity metadata remains | Matches D5 and privacy-minimizing body retention |
+| Recovery window | Duration and exact recoverable scope, or an explicit no-recovery guarantee | None; no undelete in MVP | Simple and truthful local posture |
+| Recovery authority | Who can initiate recovery and how identity/intent is verified | Not applicable; recovery does not exist | No hidden recovery path |
+| Physical purge | Trigger, schedule, retry behavior, and failure visibility | Durable delete job removes live bodies/references atomically or through reconciled cleanup; failure remains visible | Application deletion, not forensic media sanitization |
+| Cross-goal effects | Required treatment of transferred evidence and dependent LearningState | D5 tombstones and downgrades commit atomically with delete | Existing fixed invariant |
+| Audit survival | Which non-content audit facts survive deletion and for how long | IDs, hashes, versions, impact, status, and timestamps for database lifetime; no raw bodies | Integrity without content retention |
+| Local backups | Whether backups exist, where they are stored, and how they are protected | Yuno creates none in MVP | No backup or recovery claim |
+| Backup inclusion | Which data, tombstones, logs, exports, and secrets are included or excluded | Not applicable to Yuno; external user/OS backups are outside app control | Must be disclosed in delete copy |
+| Backup retention | Number/age of retained backups and deletion propagation | Not applicable to Yuno; no propagation guarantee to external backups | Avoid false guarantees |
+| Restore | Supported restore scope, verification, failure behavior, and user messaging | No supported in-app restore; a user-provided database must pass schema/migration startup checks | No recovery guarantee |
+| Lost-device / corrupt-database posture | Explicit guarantee or explicit absence of guarantee | No recovery guarantee; user-managed encrypted device backup is an external choice | Honest local-only posture |
 
 The approved policy must distinguish deletion from the live database, physical purge, backup expiry, and audit retention. Settings copy may claim only what this table approves.
 
@@ -126,16 +126,16 @@ The fixed redaction categories in section 4 are the minimum. Approval must addit
 
 | Item | Decision required | Approved decision | Evidence / rationale |
 | --- | --- | --- | --- |
-| Allowed fields | Exhaustive ordinary-log allowlist by event family | | |
-| Additional redaction | Any categories beyond the fixed minimum | | |
-| Rotation | Per-file size/count or equivalent local rotation rule | | |
-| Retention | Maximum log age and total disk budget | | |
-| Storage protection | Location, permissions, and at-rest posture | | |
-| Learner access | Whether and how the local owner can inspect/export/delete logs | | |
-| Support access | None, learner-mediated bundle, or another explicitly approved model | | |
-| Support consent | Scope, expiry, revocation, and visible disclosure if access exists | | |
-| Incident handling | What may be preserved beyond ordinary retention and under whose authority | | |
-| Verification | Representative redaction and rotation evidence required for release | | |
+| Allowed fields | Exhaustive ordinary-log allowlist by event family | Event, UTC timestamp, level, request/correlation/owner/goal/job/provider-request/runner/run IDs, method, route template, status code, provider, lifecycle, fixed classification | Correlation without raw content |
+| Additional redaction | Any categories beyond the fixed minimum | Query strings, bodies, user agent, IP address, email/display name, arbitrary exception message, and unknown fields denied by default | Reduce unintended personal/internal data |
+| Rotation | Per-file size/count or equivalent local rotation rule | Five files, at most 10 MiB each | 50 MiB hard aggregate cap |
+| Retention | Maximum log age and total disk budget | 14 days or 50 MiB, whichever is reached first | Short operational/debug window |
+| Storage protection | Location, permissions, and at-rest posture | OS application-data directory restricted to local account; no separate encryption claim | Align with local ownership |
+| Learner access | Whether and how the local owner can inspect/export/delete logs | Direct filesystem inspection/deletion; no hidden copy | Learner-controlled local data |
+| Support access | None, learner-mediated bundle, or another explicitly approved model | None; no remote access, upload, telemetry forwarding, or support credential | Local-only MVP |
+| Support consent | Scope, expiry, revocation, and visible disclosure if access exists | Not applicable; no support access | Any future mechanism needs a new approval |
+| Incident handling | What may be preserved beyond ordinary retention and under whose authority | No automatic override; local owner may manually copy a file | Avoid hidden retention |
+| Verification | Representative redaction and rotation evidence required for release | Allowlist/redaction, rotation/expiry, owner-only path, no transport, provider/runner failure tests | Required before production activation |
 
 No remote support access or automatic log upload exists by implication. Any such capability would require an explicit approved decision and must remain consistent with the separate external-telemetry gate.
 
@@ -166,35 +166,35 @@ After approval, engineering maps every adopted value to configuration, validatio
 
 Before production activation, engineering must at minimum replace the unset export policy and review every current placeholder in `server/src/yuno/config.py`. No current default becomes production policy merely because it exists in code.
 
-## 12. Stop point while open
+## 12. Production-activation stop point
 
-- Production export remains disabled.
-- Settings must not promise a retention duration, recovery window, backup guarantee, or support-access model.
-- Placeholder caps and cleanup timings remain engineering-only.
-- IDK-409 cannot pass its manual privacy acceptance, and IDK-503 cannot close G10/G11.
+- Production export remains disabled until the approved export contract and cleanup are enforced.
+- Settings must not promise the approved retention, deletion, or logging behavior until the matching enforcement and tests ship.
+- IDK-409 cannot pass its manual privacy acceptance, and IDK-503 cannot close G10/G11, until section 10's review evidence passes.
+- Policy approval closes IDK-010's decision question; it does not waive implementation or privacy-review evidence.
 
 ## 13. Approval record
 
 | Approver | Role | Date | Decision | Policy version | Evidence reference |
 | --- | --- | --- | --- | --- | --- |
-| | Product/privacy owner | | | | |
+| Product/privacy owner | Product/privacy owner | 2026-08-13 | Approved without changes | 1.0 | Section 14 and exact approval statement recorded in project conversation |
 
-Decision values: `approved`, `changes requested`. Approval requires every decision cell in sections 5–9 to be complete or explicitly marked `not applicable` with a rationale. A partially completed table does not activate production lifecycle claims.
+Decision values: `approved`, `changes requested`. Every decision cell in sections 5–9 is complete or explicitly marked not applicable. Production lifecycle claims still require enforcement and section 10's review evidence.
 
-## 14. Recommended MVP policy — awaiting approval
+## 14. Approved MVP policy 1.0
 
-Status: proposed, not approved. This section supplies a complete candidate for product/privacy review. It does not alter the blank approval tables above or authorize production claims.
+Status: approved without changes on 2026-08-13 through section 14.7's exact approval statement. Sections 5–9 are the normative transcription; this section preserves the approved proposal and its rationale.
 
-The recommendation applies four external principles:
+The approved policy applies four external principles:
 
 - Define processing and deletion capabilities from a documented privacy-risk profile rather than treating a framework as automatic compliance ([NIST Privacy Framework FAQ](https://www.nist.gov/privacy-framework/frequently-asked-questions)).
 - Keep each category only as long as its stated product purpose requires, with a category-specific schedule ([ICO storage-limitation guidance](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-protection-principles/a-guide-to-the-data-protection-principles/storage-limitation/)).
 - Exclude or sanitize secrets and sensitive bodies, restrict access, cap disk consumption, and dispose of logs at the end of their defined retention period ([OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)).
 - Do not describe application-level record deletion as forensic media sanitization; device disposal is a separate, sensitivity-based process ([NIST SP 800-88 Rev. 2](https://csrc.nist.gov/pubs/sp/800/88/r2/final)).
 
-The sources do not prescribe Yuno-specific numeric limits. The values below are product recommendations inferred for a single-owner, local SQLite MVP dominated by text, code, and metadata. They protect responsiveness and disk use while leaving ample room for ordinary learning activity.
+The sources do not prescribe Yuno-specific numeric limits. The values below began as product recommendations inferred for a single-owner, local SQLite MVP dominated by text, code, and metadata; policy approval adopts them as Yuno's MVP limits. They protect responsiveness and disk use while leaving ample room for ordinary learning activity.
 
-### 14.1 Recommended size and count limits
+### 14.1 Approved size and count limits
 
 | Category | Proposed value | Scope and enforcement | Learner-visible failure |
 | --- | --- | --- | --- |
@@ -211,7 +211,7 @@ The sources do not prescribe Yuno-specific numeric limits. The values below are 
 
 One mebibyte (MiB) means 1,048,576 bytes. Limits apply to decoded stored bytes, not compressed transfer size. A request that crosses multiple limits reports the first deterministic validation failure and commits nothing.
 
-### 14.2 Recommended retention schedule
+### 14.2 Approved retention schedule
 
 | Category | Proposed retention | Clock and expiry action | Surviving metadata |
 | --- | --- | --- | --- |
@@ -228,9 +228,9 @@ One mebibyte (MiB) means 1,048,576 bytes. Limits apply to decoded stored bytes, 
 | Delete operations | For the lifetime of the local database | Immutable impact snapshot and non-content audit record remain | IDs, hashes, scope, status, and timestamps only |
 | Structured logs | 14 days or 50 MiB total, whichever is reached first | Five 10 MiB files; delete the oldest rotated file and any file older than 14 days | No separate log archive |
 
-Background job age promotion remains 5 minutes. Terminal runner workspace janitor retention changes from the engineering placeholder of 24 hours to the proposed 1 hour. Learning records with an active purpose remain until the learner deletes the owning item or goal; operational exhaust has a short fixed lifetime.
+Background job age promotion remains 5 minutes. Terminal runner workspace janitor retention changes from the engineering placeholder of 24 hours to the approved 1 hour. Learning records with an active purpose remain until the learner deletes the owning item or goal; operational exhaust has a short fixed lifetime.
 
-### 14.3 Recommended export contract
+### 14.3 Approved export contract
 
 | Item | Proposed decision |
 | --- | --- |
@@ -251,7 +251,7 @@ Background job age promotion remains 5 minutes. Terminal runner workspace janito
 
 The package is portable data, not a database backup and not a restore promise.
 
-### 14.4 Recommended delete, recovery, and backup posture
+### 14.4 Approved delete, recovery, and backup posture
 
 | Item | Proposed decision |
 | --- | --- |
@@ -264,7 +264,7 @@ The package is portable data, not a database backup and not a restore promise.
 | Entire installation erasure | The learner removes the configured SQLite database, app-managed export/source/runner directories, and rotated logs while Yuno is stopped. Device transfer/disposal follows the operating system or media owner's sanitization process. |
 | Lost or corrupt device | No recovery guarantee. Settings and documentation must recommend user-managed encrypted device backup only as an external choice, without claiming Yuno manages it. |
 
-### 14.5 Recommended logging and support posture
+### 14.5 Approved logging and support posture
 
 | Item | Proposed decision |
 | --- | --- |
@@ -280,22 +280,22 @@ The package is portable data, not a database backup and not a restore promise.
 
 ### 14.6 Known enforcement gaps before approval can activate production policy
 
-The recommendation intentionally identifies work rather than treating documentation as enforcement:
+The approved policy intentionally identifies work rather than treating documentation as enforcement:
 
-- Most proposed byte/count limits do not yet exist as configuration or validation.
+- Most approved byte/count limits do not yet exist as configuration or validation.
 - Diagnostic, transcript, import, generated-content, job/event, runner-output, and export-package expiry jobs do not yet implement this schedule.
 - Several append-only tables currently reject deletion; retaining their integrity metadata while removing bodies requires explicit body/reference separation and forward migrations.
 - Goal deletion currently removes the D5-governed evidence payloads but does not yet remove every goal-owned sensitive body named in section 14.4.
 - Export does not yet expose the approved envelope, filename/download representation, canonical-data digest, or expiry cleanup.
-- Structured logs are safely allowlisted but currently use stderr rather than the proposed owner-only rotated local files.
-- Settings does not yet display the proposed no-recovery/no-backup wording or the relevant configured limits and expiry periods.
+- Structured logs are safely allowlisted but currently use stderr rather than the approved owner-only rotated local files.
+- Settings does not yet display the approved no-recovery/no-backup wording or the relevant configured limits and expiry periods.
 
 These gaps must be implemented and verified after approval; until then, section 12's stop point remains in force.
 
-### 14.7 Candidate approval shortcut
+### 14.7 Approval statement
 
-The product/privacy owner may approve this entire candidate by recording:
+The product/privacy owner approved this policy by recording:
 
 `Approved IDK-010 recommended MVP policy 1.0 in section 14 without changes.`
 
-Any exception must name the section 14 row, replacement value, and rationale. Engineering then transcribes the approved candidate into sections 5–9, assigns the policy version and date in section 13, and implements the gap list before production activation.
+No exception was recorded. Sections 5–9 contain the normative transcription, section 13 records policy version 1.0 and the approval date, and section 14.6 remains the required engineering gap list before production activation.
