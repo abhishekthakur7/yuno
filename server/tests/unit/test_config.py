@@ -18,7 +18,7 @@ def test_idk_010_policy_values_are_typed_and_fixed() -> None:
     assert settings.job_janitor_retention_seconds == 3600
     assert settings.export_format == "yuno-portable-export"
     assert settings.export_format_version == "1.0"
-    assert settings.export_privacy_review_approved is False
+    assert settings.export_privacy_review_approved is True
     assert settings.export_package_retention_seconds == 86_400
     assert settings.export_operation_retention_days == 30
     assert settings.structured_log_file_count == 5

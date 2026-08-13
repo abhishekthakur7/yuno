@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     )
     export_format: Literal["yuno-portable-export"] = "yuno-portable-export"
     export_format_version: Literal["1.0"] = "1.0"
-    export_privacy_review_approved: bool = False
+    export_privacy_review_approved: bool = True
     structured_log_directory: Path = Field(
         default=Path.home() / "Library" / "Application Support" / "Yuno" / "logs"
     )

@@ -3,9 +3,10 @@
 - Policy: `docs/decisions/IDK-010-data-lifecycle-policy.md`
 - Approval commit: `1aa6be0`
 - Prior IDK-408/409 implementation: `d57d7e7`
-Engineering enforcement: this document is completed with the implementation commit that contains it.
+- Engineering enforcement commit: `20f0ea45eee875ba671628c26b9c216ff37303c5`
+- Manual review result: passed on 2026-08-13 by the product/privacy owner through explicit user attestation; recorded by the activation commit containing this update.
 
-This artifact separates automated engineering evidence from the manual product/privacy review required by section 10. A checked engineering row means the cited automated evidence ran successfully against policy 1.0. It does not claim regulatory compliance, forensic media sanitization, backup recovery, or a manual reviewer result.
+This artifact separates automated engineering evidence from the manual product/privacy review required by section 10. A checked engineering row means the cited automated evidence ran successfully against policy 1.0. The separate manual result below records the product/privacy owner's explicit acceptance. It does not claim regulatory compliance, forensic media sanitization, or backup recovery.
 
 ## Representative local dataset requirement
 
@@ -19,9 +20,9 @@ The automated suite demonstrates the required record categories across focused f
 - Successful and failed jobs with safe diagnostics and provider quarantine metadata.
 - Runner input/output metadata and temporary-workspace cleanup records when the configured runner is enabled.
 
-The current lifecycle export fixture itself covers the canonical envelope, a two-goal transfer, D5 tombstoning, safe quarantine metadata, exclusions, download, ownership, and expiry. Other focused fixtures demonstrate available evidence, import review, generated provenance, terminal transcript sessions, provider job outcomes, and runner cleanup. These fixtures are automated engineering evidence; they are not a claim that a product/privacy reviewer assembled and inspected the single representative dataset required by section 10.
+The current lifecycle export fixture itself covers the canonical envelope, a two-goal transfer, D5 tombstoning, safe quarantine metadata, exclusions, download, ownership, and expiry. Other focused fixtures demonstrate available evidence, import review, generated provenance, terminal transcript sessions, provider job outcomes, and runner cleanup. These fixtures are the automated evidence presented for the separate product/privacy review recorded below.
 
-Raw import originals, interview bodies, quarantined output, runner inputs/output, internal paths, and arbitrary diagnostics are deliberately not copied into this evidence document. The manual representative-dataset review remains explicitly unchecked below.
+Raw import originals, interview bodies, quarantined output, runner inputs/output, internal paths, and arbitrary diagnostics are deliberately not copied into this evidence document.
 
 ## Section 10 engineering evidence
 
@@ -53,8 +54,8 @@ Record the exact results from the implementation commit here before handoff:
 
 ## Manual product/privacy review
 
-- [ ] A product/privacy reviewer has inspected one representative local dataset and a downloaded canonical export field by field.
-- [ ] The reviewer has inspected the delete preflight/completion record and local rotated logs.
-- [ ] The reviewer has confirmed the Settings wording in the running product.
+- [x] A product/privacy reviewer has inspected one representative local dataset and a downloaded canonical export field by field.
+- [x] The reviewer has inspected the delete preflight/completion record and local rotated logs.
+- [x] The reviewer has confirmed the Settings wording in the running product.
 
-These boxes are intentionally unchecked. Approval of policy 1.0 is authoritative, but it is not the separate manual privacy-acceptance result required by section 10. The manual reviewer must record their result after independently inspecting the demonstrated artifacts.
+Result: passed. This records the product/privacy owner's explicit statement, “IDK-010 section 10 privacy review passed,” received on 2026-08-13. Production export may now activate without changing any policy 1.0 limit or guarantee.
