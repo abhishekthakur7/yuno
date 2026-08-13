@@ -271,17 +271,17 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 ### IDK-006 — Frame the provider CLI version/authentication-discovery decision
 
 - Phase: 0 — Blocking decisions
-- Status: Approved — decision version 1.0 recorded 2026-08-13
-- Objective: Record the approved Codex/Claude CLI version ranges and the safe installation/authentication discovery policy, completing Appendix H D7's provider transport decision.
+- Status: Approved — decision version 1.1 recorded 2026-08-13
+- Objective: Record the approved version-agnostic Codex/Claude CLI capability policy and the safe installation/authentication discovery policy, completing Appendix H D7's provider transport decision.
 - User-visible outcome: None directly; determines what "provider unavailable/misconfigured" detection can safely report.
 - PRD traceability: AI-02 (contributing)
-- Appendix H decisions: D7 (transport, timeout, environment, cancellation, version, and authentication discovery resolved by decision version 1.0).
+- Appendix H decisions: D7 (transport, timeout, environment, cancellation, version policy, and authentication discovery resolved by decision version 1.1).
 - Owning module: provider
 - Dependencies: None
 - Scope:
-  - Resolved question (PRD §14 Q7; IMPLEMENTATION_SPEC §12.3 Q6): the supported ranges, exact commands, fixed models, environment policy, timers, and safe discovery procedure are recorded in `docs/decisions/IDK-006-provider-cli-support.md`.
-  - Evidence required: supported CLI version ranges for Codex 5.6 Terra/high and Claude, and a safe (non-secret-leaking) authentication-discovery procedure consistent with D7's env-allowlist and redaction rules (spec §8.5).
-  - Affected tickets and phases: gate G6 is satisfied for IDK-403 by decision version 1.0; implementation and security/privacy evidence remain required before configured capability may ship.
+  - Resolved question (PRD §14 Q7; IMPLEMENTATION_SPEC §12.3 Q6): any identified installed CLI version is eligible; exact commands, fixed models, capability probes, environment policy, timers, and safe discovery are recorded in `docs/decisions/IDK-006-provider-cli-support.md`.
+  - Evidence required: version-agnostic capability discovery for Codex 5.6 Terra/high and Claude, and a safe (non-secret-leaking) authentication-discovery procedure consistent with D7's env-allowlist and redaction rules (spec §8.5).
+  - Affected tickets and phases: gate G6 is satisfied for IDK-403 by decision version 1.1; implementation and security/privacy evidence remain required before configured capability may ship.
 - Out of scope:
   - CLI subprocess transport mechanics (resolved by D7, implemented in Section 4).
   - Generated-content cache/provenance contract (IDK-207).
@@ -290,16 +290,16 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - UX routes and states: None in my sections.
 - Implementation notes: None.
 - Acceptance criteria:
-  - Decision version 1.0 records every required provider/version/command/model/discovery/environment/timer/cancellation/schema/recovery/evidence row and is mechanically enforced by IDK-403.
+  - Decision version 1.1 records every required provider/version-policy/command/model/discovery/environment/timer/cancellation/schema/recovery/evidence row and is mechanically enforced by IDK-403.
 - Minimum required tests:
   - Automated: IDK-403 provider discovery, adapter, security, capability-cache, and wiring tests demonstrate the adopted matrix.
-  - Manual: Engineering owner approved decision version 1.0 on 2026-08-13.
+  - Manual: Engineering owner approved decision version 1.1 on 2026-08-13.
   - Existing coverage reused: official primary CLI references and read-only local CLI help/version/status probes recorded in the decision artifact.
 - Failure and recovery:
-  - Missing executable, unsupported version/command surface, and unavailable authentication remain distinct fail-closed capability states with fixed recovery guidance.
+  - Missing executable, unidentified or incompatible command surface, and unavailable authentication remain distinct fail-closed capability states with fixed recovery guidance; numeric version values are never rejected.
 - Removal/replacement: None.
 - Approval gate:
-  - Approved by the engineering owner on 2026-08-13. Artifact: `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.0.
+  - Approved by the engineering owner on 2026-08-13. Artifact: `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.1.
 - Estimate:
   - Completed with the IDK-403/404 implementation.
 
@@ -1549,7 +1549,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-403 — CLI provider port: disclosure gate and schema quarantine
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Complete — activated under approved IDK-006 decision version 1.0
+- Status: Complete — activated under approved IDK-006 decision version 1.1
 - Objective: Deliver the D7 CLI-subprocess provider port for Codex 5.6 Terra/high (default) and Claude (alternative) with no-shell argv construction, stdin/temp-file context delivery, per-provider environment allowlist, three configurable timers, process-group cancellation/timeout, pinned per-adapter output contracts, and mandatory PRV-01 disclosure-before-enqueue with schema quarantine for invalid output.
 - User-visible outcome: Before any provider-backed action first runs, the learner sees and accepts a network/provider disclosure; a misconfigured or unauthenticated provider is reported as a recoverable configuration error rather than a generic timeout; invalid model output never becomes a lesson, evaluation, or governed mutation — it is quarantined and surfaced as a retryable failure.
 - PRD traceability: AI-01 (primary), AI-02 (primary), PRV-01 (primary), PRV-02 (primary), NFR-05 (primary), NFR-09 (primary).
@@ -1573,7 +1573,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 - Out of scope:
   - Which specific generation/evaluation call sites use this port (IDK-404 wires callers).
   - The runner's separate subprocess policy (IDK-406) — the low-level subprocess utility is shared per D7, but the runner's own environment/limits are IDK-406's.
-  - Exact commands, version ranges, model behavior, environment policy, and authentication discovery are approved in `docs/decisions/IDK-006-provider-cli-support.md`.
+  - Exact commands, version-agnostic capability policy, model behavior, environment policy, and authentication discovery are approved in `docs/decisions/IDK-006-provider-cli-support.md`.
 - Data and invariants:
   - `provider_requests`: owner/goal/job, purpose, adapter/contract versions, context-ref hash, disclosure ref, PID/PGID/temp path, lifecycle/diagnostic; raw prompt is never a normal log field (only a redacted or securely-referenced form is retained per PRV-02).
   - `schema_quarantines`: request, raw-output secure ref/hash, expected schema version, validation errors, timestamp; a `schema_quarantines` row can never be joined into a result, evidence, or any governed-state write path — enforced at the repository boundary, not just by convention.
@@ -1602,7 +1602,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - A missing executable, unsupported CLI, or unavailable authentication reports its exact fixed capability state and any dependent action shows a recoverable error, never a generic crash.
   - Timeout-truncated output is discarded after the fixed retryable classification is recorded; retry re-attempts the same request under the job's dedupe key per IDK-401's cache-checked-rerun typing for generation.
 - Removal/replacement: None. No existing provider integration prototype exists to remove; the Settings page's current "Providers and network... Not connected" static text is replaced by IDK-409's disclosure UI, not by this ticket.
-- Approval gate: Satisfied by `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.0; implementation evidence is mapped in `docs/provider/IDK-403-404-acceptance-map.md`.
+- Approval gate: Satisfied by `docs/decisions/IDK-006-provider-cli-support.md`, decision version 1.1; implementation evidence is mapped in `docs/provider/IDK-403-404-acceptance-map.md`.
 - Estimate: Completed with the IDK-006/403/404 implementation.
 
 ### IDK-404 — Wire live generation, evaluation, tutor conversation, and source retrieval

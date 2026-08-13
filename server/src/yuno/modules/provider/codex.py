@@ -7,7 +7,6 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
@@ -47,8 +46,6 @@ CODEX_MODEL = "gpt-5.6-terra"
 CODEX_REASONING_EFFORT = "high"
 CODEX_ADAPTER_VERSION = "codex-cli-adapter-v1"
 CODEX_CONTRACT_VERSION = "codex-jsonl-agent-message-v1"
-CODEX_MINIMUM_VERSION = (0, 147, 0)
-CODEX_MAXIMUM_VERSION_EXCLUSIVE = (0, 148, 0)
 CODEX_ENVIRONMENT_ALLOWLIST = (
     "HOME",
     "PATH",
@@ -65,7 +62,7 @@ CODEX_ENVIRONMENT_ALLOWLIST = (
     "CODEX_CA_CERTIFICATE",
 )
 
-_VERSION_PATTERN = re.compile(r"codex-cli (\d+)\.(\d+)\.(\d+)")
+_VERSION_PATTERN = re.compile(r"codex-cli ([0-9A-Za-z][0-9A-Za-z.+-]{0,63})")
 _REQUIRED_ROOT_FLAGS = ("--ask-for-approval", "--config")
 _REQUIRED_EXEC_FLAGS = (
     "--ephemeral",
@@ -81,14 +78,7 @@ _REQUIRED_EXEC_FLAGS = (
 )
 
 
-@dataclass(frozen=True, order=True)
-class CodexCliVersion:
-    major: int
-    minor: int
-    patch: int
-
-
-def parse_codex_cli_version(output: bytes) -> CodexCliVersion:
+def parse_codex_cli_version(output: bytes) -> str:
     try:
         value = output.decode("ascii").strip()
     except UnicodeDecodeError as exc:
@@ -96,7 +86,7 @@ def parse_codex_cli_version(output: bytes) -> CodexCliVersion:
     match = _VERSION_PATTERN.fullmatch(value)
     if match is None:
         raise ValueError("Codex CLI version output has an unexpected shape.")
-    return CodexCliVersion(*(int(part) for part in match.groups()))
+    return match.group(1)
 
 
 def codex_environment(source: Mapping[str, str]) -> dict[str, str]:
@@ -129,11 +119,8 @@ def discover_codex(
     if not _probe_succeeded(version_outcome):
         return unsupported_capability(ProviderName.CODEX)
     try:
-        version = parse_codex_cli_version(version_outcome.stdout)
+        parse_codex_cli_version(version_outcome.stdout)
     except ValueError:
-        return unsupported_capability(ProviderName.CODEX)
-    version_tuple = (version.major, version.minor, version.patch)
-    if not (CODEX_MINIMUM_VERSION <= version_tuple < CODEX_MAXIMUM_VERSION_EXCLUSIVE):
         return unsupported_capability(ProviderName.CODEX)
     try:
         root_help_outcome = _probe(

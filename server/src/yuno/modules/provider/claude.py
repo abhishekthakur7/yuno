@@ -42,8 +42,6 @@ from yuno.shared.domain.hashing import hash_payload
 CLAUDE_ADAPTER_VERSION = "claude-code-adapter-v1"
 CLAUDE_CONTRACT_VERSION = "claude-stream-json-structured-output-v1"
 CLAUDE_MODEL = "claude-sonnet-4-6"
-CLAUDE_MINIMUM_VERSION = (2, 1, 220)
-CLAUDE_MAXIMUM_VERSION_EXCLUSIVE = (2, 2, 0)
 CLAUDE_TIMERS = ProviderTimers(20, 180, 1_200)
 CLAUDE_DEFAULT_EXECUTABLE = "/opt/homebrew/bin/claude"
 CLAUDE_ENVIRONMENT_ALLOWLIST = (
@@ -61,7 +59,7 @@ CLAUDE_ENVIRONMENT_ALLOWLIST = (
     "NODE_EXTRA_CA_CERTS",
 )
 
-_VERSION_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+) \(Claude Code\)\n?$")
+_VERSION_PATTERN = re.compile(r"^([0-9A-Za-z][0-9A-Za-z.+-]{0,63}) \(Claude Code\)\n?$")
 _ROOT_FLAGS = (
     "-p, --print",
     "--input-format",
@@ -334,13 +332,7 @@ def discover_claude(
             ClaudeCapabilityClassification.UNSUPPORTED_VERSION,
             executable=str(resolved),
         )
-    version_text, version_tuple = version
-    if not (CLAUDE_MINIMUM_VERSION <= version_tuple < CLAUDE_MAXIMUM_VERSION_EXCLUSIVE):
-        return ClaudeCapability(
-            ClaudeCapabilityClassification.UNSUPPORTED_VERSION,
-            version_text,
-            str(resolved),
-        )
+    version_text = version
 
     try:
         root_help = _run_probe(
@@ -387,7 +379,7 @@ def discover_claude(
 
 def parse_claude_version(
     output: bytes,
-) -> tuple[str, tuple[int, int, int]] | None:
+) -> str | None:
     try:
         text = output.decode("ascii", errors="strict")
     except UnicodeDecodeError:
@@ -395,8 +387,7 @@ def parse_claude_version(
     match = _VERSION_PATTERN.fullmatch(text)
     if match is None:
         return None
-    parts = tuple(int(value) for value in match.groups())
-    return ".".join(str(value) for value in parts), parts
+    return match.group(1)
 
 
 def _validator_schema(

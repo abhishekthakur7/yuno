@@ -108,8 +108,8 @@ def unsupported_capability(provider: ProviderName) -> ProviderCapability:
     return ProviderCapability(
         provider,
         ProviderCapabilityState.UNSUPPORTED_VERSION,
-        "The installed CLI version or command surface is unsupported.",
-        "Install a supported CLI version, then refresh.",
+        "The executable could not be identified or lacks the required command surface.",
+        "Install a CLI build with the required command surface, then refresh.",
     )
 
 

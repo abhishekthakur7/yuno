@@ -545,8 +545,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return ProviderCapability(
                         ProviderName.CLAUDE,
                         state,
-                        "The installed CLI version or command surface is unsupported.",
-                        "Install a supported CLI version, then refresh.",
+                        "The executable could not be identified or lacks the required command surface.",
+                        "Install a CLI build with the required command surface, then refresh.",
                     ), None
                 if state is ProviderCapabilityState.AUTHENTICATION_UNAVAILABLE:
                     return authentication_capability(ProviderName.CLAUDE), None

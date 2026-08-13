@@ -11,8 +11,6 @@ import pytest
 from yuno.modules.provider.claude import (
     CLAUDE_ADAPTER_VERSION,
     CLAUDE_CONTRACT_VERSION,
-    CLAUDE_MAXIMUM_VERSION_EXCLUSIVE,
-    CLAUDE_MINIMUM_VERSION,
     CLAUDE_MODEL,
     CLAUDE_TIMERS,
     ClaudeCapabilityClassification,
@@ -135,8 +133,6 @@ def _root_help() -> bytes:
 
 
 def test_approved_constants_are_pinned() -> None:
-    assert CLAUDE_MINIMUM_VERSION == (2, 1, 220)
-    assert CLAUDE_MAXIMUM_VERSION_EXCLUSIVE == (2, 2, 0)
     assert CLAUDE_MODEL == "claude-sonnet-4-6"
     assert CLAUDE_ADAPTER_VERSION == "claude-code-adapter-v1"
     assert CLAUDE_CONTRACT_VERSION == "claude-stream-json-structured-output-v1"
@@ -346,13 +342,12 @@ def test_process_outcomes_keep_distinct_safe_classifications(
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        (b"2.1.220 (Claude Code)\n", ("2.1.220", (2, 1, 220))),
-        (b"2.1.221 (Claude Code)\n", ("2.1.221", (2, 1, 221))),
+        (b"2.1.220 (Claude Code)\n", "2.1.220"),
+        (b"2.1.221 (Claude Code)\n", "2.1.221"),
+        (b"99.0.0-beta.1+build (Claude Code)\n", "99.0.0-beta.1+build"),
         (b"2.1.220", None),
-        (b"2.1.220-beta.1 (Claude Code)\n", None),
-        (b"v2.1.220 (Claude Code)\n", None),
         (b"2.1.220 extra (Claude Code)\n", None),
-        (b"2.1\n", None),
+        (b"(Claude Code)\n", None),
         (b"\xff", None),
     ],
 )
@@ -361,18 +356,16 @@ def test_parse_claude_version_is_strict_ascii(raw, expected) -> None:
 
 
 @pytest.mark.parametrize(
-    ("version", "expected"),
+    "version",
     [
-        ("2.1.219", ClaudeCapabilityClassification.UNSUPPORTED_VERSION),
-        ("2.1.220", ClaudeCapabilityClassification.CONFIGURED),
-        ("2.1.221", ClaudeCapabilityClassification.CONFIGURED),
-        ("2.1.999", ClaudeCapabilityClassification.CONFIGURED),
-        ("2.2.0", ClaudeCapabilityClassification.UNSUPPORTED_VERSION),
-        ("3.0.0", ClaudeCapabilityClassification.UNSUPPORTED_VERSION),
+        "0.1.0",
+        "2.1.220",
+        "3.0.0",
+        "99.0.0-beta.1+build",
     ],
 )
-def test_discovery_enforces_range_flags_and_bounded_auth_json(
-    tmp_path, version, expected
+def test_discovery_accepts_any_identified_version_with_required_capabilities(
+    tmp_path, version
 ) -> None:
     executable = _executable(tmp_path)
     process = QueueProcess(
@@ -387,19 +380,26 @@ def test_discovery_enforces_range_flags_and_bounded_auth_json(
         probe_timers=ProviderTimers(1, 2, 3),
         source_environment={"HOME": "/safe-home", "SECRET": "not-forwarded"},
     )
-    assert result.classification is expected
+    assert result.classification is ClaudeCapabilityClassification.CONFIGURED
     assert process.specs[0].argv == (str(Path(executable).resolve()), "--version")
-    if expected is ClaudeCapabilityClassification.CONFIGURED:
-        assert [spec.argv[1:] for spec in process.specs] == [
-            ("--version",),
-            ("--help",),
-            ("auth", "status", "--help"),
-            ("auth", "status", "--json"),
-        ]
-        assert all(spec.stdin is None for spec in process.specs)
-        assert all("SECRET" not in spec.environment for spec in process.specs)
-    else:
-        assert len(process.specs) == 1
+    assert [spec.argv[1:] for spec in process.specs] == [
+        ("--version",),
+        ("--help",),
+        ("auth", "status", "--help"),
+        ("auth", "status", "--json"),
+    ]
+    assert all(spec.stdin is None for spec in process.specs)
+    assert all("SECRET" not in spec.environment for spec in process.specs)
+
+
+def test_discovery_rejects_unidentified_version_output(tmp_path) -> None:
+    result = discover_claude(
+        _executable(tmp_path),
+        process_port=QueueProcess(_outcome(b"not-claude 123\n")),
+        probe_timers=ProviderTimers(1, 2, 3),
+        source_environment={},
+    )
+    assert result.classification is ClaudeCapabilityClassification.UNSUPPORTED_VERSION
 
 
 def test_discovery_fails_closed_for_missing_flag_and_auth_shapes(tmp_path) -> None:

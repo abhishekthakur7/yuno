@@ -2,7 +2,7 @@
 
 Status: approved
 
-Decision version: `1.0`
+Decision version: `1.1`
 
 Approval date: 2026-08-13
 
@@ -12,12 +12,12 @@ This decision approves a local-only CLI integration. It does not approve SaaS in
 
 ## Supported providers and versions
 
-| Provider | Supported CLI range | Pinned model behavior | Adapter version | Output contract |
+| Provider | Supported CLI versions | Pinned model behavior | Adapter version | Output contract |
 | --- | --- | --- | --- | --- |
-| Codex CLI | `>=0.147.0,<0.148.0` | Always `gpt-5.6-terra` with reasoning effort `high` | `codex-cli-adapter-v1` | `codex-jsonl-agent-message-v1` |
-| Claude Code | `>=2.1.220,<2.2.0` | Always the fixed model ID `claude-sonnet-4-6`; moving aliases and account defaults are prohibited | `claude-code-adapter-v1` | `claude-stream-json-structured-output-v1` |
+| Codex CLI | Any installed release identified by the canonical `codex-cli VERSION` output and the required command-surface probe | Always `gpt-5.6-terra` with reasoning effort `high` | `codex-cli-adapter-v1` | `codex-jsonl-agent-message-v1` |
+| Claude Code | Any installed release identified by the canonical `VERSION (Claude Code)` output and the required command-surface probe | Always the fixed model ID `claude-sonnet-4-6`; moving aliases and account defaults are prohibited | `claude-code-adapter-v1` | `claude-stream-json-structured-output-v1` |
 
-Both bounds are lower-inclusive and upper-exclusive. The lower bounds are the exact locally inspected versions, so the decision does not claim compatibility with an older unverified release. A version inside the range is configured only when its documented command surface also passes the required-flag probe. This makes a compatible patch release mechanically discoverable without claiming that an unprobed command shape is supported. Prereleases, extra version text, malformed output, a lower version, and the upper bound or any later major/minor fail closed.
+There is no numeric lower bound, upper bound, major-version pin, or prerelease exclusion. The locally available CLI is used when the resolved executable identifies itself with the provider's bounded canonical version shape, exposes every required command flag, and passes the safe authentication probe. Numeric version comparison is deliberately absent; the executable identity and command-surface probes are the mechanical compatibility boundary. Unidentified output and missing required flags fail closed because they do not establish that the configured executable can run the approved direct argv.
 
 ## Approved direct argv
 
@@ -100,7 +100,7 @@ The learner-visible states are fixed:
 | State | Meaning | Recovery guidance |
 | --- | --- | --- |
 | `executable-missing` | The configured absolute CLI executable is absent or unsafe | Install the supported CLI or correct its absolute path, then refresh |
-| `unsupported-version` | Version output, version range, or required command flags are incompatible | Install a supported version, then refresh |
+| `unsupported-version` | The executable cannot be identified as the expected CLI or lacks required command flags | Install a CLI build exposing the required command surface, then refresh |
 | `authentication-unavailable` | The supported CLI's safe status probe did not confirm local configuration | Complete that CLI's own local sign-in, then refresh |
 | `configured` | Executable, version, required flags, and authentication/configuration probe all passed | The provider may be selected |
 
@@ -131,7 +131,7 @@ Provider stdout is capped at 2 MiB and stderr at 64 KiB; discovery-probe streams
 
 Codex output is a JSONL event stream and succeeds only with one completed turn and one final completed `agent_message` whose text is strict JSON. Claude output is a stream-JSON event sequence and succeeds only with one non-error result event containing `structured_output`. Duplicate JSON object members at any depth, malformed/truncated events, extra domain fields, wrong schema/contract versions, adversarial nested types, missing/duplicate terminal events, and any payload rejected by the operation-specific strict schema are quarantined. Provider error events and nonzero exit are safe process failures, not domain results.
 
-Only the schema-validated mapping crosses the provider port. Invalid raw output is stored only in the approved owner-local quarantine store, referenced by hash, excluded from ordinary logs/search/results/domain publication, and deleted under IDK-010 policy 1.0. A version mismatch or command-surface mismatch disables that provider until an engineering-reviewed adapter/contract update is released; there is no compatibility shim or automatic downgrade.
+Only the schema-validated mapping crosses the provider port. Invalid raw output is stored only in the approved owner-local quarantine store, referenced by hash, excluded from ordinary logs/search/results/domain publication, and deleted under IDK-010 policy 1.0. A missing command surface disables that provider until the installed CLI exposes the approved argv contract or the adapter contract is deliberately revised; numeric CLI version changes alone never disable it.
 
 ## Evidence and approval basis
 
@@ -143,8 +143,10 @@ The engineering owner reviewed current official primary documentation and perfor
 - Anthropic model configuration and model IDs, accessed 2026-08-13: <https://code.claude.com/docs/en/model-config> and <https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions>. These support the fixed `claude-sonnet-4-6` provenance ID.
 - The approved Codex `gpt-5.6-terra` / `high` policy comes from the existing product authority in PRD AI-02 and D7, not from an unperformed live availability probe. Discovery proves the CLI supports explicit `--model` and `--config`; actual account/model availability remains a safely classified invocation outcome.
 - Local isolated inspection on 2026-08-13: `/opt/homebrew/bin/codex --version` reported `codex-cli 0.147.0`; `/opt/homebrew/bin/claude --version` reported `2.1.220 (Claude Code)`. Codex root and `exec --help`, Claude root and `auth status --help`, and both fixed status commands demonstrated every approved flag/status surface. Status results were reduced to the fixed `configured` classification without emitting raw output.
-- Deterministic tests exercise version boundaries, exact argv, minimized environment, safe status reduction, cache refresh, event envelopes, timers, cancellation, schema quarantine, and publication isolation. Those tests, not a paid live invocation, are the authoritative automated compatibility evidence.
+- Deterministic tests exercise accepted and malformed CLI identity shapes, required command flags, exact argv, minimized environment, safe status reduction, cache refresh, event envelopes, timers, cancellation, schema quarantine, and publication isolation. Those tests, not a paid live invocation, are the authoritative automated compatibility evidence.
 
-The timeout values are an application safety policy, not a claim about provider latency or an external service-level objective. A future widening of either version range, a model change, an environment addition, or an argv/output-contract change requires a new decision version and contract fixtures before it can report configured.
+The timeout values are an application safety policy, not a claim about provider latency or an external service-level objective. A model change, environment addition, or argv/output-contract change requires a new decision version and contract fixtures before it can report configured. Installing a different CLI version does not require a decision update when the same identification, command-surface, authentication, and output-contract checks pass.
 
 The engineering owner explicitly approved the 20-second first-valid-output, 180-second inactivity, and 1,200-second absolute timeout policy on 2026-08-13 after reviewing the completed implementation and validation evidence.
+
+Decision version 1.1 supersedes the numeric ranges in version 1.0. On 2026-08-13, the engineering owner directed the runtime to use whatever locally installed CLI version is available; numeric version pinning and range rejection were therefore removed while executable identification and capability probes remain fail closed.

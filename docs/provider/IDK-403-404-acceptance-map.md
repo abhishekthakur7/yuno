@@ -30,8 +30,8 @@ This map is the implementation checklist. The implementation commit is recorded 
 
 | Decision row | Code/config contract | Boundary evidence |
 | --- | --- | --- |
-| Codex version range | fixed typed range `>=0.147.0,<0.148.0` | exact minimum, newer patch, below minimum, upper/later major, malformed |
-| Claude version range | fixed typed range `>=2.1.220,<2.2.0` | exact minimum, newer patch, below minimum, upper/later major, malformed |
+| Codex version policy | any identified installed version; required flags are authoritative | old/current/future/prerelease identifiers accepted; malformed identity and missing flags rejected |
+| Claude version policy | any identified installed version; required flags are authoritative | old/current/future/prerelease identifiers accepted; malformed identity and missing flags rejected |
 | Exact argv per operation | provider-specific immutable argv builders | full tuple equality for every schema purpose |
 | Model selection | fixed Codex Terra/high and fixed Claude Sonnet 4.6 ID | settings rejects any alternate value; adapter properties asserted |
 | Executable discovery | absolute-path resolution and safe target checks | missing, PATH substitution, broken/cyclic symlink, unsafe/non-regular target |
@@ -44,12 +44,12 @@ This map is the implementation checklist. The implementation commit is recorded 
 | Process-group cancellation | TERM/grace/KILL against PGID | child-process termination and cancellation tests |
 | Schema/quarantine | strict duplicate-rejecting JSON plus Pydantic schema | malformed/truncated/extra/wrong/nested/duplicate tests and domain-negative queries |
 | Learner classifications | fixed capability and job diagnostic vocabulary | API/UI recovery-state tests; raw error exclusion |
-| Upgrade mismatch | provider disabled until supported adapter update | refresh changes configured to unsupported without fallback |
-| Evidence/approval/version | decision document version 1.0, 2026-08-13, engineering owner | official links, safe local inspection record, full validation record |
+| Upgrade behavior | numeric upgrades remain usable when identity and required capabilities pass | arbitrary version identifiers exercise the same full discovery sequence |
+| Evidence/approval/version | decision document version 1.1, 2026-08-13, engineering owner | official links, safe local inspection record, full validation record |
 
 ## Completed validation record
 
-- Server: 1,286 pytest tests passed; Ruff check passed; Ruff formatting passed for all 50 changed/new Python files; all 4 import-linter contracts passed.
+- Server: 1,284 pytest tests passed; Ruff check passed; Ruff formatting passed for all changed/new Python files; all 4 import-linter contracts passed.
 - Database: one Alembic head; fresh migration, representative prior-database upgrade, downgrade/re-upgrade, and migration/metadata parity all passed.
 - Contracts: OpenAPI regeneration and drift check passed; generated TypeScript declarations are current.
 - Frontend: TypeScript typecheck passed; all 105 Vitest tests passed; production build passed; all 29 Playwright E2E tests passed.

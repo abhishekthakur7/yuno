@@ -8,10 +8,7 @@ import pytest
 from yuno.modules.provider.codex import (
     CODEX_ADAPTER_VERSION,
     CODEX_CONTRACT_VERSION,
-    CODEX_MAXIMUM_VERSION_EXCLUSIVE,
-    CODEX_MINIMUM_VERSION,
     CODEX_MODEL,
-    CodexCliVersion,
     CodexProviderAdapter,
     codex_environment,
     discover_codex,
@@ -121,31 +118,33 @@ def envelope(payload, *, contract=CODEX_CONTRACT_VERSION, schema="evaluation-v1"
 
 
 def test_approved_codex_contract_is_pinned() -> None:
-    assert CODEX_MINIMUM_VERSION == (0, 147, 0)
-    assert CODEX_MAXIMUM_VERSION_EXCLUSIVE == (0, 148, 0)
     assert CODEX_MODEL == "gpt-5.6-terra"
     assert CODEX_ADAPTER_VERSION == "codex-cli-adapter-v1"
     assert CODEX_CONTRACT_VERSION == "codex-jsonl-agent-message-v1"
 
 
 def test_version_parser_accepts_only_the_documented_cli_shape() -> None:
-    assert parse_codex_cli_version(b"codex-cli 0.147.0\n") == CodexCliVersion(0, 147, 0)
-    for invalid in (b"0.147.0", b"codex-cli 0.147", b"codex-cli 0.147.0-beta"):
+    assert parse_codex_cli_version(b"codex-cli 0.147.0\n") == "0.147.0"
+    assert parse_codex_cli_version(b"codex-cli 99.0.0-beta.1+build\n") == (
+        "99.0.0-beta.1+build"
+    )
+    for invalid in (b"0.147.0", b"codex-cli ", b"codex-cli 0.147.0 extra"):
         with pytest.raises(ValueError):
             parse_codex_cli_version(invalid)
 
 
 @pytest.mark.parametrize(
-    ("version", "state"),
+    "version",
     [
-        ("0.146.999", ProviderCapabilityState.UNSUPPORTED_VERSION),
-        ("0.147.0", ProviderCapabilityState.CONFIGURED),
-        ("0.147.99", ProviderCapabilityState.CONFIGURED),
-        ("0.148.0", ProviderCapabilityState.UNSUPPORTED_VERSION),
-        ("1.0.0", ProviderCapabilityState.UNSUPPORTED_VERSION),
+        "0.1.0",
+        "0.147.0",
+        "1.0.0",
+        "99.0.0-beta.1+build",
     ],
 )
-def test_discovery_range_flags_and_auth_are_fail_closed(version, state) -> None:
+def test_discovery_accepts_any_identified_version_with_required_capabilities(
+    version,
+) -> None:
     process = FakeProcess(
         outcome(f"codex-cli {version}\n".encode()),
         outcome(root_help_output()),
@@ -158,18 +157,27 @@ def test_discovery_range_flags_and_auth_are_fail_closed(version, state) -> None:
         timers=ProviderTimers(1, 2, 3),
         source_environment={"HOME": "/safe-home", "SECRET": "excluded"},
     )
-    assert capability.state is state
-    if state is ProviderCapabilityState.CONFIGURED:
-        assert [spec.argv for spec in process.specs] == [
-            ("/approved/codex", "--version"),
-            ("/approved/codex", "--help"),
-            ("/approved/codex", "exec", "--help"),
-            ("/approved/codex", "login", "status"),
-        ]
-        assert capability.model == CODEX_MODEL
-        assert all(spec.environment == {"HOME": "/safe-home"} for spec in process.specs)
-    else:
-        assert len(process.specs) == 1
+    assert capability.state is ProviderCapabilityState.CONFIGURED
+    assert [spec.argv for spec in process.specs] == [
+        ("/approved/codex", "--version"),
+        ("/approved/codex", "--help"),
+        ("/approved/codex", "exec", "--help"),
+        ("/approved/codex", "login", "status"),
+    ]
+    assert capability.model == CODEX_MODEL
+    assert all(spec.environment == {"HOME": "/safe-home"} for spec in process.specs)
+
+
+def test_discovery_rejects_unidentified_version_output() -> None:
+    process = FakeProcess(outcome(b"not-codex 123\n"))
+    capability = discover_codex(
+        "/approved/codex",
+        process,
+        timers=ProviderTimers(1, 2, 3),
+        source_environment={},
+    )
+    assert capability.state is ProviderCapabilityState.UNSUPPORTED_VERSION
+    assert len(process.specs) == 1
 
 
 def test_discovery_auth_failure_returns_only_fixed_classification() -> None:
