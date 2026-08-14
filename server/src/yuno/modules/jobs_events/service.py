@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import threading
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
@@ -106,6 +107,8 @@ class DurableJobDispatcher:
         self._janitor_diagnostic: str | None = None
         self._lane_diagnostics: dict[JobLane, str] = {}
         self._ownership_file = None
+        self._cleanup_settled = threading.Condition()
+        self._cleanup_settled_jobs: set[str] = set()
 
     @property
     def configuration(self) -> dict[str, int]:
@@ -275,6 +278,36 @@ class DurableJobDispatcher:
                 as_ref(row)
                 for row in JobRepository(session, self._clock).list(owner_id)
             )
+
+    def wait_for_cleanup(self, job_id: str, *, timeout: float = 5.0) -> bool:
+        """Block until `job_id`'s post-terminal cleanup has settled.
+
+        A job reaching a terminal state and its workspace cleanup finishing
+        are two different moments: the lane commits the terminal transition
+        first, then runs the janitor that clears `attempt.temp_path` and
+        records the durable cleanup intent. An observer that waits only for
+        the terminal state is therefore racing the janitor, and will
+        intermittently read a `temp_path` that is about to be cleared.
+
+        This is that missing second moment, made explicit. Returns True once
+        cleanup for the job has settled, False if `timeout` elapsed first --
+        a caller that needs cleanup to have happened can wait for it instead
+        of guessing, and a timeout surfaces a stuck janitor rather than
+        hiding it behind a flaky assertion.
+        """
+        deadline = time.monotonic() + timeout
+        with self._cleanup_settled:
+            while job_id not in self._cleanup_settled_jobs:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._cleanup_settled.wait(remaining)
+        return True
+
+    def _mark_cleanup_settled(self, job_id: str) -> None:
+        with self._cleanup_settled:
+            self._cleanup_settled_jobs.add(job_id)
+            self._cleanup_settled.notify_all()
 
     def attempts(self, owner_id: str, job_id: str):
         with self._sessions() as session:
@@ -573,6 +606,7 @@ class DurableJobDispatcher:
                     self._execute_external_cleanup(row.owner_id)
                 except Exception:  # noqa: BLE001 -- durable intents remain retryable
                     self._janitor_diagnostic = "external cleanup failed"
+            self._mark_cleanup_settled(row.id)
 
     def _claim(self, lane: JobLane):
         with self._transition_lock, self._sessions() as session:

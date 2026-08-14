@@ -440,6 +440,14 @@ def test_attempt_runtime_result_and_audit_are_persisted(
     ref = dispatcher.enqueue(JobRequest("rebuild_index", owner, {}))
     terminal = _wait(dispatcher, owner, ref.job_id, JobStatus.SUCCEEDED)
     assert terminal.result_ref == "index:authoritative"
+    # The terminal transition and the janitor that clears `temp_path` are two
+    # separate moments on the lane thread, so asserting on `temp_path` straight
+    # after `_wait` raced the janitor and failed intermittently. Wait for the
+    # cleanup point explicitly; a False return means the janitor is stuck,
+    # which is a real defect this assertion should report rather than absorb.
+    assert dispatcher.wait_for_cleanup(ref.job_id), (
+        "post-terminal workspace cleanup did not settle within the timeout"
+    )
     attempts = dispatcher.attempts(owner, ref.job_id)
     assert attempts[0].temp_path is None
     with uow_factory() as uow:
