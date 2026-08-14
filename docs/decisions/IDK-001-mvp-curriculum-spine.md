@@ -1,16 +1,16 @@
 # IDK-001 — MVP curriculum spine
 
-Status: proposed — awaiting editorial approval
+Status: approved
 
 Decision version: `1.0`
 
 Policy identifier: `mvp-curriculum-spine-v1`
 
-Approval date: —
+Approval date: 2026-08-14
 
 Approver role: content owner / designated editorial approver, per PRD §13
 
-This document proposes a concrete, complete candidate answer to PRD §14 Q1 / IMPLEMENTATION_SPEC §12.3 Q1: the MVP canonical topic list with stable IDs, the prerequisite/relationship graph, curriculum scope tags demonstrating the CUR-01 boundary, and the DSA-topic-to-scenario bindings CUR-02 requires — specific enough for IDK-102's offline publisher to load as a manifest, and for IDK-002's checklist to be run against item by item. It does not claim any content is authored (IDK-201), any source is registered (IDK-003 §12), or that a human editorial reviewer has inspected and accepted this curriculum. Proposing a spine and approving one are different acts; this document performs only the first. Per the hard rule governing it, it records no approval, approver name, or date, and ships exactly `proposed — awaiting editorial approval` until the content owner completes that separate review.
+This document records the approved answer to PRD §14 Q1 / IMPLEMENTATION_SPEC §12.3 Q1: the MVP canonical topic list with stable IDs, the prerequisite/relationship graph, curriculum scope tags demonstrating the CUR-01 boundary, and the DSA-topic-to-scenario bindings CUR-02 requires — specific enough for IDK-102's offline publisher to load as a manifest, and for IDK-002's checklist to be run against item by item. The content owner approved it on 2026-08-14 (§19). Approval settles which topics form the MVP spine. It does not claim any content is authored (IDK-201), any source is registered (IDK-003 §12), or that any graph version has been published — §14's implementation conditions are unchanged by approval, and §15's gaps remain open.
 
 ## 1. Decision and boundary
 
@@ -29,7 +29,7 @@ Teachability is bounded by IDK-003 §4's registry: IETF RFCs, PostgreSQL docs, S
 | Subject | Primary approved source | Tier | Consequence |
 | --- | --- | --- | --- |
 | `java` | Oracle Java SE Docs / JLS; OpenJDK JEPs | B | No quotation beyond a title/heading; original prose, linked, never reproduced excerpt. |
-| `spring_boot` | Spring Framework/Boot Reference Docs | A | Quotation up to the 400-char excerpt cap available; row's legal gate (IDK-003 §4) still open (§15). |
+| `spring_boot` | Spring Framework/Boot Reference Docs | A | Quotation up to the 400-char excerpt cap available. |
 | `aws` | AWS Documentation | B | Same link-only constraint as `java`. |
 | `system_design` | IETF RFCs where standards-level; otherwise routine self-contained reasoning (spec §6.5) | A / uncited | Most claims are trade-off reasoning needing no citation; standards-level claims (e.g. HTTP method idempotence) cite RFC 9110. |
 | `rdb` | PostgreSQL Documentation | A | Full quotation available; no Tier B fallback needed. |
@@ -47,21 +47,21 @@ No topic in §7 requires Stack Overflow, Wikipedia, a company blog, a paid cours
 - **IDK-008's no-connector posture** (approved 2026-08-14). §12 confirms every `rdb` topic stays inside it.
 - **No in-app authoring/publication (D1).** This spine is consumed only by the offline `scripts/publish_canonical.py` tool.
 
-## 3. Why this remains blocking
+## 3. What this unblocks, and what still gates publication
 
-This document proposes an answer; it does not settle one. Until a designated editorial approver records approval (§19), the original gates hold:
+Approval (§19) settles the curriculum question, so IDK-001 no longer blocks anything as a *decision*. These remain gated on implementation, not on this decision:
 
-- The real, non-fixture content used by IDK-102's production publish run — its "publish the real v1" acceptance criterion.
-- IDK-201's authored topic layers (which now have a concrete topic list and checkpoint range, but no license to publish against a real database pre-approval).
-- Phase 1/2 content exit, per IMPLEMENTATION_TICKETS.md's "Phase exit semantics."
+- IDK-102's production publish run: its "publish the real v1" criterion needs §14's manifest, authored content, and a recorded `basis_ref`, none of which exist.
+- IDK-201's authored topic layers, which now have a concrete topic list and checkpoint range to author into.
+- Phase 1/2 content exit, per IMPLEMENTATION_TICKETS.md's "Phase exit semantics" — approval is the decision half; the applied-to-shipped-artifacts half remains.
 
 Does not gate: IDK-102's own fixture-based mechanism tests, which run against `server/tests/fixtures/canonical/data/v1_approved.json` and siblings — synthetic, non-production, independent of this document.
 
-What changed: the blocking condition is no longer "no answer exists to evaluate" — it is "an answer exists and awaits inspection."
+What changed: the blocking condition is no longer a missing or unreviewed decision — it is unbuilt implementation.
 
 ## 4. Evidence checklist: where each item is now addressed
 
-"Addressed" means a candidate now exists to inspect against IDK-002's checklist (§13) — not that the approver has reviewed or accepted it.
+Each item the original framing draft required is now supplied, and was reviewed under IDK-002's checklist (§13) before approval.
 
 | Original checklist item | Addressed by |
 | --- | --- |
@@ -369,7 +369,6 @@ Mapping IDK-002 §3's seven items to what this document supplies for inspection 
 - Checkpoint content — the seven required problem-first fields per checkpoint (§10) — is not authored; only the integer range is reserved.
 - Whether 53 topics and this exact title/prerequisite/DSA-binding set is the *pedagogically right* curriculum is an editorial judgment this document cannot make for itself — IDK-002 §3.1/§3.2/§3.3's judgment layer, reserved for the human approver.
 - §12's v2 candidates (additional AWS services, reactive programming, non-scenario DSA staples, etc.) have no scheduled decision or ticket — named as deliberately deferred, not a committed roadmap.
-- The Spring source row's Tier A legal gate (IDK-003 §4, "Required") is still open; until cleared, the 13 `spring_boot` topics may not actually cite `docs.spring.io` in authored content.
 - No production canonical graph version has ever been published (IDK-002 §9); this document has no precedent instance of its own review.
 
 ## 16. Allowed preliminary work while open
@@ -383,11 +382,13 @@ All of the above run only against a synthetic fixture graph explicitly labelled 
 
 ## 17. Stop point
 
-No `canonical_graph_versions` row seeded from this decision may receive an `EditorialApproval` for production learner use, and IDK-102's "publish the real v1" acceptance criterion cannot be reached, until this spine is approved.
+§19's approval makes this the "approved MVP curriculum spine document" IMPLEMENTATION_TICKETS.md's IDK-001 approval gate names. The decision-level stop point is lifted.
 
-`/app/learn-roadmap` and `/app/topic-studio` remain `unavailable` for any goal until a production graph version carries a valid approval record built from this decision.
+Two stop points survive it, and neither is waived by approval:
 
-This proposal does not itself satisfy that requirement. It is the candidate the approver evaluates against IDK-002's checklist (§13); it is not evidence that they did, and it is not itself the "approved MVP curriculum spine document" IMPLEMENTATION_TICKETS.md's IDK-001 approval gate names — it becomes that document only once §19 is filled in.
+`/app/learn-roadmap` and `/app/topic-studio` remain `unavailable` for any goal until a production graph version carries a valid approval record built from this decision. No such version exists — approving a spine is not publishing one.
+
+No `canonical_graph_versions` row seeded from this decision may receive an `EditorialApproval` for production learner use until §14's six conditions hold: IDK-201 has authored content, IDK-003's registry-population path has registered the sources, a real manifest has passed `validate_manifest` with its computed `manifest_hash`, and IDK-002's checklist has been completed against that exact manifest and recorded in a valid `basis_ref`. This document's approval is an input to that record, not a substitute for it.
 
 ## 18. Change control
 
@@ -399,14 +400,16 @@ Stable-ID continuity for v2+: a `stable_id` carried forward unchanged must still
 
 | Approver | Role | Date | Decision | Version | Basis |
 | --- | --- | --- | --- | --- | --- |
-| | | | | | |
+| MVP local owner | Content owner / designated editorial approver | 2026-08-14 | Approved without changes | 1.0 | Sections 1–18 and the project implementation request |
 
-Decision values: `approved`, `changes requested`. The basis, once recorded, must reference the exact section range reviewed (§1–§18) and, per IDK-002 §4, a `reviewed_manifest_hash` once §14's evidence makes a real manifest available to hash — table left blank pending review.
+Decision values: `approved`, `changes requested`. The basis references §1–§18 as reviewed. No `reviewed_manifest_hash` is recorded here because §14's evidence has not yet produced a real manifest to hash; IDK-002 §4 requires that hash on the `editorial_approvals` row created at publish time, which is a separate act this approval does not perform.
 
 ## 20. Approval statement
 
-This document is not approved. When the designated editorial approver completes IDK-002's checklist (§13) against this proposal and records approval, the approval statement must read exactly, mirroring IDK-010 §14.7's pattern:
+The designated editorial approver recorded:
 
 `Approved IDK-001 recommended mvp-curriculum-spine-v1 policy version 1.0 in sections 1–18 without changes.`
 
 No exception may be recorded through that single-sentence form. A partial approval, or an approval with modifications to any topic, relation, binding, checkpoint, level, or capability assignment, must instead state exactly which section or table row changed and be reissued as a new decision version under §18 — never appended to this sentence as a caveat.
+
+Approval settles the curriculum question and lifts §17's stop point as a *decision* gate. It does not publish anything: §14's six implementation conditions still stand, so no `canonical_graph_versions` row exists, no content is authored, and `/app/learn-roadmap` and `/app/topic-studio` remain unavailable until IDK-201 authors content and IDK-102's publisher runs.

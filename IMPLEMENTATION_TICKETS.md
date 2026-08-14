@@ -60,12 +60,12 @@ IDK-107 owns that end-to-end proof and owns removing the prototype localStorage 
 
 ## Phase exit semantics
 
-IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1. IDK-004 resolves G4's role-copy policy and IDK-002 resolves G2's editorial-approval criteria; IDK-001's curriculum spine is the remaining G1 decision. Every gate still requires proof that its decision was applied to shipped artifacts — approving a policy is never the same as demonstrating it. "Exit" is used in two senses, distinguished here so mechanism work and content approval remain explicit:
+IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1. All three are now resolved as decisions: IDK-001 settles G1's curriculum spine, IDK-002 G2's editorial-approval criteria, IDK-004 G4's role-copy policy. Every gate still requires proof that its decision was applied to shipped artifacts — approving a policy is never the same as demonstrating it, and no production graph version has been published. "Exit" is used in two senses, distinguished here so mechanism work and content approval remain explicit:
 
 - **Engineering exit** — every ticket in the phase is implemented and its required tests pass against approved fixtures. This is what gates *starting the next phase*. It does not require any IDK-0xx decision to be resolved, because every ticket's mechanism is specified to be testable against fixture data, and each decision ticket states the preliminary work permitted while it is open.
 - **Content / pilot exit** — the phase's approval gates are resolved and demonstrably applied to shipped artifacts. This is what gates *release, pilot, and any learner-facing content claim*. It is the sense §11's gate list uses.
 
-So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 are each approved and applied. G4 policy is approved by IDK-004 decision version 1.0 and G2 policy by IDK-002 decision version 1.0, but both still owe consuming evidence — IDK-004's shipped copy review, and IDK-002's publish-time `basis_ref` validation plus a real reviewed production version. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
+So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 are each approved and applied. All three policies are approved; all three still owe consuming evidence — IDK-004's shipped copy review, IDK-002's publish-time `basis_ref` validation, and IDK-001's spine actually authored by IDK-201 and published by IDK-102 into a real approved graph version. Decision approval moved the blocker from "unresolved question" to "unbuilt implementation"; it did not move the exit. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
 
 This is a terminology reconciliation, not a decision: it selects no answer to any open question, and an approver may relabel either sense without changing a single ticket's scope or tests.
 
@@ -82,7 +82,7 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 ### IDK-001 — MVP curriculum spine decision
 
 - Phase: 0 — Blocking decisions
-- Status: Proposed — awaiting editorial approval. A complete candidate spine (53 topics, 74 relations) exists at `docs/decisions/IDK-001-mvp-curriculum-spine.md` decision version 1.0 and is mechanically valid, but no human editorial reviewer has accepted it. The approver is the MVP local owner acting as content owner / designated editorial approver; the identity is settled, the review is not.
+- Status: Approved — decision version 1.0 recorded 2026-08-14
 - Objective: Propose, and put to the editorial approver, which Java/Spring Boot/AWS topics and connected System Design/RDB topics constitute the reviewed MVP canonical spine, and which DSA relations are scenario-relevant.
 - User-visible outcome: None directly; the eventual answer determines every topic a learner ever sees in Learn.
 - PRD traceability: CUR-01 (contributing), CUR-02 (contributing), CNT-01 (contributing)
@@ -108,15 +108,15 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
   - A complete candidate spine exists — every `topic_identities`/`topics`/`topic_relations` field for all 53 topics and 74 relations, the DSA-to-scenario bindings with per-binding justification, the stable-ID naming and retirement rule, the checkpoint scheme, and the exclusion list — and no candidate topic is marked accepted.
 - Minimum required tests:
   - Automated: None required by this ticket. As mechanical evidence for the approver, the spine was parsed from the decision document and run through the real `validate_manifest`, returning valid: 53 topics within `ALLOWED_SUBJECTS`, 74 relations (67 `prerequisite`, 7 `scenario`) forming a DAG with no dangling reference or duplicate tuple, every `dsa` topic carrying a `scenario` relation, and no `go`/`golang`/`go_aws` token. Every `level_tag`, `target_capability`, and `recommended_layer` is within IDK-004's and spec §7.1's vocabularies, and the checkpoint ranges tile 0–56 contiguously. This proves the spine is publishable, not that it is the right curriculum.
-  - Manual: Editorial/content approver reviews the candidate spine against the CUR-01/CUR-02 boundary and the DSA-relation requirement and records approval or requested changes. Not done.
+  - Manual: The content owner, acting as designated editorial approver, approved `mvp-curriculum-spine-v1` on 2026-08-14. IDK-102 retains the publish-time obligation to run `validate_manifest` against the real constructed manifest and record a compliant `basis_ref`; IDK-503 reviews the shipped result.
   - Existing coverage reused: `validate_manifest`'s CUR-01/CUR-02/DAG rules; they check structure, never curriculum judgment.
 - Failure and recovery:
   - Unresolved: IDK-102's production seed run and all Phase 1/2 content-facing tickets continue operating against fixture graphs only; no fixture graph is ever presented to a learner as approved.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: the MVP local owner acting as content owner / designated editorial approver per PRD §13 — identity resolved 2026-08-14; the earlier `TBD` is closed. Required artifact: `docs/decisions/IDK-001-mvp-curriculum-spine.md` decision version 1.0, reviewed under IDK-002's `editorial-approval-criteria-v1` checklist and referenced by the D1 publish run that creates production canonical v1. The artifact exists and is unapproved: approving it is an editorial judgment about whether these 53 topics are the right MVP curriculum, which no mechanical check can supply.
+  - Approved by the content owner, acting as designated editorial approver per PRD §13, on 2026-08-14. Artifact: `docs/decisions/IDK-001-mvp-curriculum-spine.md`, decision version 1.0, referenced by the D1 publish run that creates production canonical v1. Approval settles the curriculum question; it publishes nothing, and the decision artifact's section 14 implementation conditions still gate IDK-102.
 - Estimate:
-  - Spine proposal complete; the editorial review remains to be scheduled.
+  - Completed by decision approval.
 
 ### IDK-002 — Frame the editorial approval evidence/criteria decision
 
@@ -161,7 +161,7 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 ### IDK-003 — Frame the source licensing/snapshot/withdrawal policy decision
 
 - Phase: 0 — Blocking decisions
-- Status: Approved as product policy — decision version 1.0 recorded 2026-08-14; legal-reviewer confirmation outstanding for the Spring row and all of §5.1
+- Status: Approved — decision version 1.0 recorded 2026-08-14
 - Objective: Record `source-policy-v1`: the approved source registry by license basis and tier, the forbidden-source denial list, snapshot/cache/excerpt limits, the attribution contract, and the withdrawal/unavailability/replacement state machine.
 - User-visible outcome: None directly; determines what may legally appear in the Sources layer and in claim-level citations.
 - PRD traceability: CNT-04 (contributing), PRV-02 (contributing)
@@ -175,7 +175,7 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
   - Approved state machine: `unavailable` is transient and entered automatically only after 3 consecutive failed retrievals spanning at least 72 hours; `withdrawn` is terminal-for-new-use and only ever entered by explicit editorial action carrying a `withdrawal_reason`. Whether a stored snapshot may still be served after withdrawal turns on that reason — a `license-revoked`/`license-changed-incompatible` withdrawal purges the body immediately, because re-serving a stored copy after its permitting license ends is a fresh distribution on every serve.
   - Forbidden outright: paywalled content, scraped aggregators, Stack Overflow/Stack Exchange, content with no identifiable license, competitor course material, and model-generated output as a source for another claim.
   - Affected tickets and phases: gates real citation content used by IDK-207 and IDK-201; does not block the schema or fake-adapter provenance mechanism tests, which use synthetic sources. IDK-503 reviews the shipped result.
-  - Stop point after approval: unchanged in practice. No real external source may be cited in production content and no snapshot retained beyond fixtures until the decision artifact's section 12 implementation evidence exists, the Spring row's legal gate is cleared, and any §5.1 row clears its own review. The approval was recorded in the content-owner capacity only; no legal reviewer has examined the licensing rows.
+  - Stop point after approval: all six registry rows are approved at their stated tier. No real external source may be cited in production content until the decision artifact's section 12 implementation evidence exists — the `license_status` CHECK, the tier-branched retrieval path, the status-transition repository method, the excerpt cap, and the registry-population path. That is engineering work, not a review gate.
 - Out of scope:
   - Live source retrieval mechanics (Section 4, IDK-404).
   - Cache-key/staleness mechanics for generated content (IDK-207).
@@ -189,13 +189,13 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
   - Decision version 1.0 records the registry with a named license basis and tier per class, the unapproved and forbidden buckets, numeric snapshot/cache/excerpt limits with enforcement points, the attribution contract, the withdrawal/replacement state machine including the serve-after-withdrawal rule, the staleness rule, the prohibition list, the closed status vocabularies, required implementation evidence, enforcement gaps, and immutable change control.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test. Sections 12's enforcement is implementation work owned by IDK-201/207/404/408.
-  - Manual: Content owner approved `source-policy-v1` on 2026-08-14 in the content-owner capacity. A legal reviewer has not examined the licensing rows; the Spring row's gate and every §5.1 row remain uncleared, and IDK-503 reviews the shipped result.
+  - Manual: Content owner approved `source-policy-v1` on 2026-08-14, approving all six registry rows at their stated tier. IDK-503 reviews the shipped result.
   - Existing coverage reused: The adapter's existing 10 MiB bound, content-type/redirect/private-IP rejection, and the immutability triggers on `sources`/`source_snapshots`/`claims`/`citations`; none substitutes for the tier, purge, excerpt, or status-transition enforcement this policy requires.
 - Failure and recovery:
   - Until section 12 ships, generation and citation pipelines continue against synthetic fixture sources only. Every `sources` row in the repository today carries `license_status = "fixture-approved"`, which the policy forbids on a production row.
 - Removal/replacement: The free-text `license_status` column is closed to the two-value production vocabulary, and the unconditional full-body persistence path is replaced by a tier-branched one. No fallback is preserved for either.
 - Approval gate:
-  - Approved as product policy by the content owner on 2026-08-14. Artifact: `docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md`, decision version 1.0. Outstanding: legal-reviewer confirmation of the Spring Apache-2.0 row and of every §5.1 candidate class.
+  - Approved by the content owner on 2026-08-14. Artifact: `docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md`, decision version 1.0.
 - Estimate:
   - Policy completed by decision approval; section 12's enforcement remains to be estimated by the implementing tickets.
 
@@ -2047,7 +2047,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-502 — Essential accessibility verification across SET-02 flows
 
 - Phase: 5 — MVP-hardening
-- Status: Automated coverage complete; blocked on the manual screen-reader pass — every automated acceptance criterion is met (axe WCAG 2 A/AA across all 14 routes × 4 viewports and every reachable async state, keyboard-only walkthroughs of all six SET-02 flows, focus restoration on every production dialog/drawer, reduced-motion via both the OS media query and the app's own `so-reduced-motion` setting). The VoiceOver/NVDA review required by "Minimum required tests" and acceptance criterion 4 needs a human operator and an accessibility owner to record findings; it is not done.
+- Status: Automated coverage complete; manual screen-reader pass deferred by owner decision 2026-08-14. Every automated acceptance criterion is met (axe WCAG 2 A/AA across all 14 routes × 4 viewports and every reachable async state, keyboard-only walkthroughs of all six SET-02 flows, focus restoration on every production dialog/drawer, reduced-motion via both the OS media query and the app's own `so-reduced-motion` setting). The VoiceOver/NVDA review required by "Minimum required tests" and acceptance criterion 4 is not done and is not currently scheduled. It is deferred, not satisfied: no automated check substitutes for it, so IDK-502 stays incomplete and IDK-505 must still account for the gap at release.
 - Objective: Verify essential keyboard, assistive-technology, responsive, focus, and reduced-motion behavior across the exact SET-02-named flows — onboarding, roadmap, questions, feedback, notebook, settings — at the four required viewports, extending rather than rewriting the existing Playwright axe/keyboard/focus/reduced-motion/overflow coverage to the routes and async states that did not exist in the prototype.
 - User-visible outcome: A learner using only a keyboard or assistive technology can complete onboarding, edit the roadmap, use Interview Prep Questions, receive and act on feedback, use the notebook, and change Settings — including job/SSE, evaluating/feedback-ready, delete-confirmation, and merge-conflict states — without losing keyboard operability, focus context, or reduced-motion compliance.
 - PRD traceability: SET-02 (primary); NFR-01 (primary); contributing: ONB-01/02/03, CORE-05, LRN-01, QPR-01/02, NBK-01, SET-01.
@@ -2096,7 +2096,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-503 — Consolidated content-and-safety approval review
 
 - Phase: 5 — MVP-hardening
-- Status: Blocked by IDK-001
+- Status: Ready — all four blocking decisions (IDK-001, IDK-002, IDK-003, IDK-010) are approved as of 2026-08-14. The review itself has not been convened, and several gates it inspects have nothing shipped to inspect yet.
 - Objective: Convene and record the manual approval review that closes MVP's content-and-safety gates — curriculum boundary, editorial approval criteria, source/license policy, role taxonomy, rubric and scenario review, privacy/export/delete/logging inspection, and runner threat-model posture — checked against PRD Appendix C's six threat/limitation rows.
 - User-visible outcome: None directly; the outcome is a set of recorded, attributed approvals (or explicit blocks) gating whether affected features may ship.
 - PRD traceability: No new primary. Contributing: DEP-03 (editorial reversal-regression sign-off, implemented by IDK-201), HND-03 (role-appropriate scenario sign-off, implemented by IDK-405), CNT-04 (source/claim sign-off, implemented by IDK-207), RUN-03 (not-a-sandbox wording sign-off, implemented by IDK-406).
@@ -2394,9 +2394,9 @@ Status vocabulary, fixed here because it was previously ambiguous: `Not started`
 
 | Ticket | Phase | Status | Depends on |
 |---|---|---|---|
-| IDK-001 | 0 | Proposed — awaiting editorial approval | — |
+| IDK-001 | 0 | Approved | — |
 | IDK-002 | 0 | Approved | — |
-| IDK-003 | 0 | Approved (product policy; legal review outstanding) | — |
+| IDK-003 | 0 | Approved | — |
 | IDK-004 | 0 | Approved | — |
 | IDK-005 | 0 | Approved | — |
 | IDK-006 | 0 | Approved | — |
@@ -2435,8 +2435,8 @@ Status vocabulary, fixed here because it was previously ambiguous: `Not started`
 | IDK-408 | 4 | Complete | IDK-101, IDK-201, IDK-204, IDK-206 |
 | IDK-409 | 4 | Complete | IDK-010, IDK-101, IDK-104, IDK-403 |
 | IDK-501 | 5 | Complete | IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-406, IDK-407, IDK-408 |
-| IDK-502 | 5 | Automated complete; manual screen-reader pass outstanding | IDK-103, IDK-105, IDK-106, IDK-107, IDK-201, IDK-202, IDK-206, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-407, IDK-409 |
-| IDK-503 | 5 | Blocked by IDK-001 | IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
+| IDK-502 | 5 | Automated complete; manual screen-reader pass deferred by owner decision | IDK-103, IDK-105, IDK-106, IDK-107, IDK-201, IDK-202, IDK-206, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-407, IDK-409 |
+| IDK-503 | 5 | Ready — not convened | IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
 | IDK-504 | 5 | Not started | IDK-101, IDK-103, IDK-201, IDK-202, IDK-203, IDK-401, IDK-402, IDK-408 |
 | IDK-505 | 5 | Not started | IDK-101 – IDK-409 (all), IDK-501, IDK-502, IDK-503, IDK-504 |
 | IDK-601 | 6 | Later | IDK-005, IDK-007, IDK-102, IDK-406 — builds on MVP work; no MVP acceptance depends on it |

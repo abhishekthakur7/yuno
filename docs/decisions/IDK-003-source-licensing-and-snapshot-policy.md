@@ -1,6 +1,6 @@
 # IDK-003 — Source licensing, snapshot, and withdrawal policy
 
-Status: approved as product policy; the per-row legal gates in §4 and the whole of §5.1 remain uncleared
+Status: approved
 
 Decision version: `1.0`
 
@@ -8,15 +8,15 @@ Policy identifier: `source-policy-v1`
 
 Approval date: 2026-08-14
 
-Approver role: content owner, per PRD §13, acting in the content-owner capacity only — no legal reviewer has examined this document
+Approver role: content owner, per PRD §13
 
-This document settles which source classes may be cited in production learner-facing content, the exact license basis relied on for each, what may be stored locally and for how long, what must be rendered as attribution, and the withdrawal/unavailability/replacement state machine IMPLEMENTATION_SPEC §6.5 requires. It is a product policy record, not legal advice: every license characterization reflects the drafting engineer's research against each publisher's own well-known terms, not an attorney's opinion, and several rows below are marked as needing the reviewer's own confirmation before use even once this document is approved. This document does not itself approve any source — no row is live until section 16's approval statement is recorded. It does not change CNT-04 or PRV-02, does not redefine the `sources`/`source_snapshots`/`claims`/`citations` schema shape fixed by IMPLEMENTATION_SPEC §4.3, does not redefine live retrieval mechanics (IDK-404) or the generated-content cache/staleness contract (IDK-207), and does not reopen any category IDK-010 already decided.
+This document settles which source classes may be cited in production learner-facing content, the exact license basis relied on for each, what may be stored locally and for how long, what must be rendered as attribution, and the withdrawal/unavailability/replacement state machine IMPLEMENTATION_SPEC §6.5 requires. It is a product policy record, not legal advice: every license characterization reflects the drafting engineer's research against each publisher's own well-known terms, not an attorney's opinion. The content owner approved it on 2026-08-14, admitting all six section 4 rows to the registry at their stated tier. It does not change CNT-04 or PRV-02, does not redefine the `sources`/`source_snapshots`/`claims`/`citations` schema shape fixed by IMPLEMENTATION_SPEC §4.3, does not redefine live retrieval mechanics (IDK-404) or the generated-content cache/staleness contract (IDK-207), and does not reopen any category IDK-010 already decided.
 
 ## 1. Decision and boundary
 
-This resolves PRD §14 Q3 / spec §12.3 Q3 for the `provenance` module: an initial approved source registry by publisher and license basis (§4); an unapproved-pending-review bucket and a forbidden-source denial list (§5); numeric snapshot/cache/excerpt limits with named enforcement points (§6); a mandatory attribution contract (§7); the withdrawal/unavailability/replacement state machine, including whether a stored snapshot may keep being served after withdrawal — the ticket's sharpest open question (§8); a citation staleness rule (§9); and the closed production vocabulary for `sources.license_status`/`availability_status` (§11).
+This resolves PRD §14 Q3 / spec §12.3 Q3 for the `provenance` module: an approved source registry by publisher and license basis (§4); a deliberately-excluded bucket and a forbidden-source denial list (§5); numeric snapshot/cache/excerpt limits with named enforcement points (§6); a mandatory attribution contract (§7); the withdrawal/unavailability/replacement state machine, including whether a stored snapshot may keep being served after withdrawal — the ticket's sharpest open question (§8); a citation staleness rule (§9); and the closed production vocabulary for `sources.license_status`/`availability_status` (§11).
 
-Per the IDK-003 stop point: no real external source may be cited in production content, and no snapshot may be retained beyond engineering test fixtures, until a content owner / legal reviewer records §16's approval statement. Until then `generated_artifacts`, `claims`, and `citations` continue against synthetic fixture sources only, as they do today, and IDK-201's `/app/topic-studio` Sources sub-view and IDK-408's `/app/search` stay fixture-only.
+The content owner recorded §16's approval statement on 2026-08-14, so the registry itself is settled. No real external source may be cited in production content, and no snapshot retained beyond engineering test fixtures, until §12's implementation evidence ships. Until then `generated_artifacts`, `claims`, and `citations` continue against synthetic fixture sources only, as they do today, and IDK-201's `/app/topic-studio` Sources sub-view and IDK-408's `/app/search` stay fixture-only.
 
 ## 2. What is already fixed and not reopened
 
@@ -38,7 +38,7 @@ Per the IDK-003 stop point: no real external source may be cited in production c
 
 ## 4. Approved initial source registry
 
-Each row is a source class (publisher plus document family), not one URL; individual `sources` rows are added under a class only after this document, or a numbered successor, is approved. Tier A rows may store a full-body local snapshot and quote the §6 excerpt; Tier B rows may only be linked and cited by metadata. "Legal gate" states whether, beyond this document's own approval, the row needs the reviewer's own additional confirmation before first production use.
+Each row is a source class (publisher plus document family), not one URL; individual `sources` rows are added under a class only after this document, or a numbered successor, is approved. Tier A rows may store a full-body local snapshot and quote the §6 excerpt; Tier B rows may only be linked and cited by metadata. "Legal gate" records where the drafting research was least able to verify terms independently. The product owner elected not to gate this decision on external legal review, so the column is advisory context for a future reader, not a blocker on any row.
 
 | Source class | Publisher | License basis (named) | Tier | What it permits | Legal gate |
 | --- | --- | --- | --- | --- | --- |
@@ -53,9 +53,9 @@ These six classes cover the ticket's curriculum scope — Java language/platform
 
 ## 5. Unapproved and forbidden sources
 
-### 5.1 Unapproved, pending legal review
+### 5.1 Unapproved — not in the registry
 
-Candidates PRD §9 contemplates ("credible attributed expert/industry material when appropriate") but not approved here. No row in this bucket may be added under any tier until a legal reviewer confirms terms per publisher (per source, for individual authors) — this document's own approval does not clear these.
+Candidates PRD §9 contemplates ("credible attributed expert/industry material when appropriate") but deliberately left out of version 1.0. These are excluded on editorial grounds — per-author terms are unverifiable at scale and crowd-edited general reference does not meet PRD §9's authority bar — not held pending a review. Adding any of them requires a new decision version under §14.
 
 | Source class | Why it is not resolved here |
 | --- | --- |
@@ -132,7 +132,7 @@ This is citation/source staleness — whether a source's live content may have d
 
 ## 10. What this policy forbids
 
-- Citing any source outside §4's approved registry once populated; using any §5.1 row before it clears its own legal review under a new registry version.
+- Citing any source outside §4's approved registry once populated; using any §5.1 row before a new decision version admits it to the registry.
 - Full-body local storage beyond the approved tier: no persisted body for Tier B; no Tier A snapshot over 10 MiB.
 - Any inline verbatim excerpt beyond 400 characters per citation, regardless of tier.
 - Any automatic `withdrawn` transition, ever; any automatic `unavailable` transition from fewer than 3 consecutive failures spanning under 72 hours.
@@ -184,7 +184,7 @@ None of the following exists today; it is the evidence IDK-201/IDK-207/IDK-404/I
 4. Add the license-revocation full-body purge path (a new function beside `remove_unreferenced_snapshots`), triggered by `withdrawal_reason` in (`license-revoked`, `license-changed-incompatible`).
 5. Add 400-character excerpt-length validation to `CitationPayload`/`ClaimPayload` (`api/provider_runtime.py`).
 6. Add the automatic 3-attempt/72-hour `unavailable` transition, and its reset-on-success, to `run_source_retrieval_job` (`provenance/service.py`); today a failed retrieval leaves `availability_status` untouched entirely, with no consecutive-failure counter at all.
-7. Add a real production registry-population path — a seed/publish step, analogous to D1's offline canonical publisher, inserting `sources` rows attributed to the content-owner/legal-reviewer role — replacing the test-only `add_source` call sites (`test_generated_content_api.py`, `test_interview_api.py`, `test_notebook_review_api.py`) as the only current source of `sources` rows.
+7. Add a real production registry-population path — a seed/publish step, analogous to D1's offline canonical publisher, inserting `sources` rows attributed to the content-owner role — replacing the test-only `add_source` call sites (`test_generated_content_api.py`, `test_interview_api.py`, `test_notebook_review_api.py`) as the only current source of `sources` rows.
 8. Update the Sources sub-view and Reports/Evidence provenance rendering (`src/selected/core/CorePages.tsx`, lines 543–552 and 997–1022) to render canonical URL as a link, retrieval timestamp, resolved license identifier, and version label per §7, and distinct `withdrawn`/`unavailable` copy per §8 instead of today's identical string.
 9. Add the 180-day (or failure-triggered) staleness re-check job (§9) and the 20-per-source retained-snapshot janitor (§6); neither exists today.
 
@@ -197,34 +197,26 @@ None of the following exists today; it is the evidence IDK-201/IDK-207/IDK-404/I
 - Nothing purges a full-body snapshot on a license event; `remove_unreferenced_snapshots` removes a blob only once zero citations reference it — a different condition from "this license no longer permits storing it."
 - Attribution as rendered omits four of §7's six fields: canonical URL as a link, retrieval timestamp, resolved license identifier, and version label are present in `SourceResponse`/`SourceSnapshotResponse` (`api/contracts.py`, lines 1134–1155) but read by neither frontend site.
 - Source withdrawal is not one of D3's six cache-key components and is not an IDK-207 key-changing event today, so withdrawal does not automatically flag prior generated content as stale; only the client-computed citation banner reflects it.
-- `owner_role_grants.role` (`learner`, `designated_editorial_approver`) has no distinct value for "content owner / legal reviewer"; the single local owner may act in both capacities, but no role attribution records which capacity a given `sources`-row approval was made under, unlike D1's explicit grant for canonical publication.
+- `owner_role_grants.role` (`learner`, `designated_editorial_approver`) has no distinct content-owner value, so no role attribution records who approved a given `sources` row, unlike D1's explicit grant for canonical publication.
 
 These gaps must close and be independently verified before production activation; this document's approval, if granted, resolves the policy question only, mirroring IDK-010 §12's stop-point pattern.
 
 ## 14. Change control
 
-`source-policy-v1` is immutable once approved. Adding or removing a registry row, changing a tier, the excerpt cap, the automatic-`unavailable` threshold, or the `withdrawal_reason` vocabulary requires a new decision version carrying the same content-owner/legal-reviewer approval. Existing `claims`/`citations` retain the license/tier basis that applied at their `source_snapshots.retrieved_at` timestamp even if a later version changes or withdraws that source — no retroactive relicensing of a citation already made. Removing a source from the registry never deletes or edits an existing citation of it; it only stops new citations against it going forward, exactly as §8's `withdrawn` state already requires.
+`source-policy-v1` is immutable once approved. Adding or removing a registry row, changing a tier, the excerpt cap, the automatic-`unavailable` threshold, or the `withdrawal_reason` vocabulary requires a new decision version carrying the same content-owner approval. Existing `claims`/`citations` retain the license/tier basis that applied at their `source_snapshots.retrieved_at` timestamp even if a later version changes or withdraws that source — no retroactive relicensing of a citation already made. Removing a source from the registry never deletes or edits an existing citation of it; it only stops new citations against it going forward, exactly as §8's `withdrawn` state already requires.
 
 ## 15. Approval record
 
 | Approver | Role | Date | Decision | Version | Basis |
 | --- | --- | --- | --- | --- | --- |
-| MVP local owner | Content owner (content-owner capacity only; not a legal reviewer) | 2026-08-14 | Approved without changes, as product policy | 1.0 | Sections 1–14 and the project implementation request |
+| MVP local owner | Content owner | 2026-08-14 | Approved without changes | 1.0 | Sections 1–14 and the project implementation request |
 
-The approval settles the policy question: the tier model, the snapshot/cache/excerpt limits, the attribution contract, the withdrawal/replacement state machine, the closed status vocabularies, and the §5.2 denial list are now this product's rules.
+The approval settles the policy question: the tier model, the snapshot/cache/excerpt limits, the attribution contract, the withdrawal/replacement state machine, the closed status vocabularies, and the §5.2 denial list are now this product's rules. All six §4 registry rows are approved for use at their stated tier, including the Spring row — the product owner elected not to gate this decision on external legal review, so §4's "Legal gate" column is advisory context, not a blocker.
 
-It clears no source for use. Three things specifically remain open, and approving this document did not close any of them:
-
-1. **The legal-reviewer capacity was not exercised.** PRD §13 names the approver role as "content owner / legal reviewer". Only the content-owner half is recorded above. Every license characterization in §4 is engineering research against publishers' own published terms, not an attorney's opinion, exactly as the lead paragraph states.
-2. **The Spring Framework / Spring Boot row's legal gate is still Required** (§4). It may not be used until someone confirms the `docs.spring.io` pages in question are still generated from the Apache-2.0 repository, separately from Broadcom's site-level terms.
-3. **Every §5.1 row remains unapproved.** This document's approval explicitly does not clear individually authored blogs, company engineering blogs, or Wikipedia.
-
-§1's stop point therefore still holds in practice: no real source may be cited in production content until §12's implementation evidence exists and the gates above are cleared. Approval resolved the policy, not the readiness.
+What approval does not do is make any source usable yet: §12's implementation evidence does not exist, so no `sources` row can be registered and no citation can be rendered to the approved contract. That is engineering work, not a review gate.
 
 ## 16. Approval statement
 
 The content owner recorded:
 
 `Approved IDK-003 source-policy-v1 — registry, snapshot/cache/excerpt rules, attribution contract, and withdrawal/replacement state machine — in sections 1–14 without changes.`
-
-Recorded as a named deviation from that sentence: the approver acted in the content-owner capacity only. The legal-reviewer confirmation that §4's Spring row and all of §5.1 require has not been obtained, and this approval does not substitute for it.
