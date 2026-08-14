@@ -60,18 +60,18 @@ IDK-107 owns that end-to-end proof and owns removing the prototype localStorage 
 
 ## Phase exit semantics
 
-IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1. IDK-004 now resolves G4's role-copy policy; IDK-001 and IDK-002 remain framing tickets, and every gate still requires proof that its decision was applied to shipped artifacts. "Exit" is used in two senses, distinguished here so mechanism work and content approval remain explicit:
+IMPLEMENTATION_SPEC §11 states that gates G1/G2/G4 "cannot remain unresolved for exit" from Phase 1. IDK-004 resolves G4's role-copy policy and IDK-002 resolves G2's editorial-approval criteria; IDK-001's curriculum spine is the remaining G1 decision. Every gate still requires proof that its decision was applied to shipped artifacts — approving a policy is never the same as demonstrating it. "Exit" is used in two senses, distinguished here so mechanism work and content approval remain explicit:
 
 - **Engineering exit** — every ticket in the phase is implemented and its required tests pass against approved fixtures. This is what gates *starting the next phase*. It does not require any IDK-0xx decision to be resolved, because every ticket's mechanism is specified to be testable against fixture data, and each decision ticket states the preliminary work permitted while it is open.
 - **Content / pilot exit** — the phase's approval gates are resolved and demonstrably applied to shipped artifacts. This is what gates *release, pilot, and any learner-facing content claim*. It is the sense §11's gate list uses.
 
-So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 are both approved and applied. G4 policy is approved by IDK-004 decision version 1.0, but its consuming UI/review evidence remains required. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
+So Phase 1 reaches engineering exit once IDK-101–IDK-108 pass against a fixture graph explicitly labelled non-production, and reaches content exit only once G1/G2/G4 are each approved and applied. G4 policy is approved by IDK-004 decision version 1.0 and G2 policy by IDK-002 decision version 1.0, but both still owe consuming evidence — IDK-004's shipped copy review, and IDK-002's publish-time `basis_ref` validation plus a real reviewed production version. IDK-503 performs the content-exit review for every gate; IDK-505 is the final release gate and fails while any content exit is outstanding. No fixture-backed engineering exit may be presented as pilot readiness.
 
 This is a terminology reconciliation, not a decision: it selects no answer to any open question, and an approver may relabel either sense without changing a single ticket's scope or tests.
 
 ## Reading a ticket
 
-Every ticket uses the same field order. `Status` is `Ready`, `Blocked by <decision ID>`, or `Later`; a `Blocked by` status means an unresolved decision is required for *that ticket's own* acceptance criteria, not that no work can start — each decision ticket states the preliminary work that may proceed. `Estimate` is deliberately unset everywhere: the implementation team estimates after approval.
+Every ticket uses the same field order. `Status` is `Not started`, `Complete`, `Blocked by <decision ID>`, or `Later` for an implementation ticket, and `Approved` or `Ready` for a Section 0 decision ticket; Appendix 1 defines each value. A `Blocked by` status means an unresolved decision is required for *that ticket's own* acceptance criteria, not that no work can start — each decision ticket states the preliminary work that may proceed. `Estimate` is deliberately unset everywhere: the implementation team estimates after approval.
 
 ---
 
@@ -79,11 +79,11 @@ Every ticket uses the same field order. `Status` is `Ready`, `Blocked by <decisi
 
 These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 questions that gate MVP scope. None selects an outcome; each defines the question, the evidence an approver needs, and the exact point downstream work must stop.
 
-### IDK-001 — Frame the MVP curriculum spine decision
+### IDK-001 — MVP curriculum spine decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame, without answering, which Java/Spring Boot/AWS topics and connected System Design/RDB topics constitute the reviewed MVP canonical spine, and which DSA relations are scenario-relevant.
+- Status: Proposed — awaiting editorial approval. A complete candidate spine (53 topics, 74 relations) exists at `docs/decisions/IDK-001-mvp-curriculum-spine.md` decision version 1.0 and is mechanically valid, but no human editorial reviewer has accepted it. The approver is the MVP local owner acting as content owner / designated editorial approver; the identity is settled, the review is not.
+- Objective: Propose, and put to the editorial approver, which Java/Spring Boot/AWS topics and connected System Design/RDB topics constitute the reviewed MVP canonical spine, and which DSA relations are scenario-relevant.
 - User-visible outcome: None directly; the eventual answer determines every topic a learner ever sees in Learn.
 - PRD traceability: CUR-01 (contributing), CUR-02 (contributing), CNT-01 (contributing)
 - Appendix H decisions: None (D1 governs publication mechanics, not curriculum content).
@@ -103,96 +103,101 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - API/domain/event contracts: None (framing only; no endpoint accepts curriculum content in MVP).
 - UX routes and states: `/app/learn-roadmap` and `/app/topic-studio` remain `unavailable` for any goal until a production graph version carries a valid approval record built from this decision.
 - Implementation notes:
-  - No topic ID, count, or title is proposed or invented by this ticket.
+  - Decision version 1.0 proposes concrete topic IDs, counts, and titles. This supersedes the earlier constraint that no topic be named here: a spine that names no topic cannot satisfy its own "candidate topic list with stable IDs" evidence requirement, and IDK-102's production publish run has nothing to consume. Proposing candidates is not accepting them — no topic is accepted until the editorial review records approval.
 - Acceptance criteria:
-  - A documented question set and required evidence checklist exist; no candidate topic is marked accepted.
+  - A complete candidate spine exists — every `topic_identities`/`topics`/`topic_relations` field for all 53 topics and 74 relations, the DSA-to-scenario bindings with per-binding justification, the stable-ID naming and retirement rule, the checkpoint scheme, and the exclusion list — and no candidate topic is marked accepted.
 - Minimum required tests:
-  - Automated: None — decision framing carries no automated test.
-  - Manual: Editorial/content approver reviews the candidate spine document against the CUR-01/CUR-02 boundary and DSA-relation requirement and records approval or requested changes.
-  - Existing coverage reused: None.
+  - Automated: None required by this ticket. As mechanical evidence for the approver, the spine was parsed from the decision document and run through the real `validate_manifest`, returning valid: 53 topics within `ALLOWED_SUBJECTS`, 74 relations (67 `prerequisite`, 7 `scenario`) forming a DAG with no dangling reference or duplicate tuple, every `dsa` topic carrying a `scenario` relation, and no `go`/`golang`/`go_aws` token. Every `level_tag`, `target_capability`, and `recommended_layer` is within IDK-004's and spec §7.1's vocabularies, and the checkpoint ranges tile 0–56 contiguously. This proves the spine is publishable, not that it is the right curriculum.
+  - Manual: Editorial/content approver reviews the candidate spine against the CUR-01/CUR-02 boundary and the DSA-relation requirement and records approval or requested changes. Not done.
+  - Existing coverage reused: `validate_manifest`'s CUR-01/CUR-02/DAG rules; they check structure, never curriculum judgment.
 - Failure and recovery:
   - Unresolved: IDK-102's production seed run and all Phase 1/2 content-facing tickets continue operating against fixture graphs only; no fixture graph is ever presented to a learner as approved.
 - Removal/replacement: None.
 - Approval gate:
-  - Approver: TBD (content owner / editorial approver per PRD §13). Required artifact: an approved MVP curriculum spine document (topic list, stable IDs, relations, DSA scenario bindings) satisfying CUR-01/CUR-02, referenced by the D1 publish run that creates production canonical v1.
+  - Approver: the MVP local owner acting as content owner / designated editorial approver per PRD §13 — identity resolved 2026-08-14; the earlier `TBD` is closed. Required artifact: `docs/decisions/IDK-001-mvp-curriculum-spine.md` decision version 1.0, reviewed under IDK-002's `editorial-approval-criteria-v1` checklist and referenced by the D1 publish run that creates production canonical v1. The artifact exists and is unapproved: approving it is an editorial judgment about whether these 53 topics are the right MVP curriculum, which no mechanical check can supply.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Spine proposal complete; the editorial review remains to be scheduled.
 
 ### IDK-002 — Frame the editorial approval evidence/criteria decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame the remaining unresolved part of editorial policy — the evidence and review criteria an approval must satisfy — given PRD §13 already resolves that the MVP local owner acts as the designated editorial approver.
+- Status: Approved — decision version 1.0 recorded 2026-08-14
+- Objective: Record `editorial-approval-criteria-v1`: the checklist an approval must complete, the structured `basis_ref` payload it must produce, the sampling minimums that make a review sufficient, and what the policy forbids regardless of who reviews.
 - User-visible outcome: None directly; determines what a real `EditorialApproval.basis_ref` must contain before any graph version is trustworthy.
 - PRD traceability: CUR-03 (contributing), NFR-03 (contributing)
 - Appendix H decisions: D1 (partially resolves the approver role; this ticket scopes only the remaining criteria question).
 - Owning module: canonical
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q2, partially resolved; IMPLEMENTATION_SPEC §12.3 Q2): "What evidence and review criteria must accompany an approval by the MVP designated editorial role?"
-  - Evidence required: a checklist an approver must complete before recording approval (e.g., source/citation spot-check, DSA-relation review, curriculum-boundary review, half-seed/immutability sanity check), and how that checklist maps to the `basis_ref` field on `editorial_approvals`.
-  - Affected tickets and phases: gates the content of real production approval records written by IDK-102's publish tool; does not block IDK-102's mechanism tests (approval-last transaction, immutable trigger, half-seed invisibility), which use a placeholder `basis_ref`.
-  - Allowed preliminary work: implement `editorial_approvals` schema with a free-form `basis_ref` column and the role-grant distinction (learner vs. designated_editorial_approver) that D1 already resolves.
-  - Stop point: no production graph version may be treated as "reviewed" for pilot readiness (Phase 5 exit) until this criteria checklist is approved and demonstrably applied to the seeded v1/v2 fixtures.
+  - Resolved question (PRD §14 Q2, partially resolved by D1; IMPLEMENTATION_SPEC §12.3 Q2): decision version 1.0 records the seven-item checklist, the `editorial-approval-basis-v1` payload schema, sampling minimums, and prohibitions in `docs/decisions/IDK-002-editorial-approval-criteria.md`.
+  - Approved checklist: curriculum-boundary judgment (CUR-01), DSA-topic-to-scenario soundness (CUR-02), DAG ordering plus stable-identity continuity, source/citation structural completeness and live-content spot-check, layer-reversal regression (DEP-03), half-seed/immutability confirmation, and a v2+ diff review covering every deletion (IDK-407).
+  - Approved sufficiency: exhaustive review everywhere except live citation verification, which is sampled at `max(5, ceil(0.20 × distinct sources))` capped at the population. Stable-identity continuity and diff review are never sampled.
+  - Approved `basis_ref` contract: one canonical JSON object with a fixed field set, validated at publish time — `json_valid`, required fields, a `reviewed_manifest_hash` cross-check against the row's own `manifest_hash`, and `review_kind` consistency. An empty string, a free-text sentence, a bare date, or a `basis_ref` reused from another version is invalid.
+  - Affected tickets and phases: gates the content of real production approval records written by IDK-102's publish tool and IDK-407's v2 publish; does not block their mechanism tests, which use fixture `basis_ref` values under the decision's section 7 separation. IDK-503 reviews the shipped `basis_ref`.
+  - Stop point after approval: no production graph version is "reviewed" for pilot readiness until the decision artifact's section 8 validation ships and its section 3 checklist is completed against the exact manifest published.
 - Out of scope:
   - Who the approver is (resolved: local owner acting explicitly in that role).
   - The transactional mechanics of publication (IDK-102).
 - Data and invariants:
-  - `editorial_approvals.basis_ref` remains a reference column; its required content is defined by this decision, not invented here.
-- API/domain/event contracts: None.
+  - `editorial_approvals.basis_ref` stays a `TEXT` column; decision version 1.0 fixes its required content. `editorial-approval-criteria-v1` and the `editorial-approval-basis-v1` payload literal are immutable — a criteria change requires a new decision version so an existing `basis_ref` is never silently reinterpreted under a later bar.
+- API/domain/event contracts: None new. The publish path gains framework-free validation of the parsed `basis_ref` object before `record_approval`.
 - UX routes and states: None directly; no in-app approval UI exists in MVP (D1).
-- Implementation notes: None.
+- Implementation notes:
+  - Approval is policy, not enforcement. `basis_ref` carries zero mechanical validation today — `server/src/yuno/modules/canonical/models.py:442` declares it `Text, nullable=False` with no `json_valid` CheckConstraint, so `""` currently satisfies the column, and `publisher.py` forwards the string unexamined.
 - Acceptance criteria:
-  - A documented, unanswered criteria checklist exists; no criteria are declared adopted.
+  - Decision version 1.0 records the checklist with per-item pass/fail conditions, the `basis_ref` field schema and its publish-time validation, sampling minimums with per-item rationale, the prohibition list, fixture/production separation, required implementation evidence, enforcement gaps, and immutable change control.
 - Minimum required tests:
-  - Automated: None — decision framing carries no automated test.
-  - Manual: Editorial approver reviews and adopts the criteria checklist, then demonstrates it against the IDK-102 v1/v2 fixtures.
-  - Existing coverage reused: None.
+  - Automated: None — decision framing carries no automated test. The validation the decision requires is implementation work owned by IDK-102.
+  - Manual: Designated editorial approver approved `editorial-approval-criteria-v1` on 2026-08-14; IDK-102 retains the publish-path validation obligation and IDK-503 the shipped `basis_ref` review.
+  - Existing coverage reused: The existing `payload_json_valid` CheckConstraint pattern and the single `record_approval` write path; neither substitutes for the validation this decision requires.
 - Failure and recovery:
-  - Unresolved: publish runs proceed with a placeholder `basis_ref` for engineering testing only; no such run is presented as pilot-ready.
-- Removal/replacement: None.
+  - A `basis_ref` failing any section 4 check is rejected before any write, and the publish transaction rolls back whole. Fixture publishes remain legitimate only against a database no running Yuno server reads from.
+- Removal/replacement: The any-string acceptance behavior for `basis_ref` is removed outright, with no fallback preserved for it.
 - Approval gate:
-  - Approver: TBD (designated editorial approver — MVP local owner acting in that role, per PRD §13). Required artifact: an adopted editorial-approval evidence/criteria checklist.
+  - Approved by the designated editorial approver on 2026-08-14. Artifact: `docs/decisions/IDK-002-editorial-approval-criteria.md`, decision version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
 ### IDK-003 — Frame the source licensing/snapshot/withdrawal policy decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
-- Objective: Frame which initial sources and licenses are approved, and what snapshot, cache, withdrawal, and replacement rules apply to citations.
+- Status: Approved as product policy — decision version 1.0 recorded 2026-08-14; legal-reviewer confirmation outstanding for the Spring row and all of §5.1
+- Objective: Record `source-policy-v1`: the approved source registry by license basis and tier, the forbidden-source denial list, snapshot/cache/excerpt limits, the attribution contract, and the withdrawal/unavailability/replacement state machine.
 - User-visible outcome: None directly; determines what may legally appear in the Sources layer and in claim-level citations.
 - PRD traceability: CNT-04 (contributing), PRV-02 (contributing)
 - Appendix H decisions: None.
 - Owning module: provenance
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q3; IMPLEMENTATION_SPEC §12.3 Q3): "Which sources and licenses are approved, and what snapshot, cache, withdrawal and replacement rules apply?"
-  - Evidence required: a proposed initial source registry with license terms per source, a snapshot/cache retention proposal, and a withdrawal-handling proposal consistent with spec §6.5 ("withdrawn/unavailable sources remain visible with status... snapshot rights and replacement policy require source-policy approval").
-  - Affected tickets and phases: gates real citation content used by IDK-207 (generated-content provenance) and IDK-201 (Sources layer); does not block the `sources`/`source_snapshots`/`claims`/`citations` schema or the fake-adapter-backed provenance mechanism tests, which use synthetic sources.
-  - Allowed preliminary work: implement the `sources`/`source_snapshots`/`claims`/`citations` tables and the withdrawn/unavailable status state machine against synthetic fixture sources.
-  - Stop point: no real external source may be cited in production learner-facing content, and no snapshot may be retained beyond engineering test fixtures, until this policy is approved.
+  - Resolved question (PRD §14 Q3; IMPLEMENTATION_SPEC §12.3 Q3): decision version 1.0 records the registry, tier model, limits, attribution contract, and state machine in `docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md`.
+  - Approved registry: six source classes on a two-tier model. Tier A (full local snapshot plus quotation) covers the IETF RFC series under the IETF Trust Legal Provisions, PostgreSQL documentation under the PostgreSQL License, and the Spring Framework/Boot reference documentation under Apache-2.0. Tier B (link and citation metadata only, no persisted body) covers Oracle Java SE documentation and the JLS, OpenJDK JEP pages, and AWS documentation — none of which has an identified open license.
+  - Approved limits: 10 MiB per Tier A snapshot, no body persisted for Tier B, 20 retained snapshots per source with cited snapshots never pruned, and a 400-character inline verbatim excerpt ceiling per citation.
+  - Approved state machine: `unavailable` is transient and entered automatically only after 3 consecutive failed retrievals spanning at least 72 hours; `withdrawn` is terminal-for-new-use and only ever entered by explicit editorial action carrying a `withdrawal_reason`. Whether a stored snapshot may still be served after withdrawal turns on that reason — a `license-revoked`/`license-changed-incompatible` withdrawal purges the body immediately, because re-serving a stored copy after its permitting license ends is a fresh distribution on every serve.
+  - Forbidden outright: paywalled content, scraped aggregators, Stack Overflow/Stack Exchange, content with no identifiable license, competitor course material, and model-generated output as a source for another claim.
+  - Affected tickets and phases: gates real citation content used by IDK-207 and IDK-201; does not block the schema or fake-adapter provenance mechanism tests, which use synthetic sources. IDK-503 reviews the shipped result.
+  - Stop point after approval: unchanged in practice. No real external source may be cited in production content and no snapshot retained beyond fixtures until the decision artifact's section 12 implementation evidence exists, the Spring row's legal gate is cleared, and any §5.1 row clears its own review. The approval was recorded in the content-owner capacity only; no legal reviewer has examined the licensing rows.
 - Out of scope:
   - Live source retrieval mechanics (Section 4, IDK-404).
   - Cache-key/staleness mechanics for generated content (IDK-207).
 - Data and invariants:
-  - `sources.license_status` and `sources.availability_status` remain populated by this decision's outcome, never invented per-source here.
-- API/domain/event contracts: None.
-- UX routes and states: `/app/topic-studio` Sources sub-view and `/app/search` remain populated by fixture-only sources until this decision resolves.
-- Implementation notes: None.
+  - Decision version 1.0 closes `sources.license_status` to `approved-open-license`/`approved-link-only` and fixes the meaning of each `availability_status` value, plus a five-value `withdrawal_reason` vocabulary. `source-policy-v1` is immutable — adding or removing a registry row, changing a tier, the excerpt cap, or the automatic-`unavailable` threshold requires a new decision version. A citation retains the license basis that applied at its snapshot's `retrieved_at`; no version change retroactively relicenses an existing citation.
+- API/domain/event contracts: None new. The attribution contract fixes what a rendered citation must carry; `SourceResponse`/`SourceSnapshotResponse` already return every required field.
+- UX routes and states: `/app/topic-studio` Sources sub-view and `/app/search` remain fixture-only until section 12's implementation evidence exists. `unavailable` and `withdrawn` must render as distinguishable facts, which they do not today.
+- Implementation notes:
+  - Approval is policy, not enforcement, and this policy is further gated than its peers: it was approved in the content-owner capacity only. `HttpSourceRetrievalAdapter` persists the full response body regardless of `license_status`, so no Tier B link-only path exists — retrieving a real Tier B source today would over-retain content its terms do not permit storing. `SqlAlchemySourceRepository` exposes no `update_source`, so no code path can transition a source's status at all.
 - Acceptance criteria:
-  - A documented source-registry proposal and open license/snapshot/withdrawal questions exist; no source is marked approved.
+  - Decision version 1.0 records the registry with a named license basis and tier per class, the unapproved and forbidden buckets, numeric snapshot/cache/excerpt limits with enforcement points, the attribution contract, the withdrawal/replacement state machine including the serve-after-withdrawal rule, the staleness rule, the prohibition list, the closed status vocabularies, required implementation evidence, enforcement gaps, and immutable change control.
 - Minimum required tests:
-  - Automated: None — decision framing carries no automated test.
-  - Manual: Content/legal reviewer approves the initial source registry and snapshot/withdrawal rules.
-  - Existing coverage reused: None.
+  - Automated: None — decision framing carries no automated test. Sections 12's enforcement is implementation work owned by IDK-201/207/404/408.
+  - Manual: Content owner approved `source-policy-v1` on 2026-08-14 in the content-owner capacity. A legal reviewer has not examined the licensing rows; the Spring row's gate and every §5.1 row remain uncleared, and IDK-503 reviews the shipped result.
+  - Existing coverage reused: The adapter's existing 10 MiB bound, content-type/redirect/private-IP rejection, and the immutability triggers on `sources`/`source_snapshots`/`claims`/`citations`; none substitutes for the tier, purge, excerpt, or status-transition enforcement this policy requires.
 - Failure and recovery:
-  - Unresolved: generation and citation pipelines continue to operate against synthetic fixture sources only.
-- Removal/replacement: None.
+  - Until section 12 ships, generation and citation pipelines continue against synthetic fixture sources only. Every `sources` row in the repository today carries `license_status = "fixture-approved"`, which the policy forbids on a production row.
+- Removal/replacement: The free-text `license_status` column is closed to the two-value production vocabulary, and the unconditional full-body persistence path is replaced by a tier-branched one. No fallback is preserved for either.
 - Approval gate:
-  - Approver: TBD (content owner / legal reviewer per PRD §13). Required artifact: an approved initial source registry with license/snapshot/withdrawal rules.
+  - Approved as product policy by the content owner on 2026-08-14. Artifact: `docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md`, decision version 1.0. Outstanding: legal-reviewer confirmation of the Spring Apache-2.0 row and of every §5.1 candidate class.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Policy completed by decision approval; section 12's enforcement remains to be estimated by the implementing tickets.
 
 ### IDK-004 — Approve the user-facing role-taxonomy decision
 
@@ -419,7 +424,7 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 ### IDK-010 — Frame the combined size/retention and export/delete/logging lifecycle decision
 
 - Phase: 0 — Blocking decisions
-- Status: Ready
+- Status: Approved — policy version 1.0 recorded 2026-08-13
 - Objective: Frame, as one combined decision, the size/retention limits for imports/artifacts/transcripts/generated content/job history/runner output/temp files/diagnostic expiry, and the precise export package/versioning, delete-recovery, backup, and log-retention/redaction posture.
 - User-visible outcome: None directly; determines what limits and lifecycle guarantees Settings can honestly display.
 - PRD traceability: SET-01 (contributing), NFR-04 (contributing), NFR-06 (contributing), DAT-02 (contributing)
@@ -427,33 +432,34 @@ These eleven tickets frame the unresolved PRD §14 / IMPLEMENTATION_SPEC §12.3 
 - Owning module: settings_data
 - Dependencies: None
 - Scope:
-  - Question (PRD §14 Q10+Q11; IMPLEMENTATION_SPEC §12.3 Q10+Q11, combined): "What limits apply to imports, artifacts, transcripts, generated content, execution output, temporary files, and retained jobs (including diagnostic/session expiry)? What are the precise export package/version, transcript inclusion, delete recovery, backup, and logging retention/redaction policies?"
-  - Evidence required: concrete size/count limits per category, a diagnostic-session expiry duration, an export package format/version (spec §12.2 recommends a versioned JSON manifest plus referenced UTF-8 payloads as a non-adopted default), delete-recovery guarantees (or explicit absence thereof), backup posture, and log field-redaction/retention rules building on the already-specified redaction categories (spec §8.5).
-  - Affected tickets and phases: gates Section 4 IDK-409 (export/delete/redaction/logging orchestration) and the production expiry/cap values referenced but not enforced by IDK-105 (diagnostic expiry) and IDK-202 (overlay-proposal pending cap); does not block IDK-108's tombstone mechanism, IDK-105's pause/resume persistence, or IDK-202's cap-rejection behavior, all of which are testable at placeholder/configurable values.
-  - Allowed preliminary work: implement `export_operations`/`delete_operations` schema, the D5 tombstone/downgrade transaction, and a configurable (not hard-coded) cap/expiry mechanism using placeholder values explicitly marked non-final.
-  - Stop point: no production Settings export/delete flow (IDK-409) may claim a specific retention, recovery, or redaction guarantee until this is approved (Phase 4/5 exit gate G10/G11).
+  - Resolved question (PRD §14 Q10+Q11; IMPLEMENTATION_SPEC §12.3 Q10+Q11, combined): policy version 1.0 records every size/count limit, retention duration, export contract item, delete/recovery/backup posture, and logging/support-access rule in `docs/decisions/IDK-010-data-lifecycle-policy.md`.
+  - Approved export contract: one canonical UTF-8 JSON document, format identifier `yuno-portable-export` version `1.0`, filename `yuno-export-v1-YYYYMMDDTHHMMSSZ.json`, sorted keys and no insignificant whitespace, SHA-256 integrity digest over the canonical `data` object, and stable `availability: unavailable` reasons (`tombstoned`, `source-missing`, `raw-original-excluded`, `policy-excluded`). Interview transcripts, raw import originals, quarantined provider output, and runner output bodies are excluded from v1 and marked, never fabricated or silently omitted.
+  - Approved delete/backup posture: goal deletion is irreversible with no recovery window and no undelete; Yuno creates no backups and supports no in-app restore; only non-content IDs, hashes, versions, impact snapshot, status, and timestamps survive.
+  - Approved logging posture: an ordinary-log field allowlist, additional denial of query strings, bodies, user agents, IP addresses, email/display names, arbitrary exception messages, and unknown fields; five 10 MiB owner-only rotated files capped at 14 days or 50 MiB; no remote support access, upload, or telemetry forwarding.
+  - Affected tickets and phases: the decision gate is satisfied for IDK-409 (export/delete/redaction/logging orchestration) and for the production expiry/cap values referenced by IDK-105 (diagnostic expiry, 30 days) and IDK-202 (overlay-proposal pending cap, 25 per goal). IDK-503's G10/G11 review and section 10's review evidence remain required.
+  - Stop point after approval: production export stays disabled and Settings may claim no retention, recovery, or redaction guarantee until the decision artifact's section 14.6 enforcement gaps are implemented and section 10's privacy-review evidence passes. Approval closed the decision question; it waived no implementation evidence.
 - Out of scope:
   - The tombstone/downgrade transaction mechanics themselves (IDK-108, already fully specified by D5).
   - Full export/delete job orchestration UI (Section 4, IDK-409).
 - Data and invariants:
-  - `export_operations`, `delete_operations`, `evidence_tombstones` remain schema-complete; only the retention/recovery/format VALUES await this decision.
-- API/domain/event contracts: None.
-- UX routes and states: `/app/settings` export/delete regions display configurable placeholder limits, never an invented guarantee, until this resolves.
+  - `export_operations`, `delete_operations`, `evidence_tombstones` remain schema-complete; policy version 1.0 fixes their retention/recovery/format VALUES. The policy version is an immutable reference — changing an approved value requires a newly approved version, not an edit.
+- API/domain/event contracts: None owned by this ticket; the approved export envelope, `availability`/reason vocabulary, and log allowlist are implemented by IDK-409.
+- UX routes and states: `/app/settings` export/delete regions may display only the guarantees section 14 approves, and only once the matching enforcement ships; an approved-but-unenforced limit is not displayable.
 - Implementation notes:
-  - No specific numeric limit, retention duration, or export format version is adopted by this ticket.
+  - Approval is policy, not enforcement. The decision artifact's section 14.6 names the enforcement gaps that exist today, and section 11 requires every current `server/src/yuno/config.py` placeholder to be reconciled against the approved tables — no existing default became policy merely by being in code.
 - Acceptance criteria:
-  - A documented open size/retention/lifecycle question set exists; no limit or lifecycle guarantee is declared adopted.
+  - Policy version 1.0 records every size/count limit, retention duration and clock, export contract item, delete/recovery/backup posture, logging/support-access rule, required review evidence, enforcement-gap list, and change-control rule.
 - Minimum required tests:
   - Automated: None — decision framing carries no automated test.
-  - Manual: Product/privacy owner approves size/retention limits and the export/delete/logging lifecycle policy.
-  - Existing coverage reused: None.
+  - Manual: Product/privacy owner approved policy version 1.0 on 2026-08-13 through the decision artifact's section 14.7 approval statement; IDK-409 retains the implementation evidence and IDK-503 the G10/G11 privacy review over section 10's representative dataset.
+  - Existing coverage reused: The NIST Privacy Framework, ICO storage-limitation, OWASP logging, and NIST SP 800-88 Rev. 2 references recorded in section 14; none substitutes for enforcement evidence.
 - Failure and recovery:
-  - Unresolved: caps/expiry remain configurable-but-unset in engineering builds; Settings never displays an invented retention or recovery claim.
-- Removal/replacement: None.
+  - Until an approved value has a matching enforcement mechanism, it stays configurable and undisplayed; Settings never presents an approved-but-unenforced limit as an active guarantee.
+- Removal/replacement: The approved 1-hour terminal runner-workspace janitor retention replaces the 24-hour engineering placeholder; the unset export policy is replaced by the `yuno-portable-export` 1.0 contract; stderr structured logging is replaced by the approved owner-only rotated local files.
 - Approval gate:
-  - Approver: TBD (product/privacy owner per PRD §13). Required artifact: approved size/retention limits and export/delete/logging lifecycle policy.
+  - Approved by the product/privacy owner on 2026-08-13. Artifact: `docs/decisions/IDK-010-data-lifecycle-policy.md`, policy version 1.0.
 - Estimate:
-  - TBD; implementation team to estimate after approval.
+  - Completed by decision approval.
 
 ### IDK-011 — Frame the external telemetry decision
 
@@ -500,7 +506,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-101 — Modular-monolith foundation: persistence, UoW, OpenAPI boundary, audit
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Stand up the FastAPI/SQLAlchemy/SQLite modular monolith per spec §3.2/§3.3: the `owner_id` seam with a server-resolved local owner, foreign-key-enforced SQLite, a single Alembic head check, one UnitOfWork per HTTP command, an OpenAPI-generated TypeScript client with CI drift check, append-only `audit_events`, and enforced module import boundaries.
 - User-visible outcome: None directly observable by a learner; every later ticket's persistence, ownership isolation, and auditability depend on this skeleton existing correctly.
 - PRD traceability: SYS-01 (primary), DAT-01 (primary), NFR-03 (primary), NFR-07 (primary)
@@ -551,7 +557,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-102 — Approval-gated offline canonical v1 publication
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Build the D1 offline seed/publish tool: no in-app authoring/publication UI or API; graph material plus `EditorialApproval` inserted last in one transaction; refusal of in-place mutation of any approved version; every read path gated on approval-record existence.
 - User-visible outcome: A learner never sees a half-seeded or unapproved canonical graph; roadmap/topic/search reads are always backed by a fully approved version.
 - PRD traceability: CUR-03 (primary), CNT-01 (primary), CUR-01 (primary), CUR-02 (primary)
@@ -605,7 +611,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-103 — Exact 14-route shell and not-found contract, backend-resolved
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Preserve the existing exact 14-route contract (`/`, `/app/onboarding`, `/app/learn-roadmap`, `/app/topic-studio`, `/app/interview-hub`, `/app/practice`, `/app/mock`, `/app/reports`, `/app/evidence`, `/app/imports`, `/app/canonical-updates`, `/app/search`, `/app/jobs`, `/app/settings`), `/app/$pageId` validation of the exact 13 page IDs, the shared shell, the not-found experience, and focused Mock outside the shell — now backed by the server-resolved local owner from IDK-101 instead of anonymous client-only state.
 - User-visible outcome: Navigation, page structure, and the not-found experience remain exactly as approved; nothing about IA, terminology, or control placement changes.
 - PRD traceability: CORE-01 (primary)
@@ -647,7 +653,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-104 — Global profile and multiple isolated goal workspaces
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Implement one global `learner_profiles` row per owner and N isolated `goal_workspaces`, with goal switch/resume/archive, `/` My learning states (empty/ready/stale/locked/unavailable), historical Resume kept separate from dismissible Recommended next, and audience/level labelling that excludes any beginner track.
 - User-visible outcome: A learner can create more than one goal, switch between them without mixing progress, and see `/` reflect the currently selected goal's real state.
 - PRD traceability: CORE-03 (primary), CORE-02 (primary)
@@ -690,7 +696,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-105 — Persisted optional diagnostic/setup lifecycle
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Persist diagnostic sessions and answers as first-class entities (explicitly not `LearningState`), owner-scoped, surviving pause/refresh/restart; every optional step skippable; adaptive next-question selection from responses/confidence; optional Markdown/plain-text notes (Learn) or questions (Interview Prep) captured as untrusted seed.
 - User-visible outcome: A learner can take, pause, resume, or skip a diagnostic without losing answered questions, and optionally paste notes/questions that are visibly untrusted until reviewed later in Imports.
 - PRD traceability: ONB-01 (primary), ONB-02 (primary), D11 (primary, shared with IDK-107)
@@ -736,7 +742,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-106 — Deterministic learner-controlled roadmap preview
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Implement the D2 deterministic roadmap projection — pinned approved graph + accepted overlay + explicit corrections — with pending proposals/conflicts as non-mutating annotations, topological sort with stable-ID lexicographic tie-break, goal scoping that never hides a transferred-evidence topic, and rejection with a visible reason for any order constraint that creates a cycle or violates an unmodified prerequisite. Full preview is available before goal creation with jump/skip/reorder/depth-override/correction, and recommendation is always shown separately from override.
 - User-visible outcome: The learner sees the entire roadmap, can jump/skip/reorder/override depth/correct inferred state at any time (before or after goal creation), and rebuilds never silently reorder or hide anything.
 - PRD traceability: ONB-03 (primary), CORE-05 (primary), LRN-01 (primary), DEP-01 (primary), D2 (primary)
@@ -779,7 +785,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-107 — Atomic goal confirmation and first working production slice
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Implement the D11 atomic goal-confirmation transaction — one UoW creates the goal, its `LearningState`s, any preview-made overlay edits, and the diagnostic confirmation link, pinned to the graph version captured at diagnostic start — delivering the first end-to-end production slice (My learning → Onboarding → persisted diagnostic/setup → full roadmap preview → explicit goal confirmation → persisted My learning and roadmap), and remove the prototype's localStorage/legacy-hydration persistence now that the API-backed replacement works.
 - User-visible outcome: Confirming a goal after onboarding reliably creates a real, persisted goal with its roadmap and diagnostic history — surviving reload, restart, and browser storage clearing — with no partial goal ever visible.
 - PRD traceability: ONB-03 (contributing), D11 (primary)
@@ -826,7 +832,7 @@ These eight tickets deliver the modular-monolith skeleton, the approval-gated ca
 ### IDK-108 — Conservative evidence transfer and delete/tombstone effects
 
 - Phase: 1 — MVP foundation
-- Status: Ready
+- Status: Complete
 - Objective: Implement D5 — evidence is immutable and goal-scoped; cross-goal transfer creates fresh `LearningState` rows in the target goal referencing source evidence read-only with a classification, copying nothing and transferring no completion; deleting a source goal tombstones evidence referenced elsewhere (classification metadata retained, content dropped) and downgrades dependent states to `unverified` with an audit entry, shown as an impact preview before confirmation.
 - User-visible outcome: Creating a second goal shows likely-known/partial/unverified/new classifications for relevant prior evidence (correctable, never hidden); deleting a goal shows exactly what will be tombstoned/downgraded before the learner confirms.
 - PRD traceability: CORE-04 (primary), D5 (primary)
@@ -872,7 +878,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-201 — Self-contained approved topic layers and roadmap return
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Deliver the self-contained topic workspace with the eight approved layers (Essential, Implementation, Internals, Production, Alternatives, Failures, Interview, Sources), a topic-attached conversation, always-reachable roadmap return without losing context, and problem-first checkpoints naming scenario, target capability, expected artifact, a 30–60 minute session range, rubric and assumptions, an evidence criterion, and a material static/runtime limitation, with every revealed layer accurate on its own (a later layer refines, never reverses).
 - User-visible outcome: Opening any topic shows everything needed to work it without hidden prerequisite navigation, and the roadmap is always one action away.
 - PRD traceability: LRN-02 (primary), LRN-03 (primary), DEP-02 (primary), DEP-03 (primary)
@@ -916,7 +922,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-202 — Explicit recommendations and bridges through overlay proposals
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Restrict AI/adaptation to writing `OverlayProposal` records pinned to the graph version they were generated against, revalidated at acceptance and rejected with a visible reason if stale, applied in a single transaction, deduplicated by content hash while pending, and capped per goal; bridges carry why/relationship/proposed placement and are add/postpone/dismiss with append-only decision history — nothing is added silently.
 - User-visible outcome: A learner sees every gap/bridge/recommendation as an explicit, explainable proposal they can accept, postpone, or dismiss; nothing changes their plan without that action.
 - PRD traceability: LRN-04 (primary), GAP-01 (primary), GAP-02 (primary), CNT-02 (primary), D2 (contributing)
@@ -960,7 +966,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-203 — Untrusted import review and existing-topic-only mapping
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Implement D10 — original preserved exactly with hash; parsed asynchronously into ordered untrusted statements with parser provenance; normalized dedupe; unmapped statements never auto-create topics or expand curriculum scope; mapping targets only an existing canonical topic in the goal's approved graph; learner may correct, map, verify as their own assertion, or dismiss; mapping changes the per-topic imports hash and surfaces D3 staleness; graph adoption reprocesses unmapped statements; imports never become canonical truth, evidence, or completion.
 - User-visible outcome: Pasted notes/questions remain visibly untrusted, are never silently absorbed into the curriculum, and the learner explicitly decides what — if anything — each statement means for their goal.
 - PRD traceability: IMP-01 (primary), IMP-02 (primary), D10 (primary)
@@ -1009,7 +1015,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-204 — Immutable evidence, evaluations, disputes, and re-evaluation
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Deliver immutable, append-only evidence and assessments; visible rubric dimensions and assumptions; acceptance of multiple valid solutions; append-only disputes; re-evaluation that creates a successor and marks the predecessor excluded-from-derivation while preserving history; unresolved ambiguity that carries no readiness penalty.
 - User-visible outcome: Submitting an artifact/answer produces a real, permanent evidence record with rubric-based feedback; disputing it never erases the original, and re-evaluation adds a new result rather than overwriting.
 - PRD traceability: EVAL-01 (primary), EVAL-02 (primary)
@@ -1063,7 +1069,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-205 — Deterministic derived progress with explicit now
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Implement D6 — a server-side deterministic function `f(eligible evidence, learner corrections/confirmations, explicit now, rule version)` computing coverage, proficiency, retention, and readiness; corrections are first-class inputs recomputation never silently reverses; `now` is explicit because retention decays; per-goal memoization is invalidated in the same transaction as evidence appends; responses carry definitions, supporting evidence, uncertainty, and rule version; exactly four inferred states (likely known, partial, unverified, new), never inferred completion; detailed/simple is presentation-only and deletes nothing; dismissed/disabled reviews carry no penalty; the production policy is `derived-state-v1` from IDK-009 decision version 1.0.
 - User-visible outcome: Progress always reflects real evidence and the learner's own corrections, never silently reverts a correction, and is explicit about what "now" means when retention is involved.
 - PRD traceability: PRG-01 (primary), PRG-02 (primary), D6 (primary)
@@ -1111,7 +1117,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-206 — Goal notebook and optional review/retrieval
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Deliver one notebook per goal with entries labelled auto or user and optional topic/evidence/source links, plus an optional non-blocking review queue with retrieval, spacing, interleaving, and context variation; per-goal enable/disable and duration/cadence/type tuning; recall/explanation/application required before reveal; attempts record response, optional confidence, feedback/correction, next interval, and later varied-context result; production scheduling uses `review-schedule-v1` approved by IDK-009.
 - User-visible outcome: Every goal has a real notebook of labelled entries, and an optional review queue that never blocks navigation and never penalizes dismissal or disabling.
 - PRD traceability: NBK-01 (primary), RET-01 (primary), RET-02 (primary), RET-03 (primary)
@@ -1158,7 +1164,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-207 — Generated-content cache, provenance, and staleness contract
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Implement the D3 cache/provenance/staleness contract for generated learner-facing content: exact key `(canonical_graph_version, topic_id, goal_id, layer, topic_mapped_approved_imports_hash, prompt_template_version)`; provider/model, profile, and live evidence excluded from the key but recorded in an immutable personalization snapshot; staleness surfaced never silent; regeneration only on explicit learner action or a key-changing event; generation single-flighted per key at enqueue; adaptive emphasis/examples/exercises flow through recommendation/review channels and never rewrite cached lesson bodies; claim-level citations for sensitive/disputed/comparative/time-or-version-dependent claims, routine content self-contained and expandable; withdrawn/unavailable sources retained with status.
 - User-visible outcome: Generated lesson content is consistent and cacheable per exact context, and the learner is always told — never left silently guessing — when a correction or update has made the shown content stale.
 - PRD traceability: CNT-03 (primary), CNT-04 (primary), D3 (primary)
@@ -1205,7 +1211,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-208 — Learner-readable Evidence and Reports surfaces
 
 - Phase: 2 — MVP learning and evidence
-- Status: Ready
+- Status: Complete
 - Objective: Present Evidence and Reports so a conclusion and next action lead, with details disclosing rubric dimensions, assumptions, sources, provenance, lineage, history, and disputes; a tombstoned-source warning where relevant; detailed/simple presentation; and no evaluative report before explicit terminal completion (Mock-specific terminal gating itself is owned by Section 3/IDK-304 — this ticket covers the learner-readable presentation layer shared by Evidence and the learning portions of Reports).
 - User-visible outcome: Opening Evidence or Reports always shows what the learner's work supports and what to do next before anything else, with full rubric/provenance detail available on request.
 - PRD traceability: PRG-01 (contributing), CORE-04 (contributing), EVAL-01 (contributing), EVAL-02 (contributing), HND-02 (contributing)
@@ -1250,7 +1256,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-301 — Interview Prep hub, editable bundles, and linked Refresher
 
 - Phase: 3 — MVP interview
-- Status: Ready
+- Status: Complete
 - Objective: Deliver `/app/interview-hub` as the Interview Prep home with independently reachable Refresher and Questions submodes, editable/copyable generic role-level bundles, optional behavioral/leadership items, and Refresher artifacts linked to subject, layer, source, and evidence gap.
 - User-visible outcome: A learner opens Interview Prep with no Learn-path prerequisite, sees separate Refresher, Questions, Practice, and Mock cards, deep-links directly into `?mode=refresher` or `?mode=questions`, copies or edits a recommended bundle for a generic role/level with no company field, and can add or remove behavioral/leadership independently of technical subjects.
 - PRD traceability: INT-01 (primary), INT-02 (primary), INT-03 (primary), REF-01 (primary), CORE-01 (contributing).
@@ -1305,7 +1311,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-302 — Practice: hints, per-attempt feedback, append-only retry
 
 - Phase: 3 — MVP interview
-- Status: Ready
+- Status: Complete
 - Objective: Implement the Practice lifecycle `ready → answering → follow-up → submitted → evaluating → feedback-ready → failed-recoverable` with hints only after explicit request, feedback only after Submit, facts/trade-offs separation, adaptive follow-ups, and append-only attempts that retry/repair never overwrite.
 - User-visible outcome: A learner answers a Practice question, optionally requests a hint before answering, submits to receive per-attempt feedback that separately labels factual corrections and trade-offs, and can repair or continue without losing any earlier attempt; cancelling an in-flight evaluation preserves the submitted attempt.
 - PRD traceability: QPR-01 (primary), QPR-02 (primary), EVAL-01 (contributing), EVAL-02 (contributing), HND-01 (contributing — Practice's response/evidence pattern reuses the same evaluated-artifact shape whose primary owner is IDK-405), NFR-09 (contributing).
@@ -1361,7 +1367,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-303 — Focused Mock: adaptive turns, exact safe-exit draft, terminal Complete
 
 - Phase: 3 — MVP interview
-- Status: Ready
+- Status: Complete
 - Objective: Implement `/app/mock` outside the ordinary global shell with one adaptive interviewer question at a time, no hints or evaluative feedback while nonterminal, byte-for-byte Save & exit draft preservation, resume that changes only status, and an explicit, idempotent, terminal Complete that fixes the transcript and enqueues final evaluation.
 - User-visible outcome: A learner answers a focused Mock interview seeing only status, the current question, the answer field, Save & exit, and terminal completion — no hints, rubric, score, praise, recommendation, evaluation, or Reports link while active; exiting and resuming returns the exact draft unchanged; completing is a deliberate, irreversible action after which the transcript can no longer accept answers.
 - PRD traceability: QMK-01 (primary), EVAL-01 (contributing), EVAL-02 (contributing).
@@ -1415,7 +1421,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-304 — Terminal-only consolidated Reports and fixture-evaluation removal
 
 - Phase: 3 — MVP interview
-- Status: Ready
+- Status: Complete
 - Objective: Deliver `/app/reports` as the learner-readable, conclusion-first consolidated view for terminal Mock (and Practice-linked) results, with rubric history and dispute/re-evaluation entry, and remove the prototype's exact-string-match fixture scoring so it survives only as a controlled regression test.
 - User-visible outcome: A learner sees a report only after explicitly completing Mock; the report leads with a plain-language conclusion and next action, then discloses assumptions, facts vs. trade-offs, rubric dimensions, ambiguity, transcript, and provenance; edited, blank, incomplete, or arbitrary transcripts never receive the exact-fixture evaluation and are instead shown as transcript-only or a real evaluator result.
 - PRD traceability: QMK-02 (primary), EVAL-01 (contributing), EVAL-02 (contributing), PRG-01 (contributing), CNT-04 (contributing).
@@ -1468,7 +1474,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-401 — Durable two-lane job engine: crash, restart, retry, cancel, atomicity
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete
 - Objective: Deliver the one durable worker process with reserved interactive and background lanes, FIFO within each lane, queue-level dedupe/single-flight at enqueue, startup reconciliation, and one-transaction terminal result/state/event commit, replacing the prototype "no live job system" Jobs page with the real operational view.
 - User-visible outcome: `/app/jobs` shows real queued/running/succeeded/failed/cancel-requested/cancelled jobs across both lanes with retry/cancel controls that reflect actual server state; background bulk work never blocks an interactive conversational turn; a server restart never leaves a job in an ambiguous terminal state.
 - PRD traceability: DAT-02 (primary), NFR-02 (primary), NFR-05 (contributing — fail-closed reconciliation), NFR-06 (contributing — job diagnostics).
@@ -1523,7 +1529,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-402 — SSE reconnect with authoritative GET reconciliation
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete
 - Objective: Deliver owner-scoped `GET /events` SSE with `Last-Event-ID` reconnect, in-order replay of retained events, client-side dedupe, and mandatory post-reconnect reconciliation against `GET /jobs/{id}` as the authoritative source.
 - User-visible outcome: A learner watching an in-flight job sees connected/reconnecting/unavailable status with a Refresh action; after any connection loss, the UI always confirms the true job state via GET rather than trusting replayed events alone, and duplicate event delivery never double-applies a state change.
 - PRD traceability: SYS-03 (primary), NFR-02 (contributing).
@@ -1677,7 +1683,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-405 — Hands-on lifecycle and static/runtime separation
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete
 - Objective: Implement the hands-on lifecycle `scenario → artifact/code/design/decision → visible rubric review → adaptive cross-question → revision → submitted evidence` with every stage and revision linked, static review always labelled static with a required non-empty limitation, and the UI visually distinguishing static analysis, compilation, and test execution, where only Submit appends evidence.
 - User-visible outcome: A learner works a scenario in Topic Studio, submits an artifact for review, sees a rubric-based static review that is unmistakably labelled as static (never claiming runtime behavior), receives an adaptive cross-question, revises, and only an explicit Submit creates evidence; Run remains exploratory and never appends evidence on its own.
 - PRD traceability: HND-01 (primary), HND-02 (primary), HND-03 (co-primary with IDK-503, which owns the scenario-realism review that HND-03's PRD acceptance actually names), EVAL-01 (contributing).
@@ -1734,7 +1740,11 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-406 — Controlled Java runner: confirmation, no-shell execution, limits, and cleanup
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready — Java-only schema/contract narrowing landed early (Alembic revision `c5b1e70a94d2`) because IDK-501 verifies it; the runner's execution machinery (broker, cgroups, namespaces, syscall filter, capability snapshots, activation evidence, test-driver manifests) is untouched and the runner remains fail-closed. Landed portion: `language IN ('java')` checks on `runner_confirmations`/`runner_records` with the approved transactional relational-placeholder disposal, `RunnerLanguage` reduced to `JAVA`, `Settings.runner_relational_connector` and `Settings.runner_python_command` removed, the configured-string relational detector and the Python capability branch removed, and the relational/Python OpenAPI, generated-client, and UI surfaces removed.
+- Status: Partially implemented; execution remains fail-closed and unactivated. This status was corrected on 2026-08-14 after an audit found the previous wording wrong in both directions — it claimed the execution machinery was "untouched", which understated what exists, while the specific isolation primitives it named are genuinely absent.
+  - Landed: the Java-only schema/contract narrowing (Alembic revision `c5b1e70a94d2`, verified by IDK-501) — `language IN ('java')` checks on `runner_confirmations`/`runner_records` with the approved transactional relational-placeholder disposal, `RunnerLanguage` reduced to `JAVA`, `Settings.runner_relational_connector` and `Settings.runner_python_command` removed, the configured-string relational detector and the Python capability branch removed, and the relational/Python OpenAPI, generated-client, and UI surfaces removed.
+  - Also landed, contrary to the previous status text: a substantially complete execution service (`server/src/yuno/modules/runner/service.py`, 786 lines — `capabilities`, `validate_input`, `resolve_inputs_within_limits`, `create_confirmation`, `minimal_environment`, bounded output capture, workspace-usage limit classification, `execute_runner_job`), a real `LocalRunnerProcessPort` (`runner/adapters.py:86`) wired at `api/app.py:784`, and 24 integration tests in `server/tests/integration/test_runner.py`.
+  - Genuinely absent: the root broker, cgroups, namespaces, and syscall filter. `runner/adapters.py` isolates using POSIX `resource.setrlimit` through `preexec_fn` only (`adapters.py:92-108`) — RLIMIT_CPU/AS/NPROC/FSIZE. No capability snapshot, test-driver manifest, or native exact-tuple activation evidence exists in this repository, and no CI job produces one.
+  - Fail-closed is intact: `runner_enabled` defaults `False` and every `runner_*` policy value defaults `None` (`server/src/yuno/config.py:93-104`), so no learner process can start. Effective Java execution remains prohibited.
 - Objective: Implement the confirmed, no-shell, limited, cancellable Java 21 direct compile/test runner on the exact approved IDK-005/007 policies, with deterministic platform/paired-JDK detection; Python, build-tool, and database execution absent/unsupported under approved IDK-005/008; Go Later; and effective enablement fail-closed until exact-tuple evidence passes.
 - User-visible outcome: A learner explicitly confirms a Run, sees declared inputs and their hashes, watches structured ordered output stream in, can cancel the complete cgroup-owned process tree with a recorded cleanup outcome, and sees clear language that this is controlled subprocess execution — not a sandbox, hostile-code isolation, production, or AWS proof; if the runner isn't enabled, Run stays absent/disabled while Submit's static review (IDK-405) keeps working.
 - PRD traceability: RUN-01 (primary), RUN-02 (primary), RUN-03 (primary), NFR-10 (primary), HND-02 (contributing — static/runtime visual separation the runner's output must support).
@@ -1817,7 +1827,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-407 — Atomic canonical v2 publication and opt-in merge
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete
 - Objective: Publish a second approved canonical graph version through the same offline tooling as IDK-102, and deliver the opt-in, always-recomputed base→latest canonical-update diff/merge flow at `/app/canonical-updates` with atomic acceptance moving the goal's version pin.
 - User-visible outcome: A learner sees a published curriculum update as an inspectable diff naming impacts, selects changes, resolves each conflict (overlay-wins pre-selected and explained, never silently applied), sees archived-local-topic entries for any topic upstream removed while carrying their evidence/overlay state, and only after explicit confirmation does the goal's version pin move — with postpone/dismiss leaving the goal completely unchanged.
 - PRD traceability: CUR-04 (primary), CNT-01 (contributing), CNT-02 (contributing).
@@ -1873,7 +1883,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-408 — FTS5 search with owner/goal isolation and stale fallback
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Ready
+- Status: Complete
 - Objective: Deliver SQLite FTS5 search over approved canonical topic/content, owned generated content, notebook, and eligible evidence metadata, with every result joined to `search_documents` for owner/goal filtering, idempotent background projection writes, an explicit stale-index state with deterministic owned-row fallback, and rebuild-then-switch semantics that never activate a partial projection.
 - User-visible outcome: A learner searches their own goal's content and never sees another owner's or another goal's material; when the index is stale or unavailable, results still return from a deterministic, clearly labelled "degraded" fallback rather than silently going empty or leaking unfiltered rows; a rebuild in progress never surfaces a half-built result set.
 - PRD traceability: SYS-02 (primary), NFR-08 (contributing).
@@ -1924,7 +1934,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-409 — Settings, disclosure-gated network, durable export/delete, and redacted logging
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Blocked by IDK-010
+- Status: Complete — implemented by `d57d7e7`, enforced against IDK-010 policy version 1.0 by `20f0ea4`, export activated by `dc5267f`
 - Objective: Deliver `/app/settings` covering global profile, goal settings, imports, provider/network disclosure, review, accessibility, progress display, versioned export, and destructive delete as durable jobs, with disclosure acceptance gating the first network enqueue, an immutable unchanged-at-confirmation delete impact snapshot, truthful (never fabricated) export representation of unavailable/tombstoned content, and structured, redaction-compliant local logs.
 - User-visible outcome: A learner edits profile/goal/accessibility/progress-display/review settings with changes persisting and their effect visible; before any provider or source network call happens, they have explicitly accepted a disclosure; requesting export or delete shows real job progress and an accurate impact preview naming what will be affected before they confirm; a changed impact since the last preview forces a fresh preflight rather than silently proceeding.
 - PRD traceability: SET-01 (primary), NFR-04 (primary), NFR-06 (primary), PRV-01 (contributing), PRV-02 (contributing).
@@ -1943,7 +1953,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 - Out of scope:
   - The provider disclosure gate's own enforcement at enqueue and the CLI adapter itself (IDK-403) — this ticket surfaces and records acceptance/revocation; IDK-403 enforces it.
   - The tombstone/downgrade domain mechanics and their atomicity (IDK-108) — this ticket owns the Settings-facing preflight/confirm/execute flow and snapshot-freshness check, not the tombstone algorithm.
-  - Exact export package format/version, transcript-inclusion rules, delete recovery window, backup posture, log retention duration, and support-access model — all TBD pending IDK-010; not invented here.
+  - Choosing the export package format/version, transcript-inclusion rules, delete recovery window, backup posture, log retention duration, or support-access model — all fixed by IDK-010 policy version 1.0; this ticket implements those approved values and invents none of its own.
 - Data and invariants:
   - `owner_settings.row_version` increments on every successful `PATCH /settings`; a PATCH carrying a stale `If-Match` is rejected, never silently merged.
   - `network_disclosures`: unique `(owner, category, disclosure_version)`; an accepted disclosure's `accepted_at` timestamp must precede the timestamp of the first job enqueue it gates — verified, not merely documented.
@@ -1975,7 +1985,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
   - An export or delete job failure surfaces `failed` with a retry action; delete failure never leaves a partial cross-goal downgrade — the underlying atomic operation (IDK-108) either fully applies or fully rolls back.
   - A revoked disclosure blocks only future enqueues for that category; it does not retroactively alter already-committed provider requests or results.
 - Removal/replacement: Removes the prototype `Export JSON` blob-download action and the `Reset local pages` localStorage reset in `src/selected/operations/OperationalPages.tsx`, replacing them with the durable `POST /exports`/`GET /exports/{id}` job and the real destructive-delete preflight/confirm flow. Also removes the entire operations-side localStorage store in `src/selected/operations/OperationalPages.tsx` — `STORAGE_KEY` (`lattice.operations.state.v1`), `LEGACY_STORAGE_KEY` (`lattice.selected.operations.v1`), `hydrateOperationsState`, `loadState` and the `useOperationsState` hook that binds Evidence, Imports, Canonical updates, Search, Jobs and Settings together — once IDK-203/IDK-206/IDK-208/IDK-407 have migrated the last of its fields; and removes `installNetworkTripwire` in `src/shared/network.ts` together with `src/shared/network.test.ts` — the tripwire's blanket block of non-local-origin requests contradicts PRV-01's disclosed-provider/source-network posture (network access for configured model providers and source retrieval is explicitly permitted with disclosure; strict offline is explicitly not claimed) and is replaced by the disclosure-acceptance gate this ticket surfaces and IDK-403 enforces at enqueue.
-- Approval gate: Blocked by IDK-010 (combined size/retention and export/delete/logging lifecycle) — exact export package/version, transcript-inclusion rules, delete recovery window, backup posture, and log retention/support-access posture are all undetermined until IDK-010 resolves; the versioned-write, disclosure-gate, immutable-impact-snapshot, and redaction mechanics are fully specified and testable ahead of that decision.
+- Approval gate: Satisfied. IDK-010 policy version 1.0 (2026-08-13) supplied the export package/version, transcript-inclusion, delete-recovery, backup, and log retention/support-access values, and this ticket implements them. The decision artifact's section 10 review evidence is recorded in `docs/privacy/IDK-010-policy-1.0-review-evidence.md` — the product/privacy owner's manual review passed on 2026-08-13, which is what permits `export_privacy_review_approved` to default true and production export to activate. IDK-503 still owns the consolidated G10/G11 review across every gate; this ticket's own privacy acceptance is closed.
 - Estimate: TBD; implementation team to estimate after approval.
 
 ## 5. MVP-hardening
@@ -2086,7 +2096,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-503 — Consolidated content-and-safety approval review
 
 - Phase: 5 — MVP-hardening
-- Status: Blocked by IDK-001, IDK-002, IDK-003, IDK-010
+- Status: Blocked by IDK-001
 - Objective: Convene and record the manual approval review that closes MVP's content-and-safety gates — curriculum boundary, editorial approval criteria, source/license policy, role taxonomy, rubric and scenario review, privacy/export/delete/logging inspection, and runner threat-model posture — checked against PRD Appendix C's six threat/limitation rows.
 - User-visible outcome: None directly; the outcome is a set of recorded, attributed approvals (or explicit blocks) gating whether affected features may ship.
 - PRD traceability: No new primary. Contributing: DEP-03 (editorial reversal-regression sign-off, implemented by IDK-201), HND-03 (role-appropriate scenario sign-off, implemented by IDK-405), CNT-04 (source/claim sign-off, implemented by IDK-207), RUN-03 (not-a-sandbox wording sign-off, implemented by IDK-406).
@@ -2133,7 +2143,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-504 — Representative performance measurement, no invented threshold
 
 - Phase: 5 — MVP-hardening
-- Status: Ready
+- Status: Not started
 - Objective: Record representative local performance measurements across the exact measurement set in spec §8.6 — device/OS/runtime/toolchain and dataset shape; cold/warm navigation; full-roadmap render/interaction; FTS query and stale fallback; SSE-to-visible-state latency; interactive job start while background work runs; import/index-rebuild effects; CPU/memory/SQLite size; 390/768/1366/1440 viewport overflow and input latency — reporting distributions and outliers with no invented pass/fail number.
 - User-visible outcome: None directly; the outcome is a reproducible performance report an approver later uses to set thresholds. No performance guarantee is shown to a learner.
 - PRD traceability: NFR-08 (primary); contributing: SYS-02, SYS-03, DAT-02.
@@ -2183,7 +2193,7 @@ Phase 5 closes the MVP without adding features: it proves migrations survive rep
 ### IDK-505 — Final MVP readiness, scope, recovery, and unsupported-claim audit
 
 - Phase: 5 — MVP-hardening
-- Status: Ready
+- Status: Not started
 - Objective: Perform the final MVP readiness, scope, recovery, and unsupported-claim audit against PRD §14's final audit checklist and spec §13's final completeness audit, and confirm every prototype mechanism scheduled for removal is actually gone.
 - User-visible outcome: None directly; the outcome is a pass/fail readiness determination and, where failing, a concrete defect list that must close before release.
 - PRD traceability: No new primary; contributing to all 60 Musts and NFR-01–NFR-11 collectively as the final cross-cutting audit.
@@ -2380,53 +2390,55 @@ All four tickets carry no MVP dependency, are not reachable through MVP acceptan
 
 Every dependency points backward to a decision ticket or a lower-numbered implementation ticket. No ticket depends on a later one.
 
+Status vocabulary, fixed here because it was previously ambiguous: `Not started` means no implementation exists. `Complete` means the ticket's own acceptance criteria are implemented and its Appendix 8 required automated tests exist and pass; it does not mean the manual reviews Appendix 8 lists for that ticket have been performed — IDK-503 owns those, and IDK-505 is the final release gate. `Approved` applies only to Section 0 decision tickets and means the decision artifact exists and carries a recorded approval. `Blocked by <ID>` means an unresolved decision is required for that ticket's own acceptance. Until 2026-08-14 this table used `Ready` for both "not started" and "implemented and tested", which made it unusable as a readiness signal; `Ready` no longer appears for an implementation ticket.
+
 | Ticket | Phase | Status | Depends on |
 |---|---|---|---|
-| IDK-001 | 0 | Ready | — |
-| IDK-002 | 0 | Ready | — |
-| IDK-003 | 0 | Ready | — |
+| IDK-001 | 0 | Proposed — awaiting editorial approval | — |
+| IDK-002 | 0 | Approved | — |
+| IDK-003 | 0 | Approved (product policy; legal review outstanding) | — |
 | IDK-004 | 0 | Approved | — |
 | IDK-005 | 0 | Approved | — |
 | IDK-006 | 0 | Approved | — |
 | IDK-007 | 0 | Approved | — |
 | IDK-008 | 0 | Approved | — |
 | IDK-009 | 0 | Approved | — |
-| IDK-010 | 0 | Ready | — |
+| IDK-010 | 0 | Approved | — |
 | IDK-011 | 0 | Ready | — |
-| IDK-101 | 1 | Ready | — |
-| IDK-102 | 1 | Ready | IDK-101 |
-| IDK-103 | 1 | Ready | IDK-101 |
-| IDK-104 | 1 | Ready | IDK-004, IDK-101, IDK-103 |
-| IDK-105 | 1 | Ready | IDK-004, IDK-101, IDK-102, IDK-103 |
-| IDK-106 | 1 | Ready | IDK-101, IDK-102 |
-| IDK-107 | 1 | Ready | IDK-101, IDK-102, IDK-103, IDK-104, IDK-105, IDK-106 |
-| IDK-108 | 1 | Ready | IDK-101, IDK-104 |
-| IDK-201 | 2 | Ready | IDK-101, IDK-102, IDK-103, IDK-106, IDK-107 |
-| IDK-202 | 2 | Ready | IDK-106 |
-| IDK-203 | 2 | Ready | IDK-101, IDK-102, IDK-105 |
-| IDK-204 | 2 | Ready | IDK-101, IDK-102, IDK-108 |
-| IDK-205 | 2 | Ready | IDK-101, IDK-108, IDK-204 |
-| IDK-206 | 2 | Ready | IDK-201, IDK-204 |
-| IDK-207 | 2 | Ready | IDK-101, IDK-102, IDK-201, IDK-203 |
-| IDK-208 | 2 | Ready | IDK-108, IDK-204, IDK-205 |
-| IDK-301 | 3 | Ready | IDK-004, IDK-103, IDK-104, IDK-201, IDK-205 |
-| IDK-302 | 3 | Ready | IDK-008, IDK-009, IDK-204, IDK-205, IDK-301 |
-| IDK-303 | 3 | Ready | IDK-009, IDK-104, IDK-301, IDK-302 |
-| IDK-304 | 3 | Ready | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
-| IDK-401 | 4 | Ready | IDK-101 |
-| IDK-402 | 4 | Ready | IDK-101, IDK-401 |
+| IDK-101 | 1 | Complete | — |
+| IDK-102 | 1 | Complete | IDK-101 |
+| IDK-103 | 1 | Complete | IDK-101 |
+| IDK-104 | 1 | Complete | IDK-004, IDK-101, IDK-103 |
+| IDK-105 | 1 | Complete | IDK-004, IDK-101, IDK-102, IDK-103 |
+| IDK-106 | 1 | Complete | IDK-101, IDK-102 |
+| IDK-107 | 1 | Complete | IDK-101, IDK-102, IDK-103, IDK-104, IDK-105, IDK-106 |
+| IDK-108 | 1 | Complete | IDK-101, IDK-104 |
+| IDK-201 | 2 | Complete | IDK-101, IDK-102, IDK-103, IDK-106, IDK-107 |
+| IDK-202 | 2 | Complete | IDK-106 |
+| IDK-203 | 2 | Complete | IDK-101, IDK-102, IDK-105 |
+| IDK-204 | 2 | Complete | IDK-101, IDK-102, IDK-108 |
+| IDK-205 | 2 | Complete | IDK-101, IDK-108, IDK-204 |
+| IDK-206 | 2 | Complete | IDK-201, IDK-204 |
+| IDK-207 | 2 | Complete | IDK-101, IDK-102, IDK-201, IDK-203 |
+| IDK-208 | 2 | Complete | IDK-108, IDK-204, IDK-205 |
+| IDK-301 | 3 | Complete | IDK-004, IDK-103, IDK-104, IDK-201, IDK-205 |
+| IDK-302 | 3 | Complete | IDK-008, IDK-009, IDK-204, IDK-205, IDK-301 |
+| IDK-303 | 3 | Complete | IDK-009, IDK-104, IDK-301, IDK-302 |
+| IDK-304 | 3 | Complete | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
+| IDK-401 | 4 | Complete | IDK-101 |
+| IDK-402 | 4 | Complete | IDK-101, IDK-401 |
 | IDK-403 | 4 | Complete | IDK-006, IDK-101, IDK-401 |
 | IDK-404 | 4 | Complete | IDK-207, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-403 |
-| IDK-405 | 4 | Ready | IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
-| IDK-406 | 4 | Ready (Java-only schema slice landed) | IDK-005, IDK-007, IDK-008, IDK-401, IDK-405 |
-| IDK-407 | 4 | Ready | IDK-101, IDK-102, IDK-106, IDK-201 |
-| IDK-408 | 4 | Ready | IDK-101, IDK-201, IDK-204, IDK-206 |
-| IDK-409 | 4 | Blocked by IDK-010 | IDK-010, IDK-101, IDK-104, IDK-403 |
+| IDK-405 | 4 | Complete | IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
+| IDK-406 | 4 | Partially implemented — rlimit-based execution built and tested; broker/cgroup/namespace/syscall-filter layer and native activation evidence absent; fail-closed | IDK-005, IDK-007, IDK-008, IDK-401, IDK-405 |
+| IDK-407 | 4 | Complete | IDK-101, IDK-102, IDK-106, IDK-201 |
+| IDK-408 | 4 | Complete | IDK-101, IDK-201, IDK-204, IDK-206 |
+| IDK-409 | 4 | Complete | IDK-010, IDK-101, IDK-104, IDK-403 |
 | IDK-501 | 5 | Complete | IDK-101, IDK-102, IDK-104, IDK-105, IDK-108, IDK-203, IDK-303, IDK-401, IDK-406, IDK-407, IDK-408 |
 | IDK-502 | 5 | Automated complete; manual screen-reader pass outstanding | IDK-103, IDK-105, IDK-106, IDK-107, IDK-201, IDK-202, IDK-206, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-407, IDK-409 |
-| IDK-503 | 5 | Blocked by IDK-001, IDK-002, IDK-003, IDK-010 | IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
-| IDK-504 | 5 | Ready | IDK-101, IDK-103, IDK-201, IDK-202, IDK-203, IDK-401, IDK-402, IDK-408 |
-| IDK-505 | 5 | Ready | IDK-101 – IDK-409 (all), IDK-501, IDK-502, IDK-503, IDK-504 |
+| IDK-503 | 5 | Blocked by IDK-001 | IDK-001, IDK-002, IDK-003, IDK-004, IDK-005, IDK-007, IDK-008, IDK-009, IDK-010, IDK-102, IDK-201, IDK-207, IDK-405, IDK-406, IDK-409 |
+| IDK-504 | 5 | Not started | IDK-101, IDK-103, IDK-201, IDK-202, IDK-203, IDK-401, IDK-402, IDK-408 |
+| IDK-505 | 5 | Not started | IDK-101 – IDK-409 (all), IDK-501, IDK-502, IDK-503, IDK-504 |
 | IDK-601 | 6 | Later | IDK-005, IDK-007, IDK-102, IDK-406 — builds on MVP work; no MVP acceptance depends on it |
 | IDK-602 | 6 | Later | IDK-403, IDK-404 — builds on MVP work; no MVP acceptance depends on it |
 | IDK-603 | 6 | Later | IDK-101, IDK-102, IDK-401, IDK-403, IDK-406 — builds on MVP work; no MVP acceptance depends on it |
