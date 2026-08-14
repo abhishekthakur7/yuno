@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
 
+from tests.conftest import build_isolated_settings
 from yuno.api.app import create_app
 from yuno.config import Settings
 from yuno.modules.runner.adapters import LocalRunnerProcessPort
@@ -29,8 +30,8 @@ from yuno.modules.runner.service import (
 from yuno.shared.domain.errors import RunnerInputLimitError
 
 
-def _enabled(database_url: str) -> Settings:
-    return Settings(database_url=database_url).model_copy(
+def _enabled(database_url: str, tmp_path) -> Settings:
+    return build_isolated_settings(tmp_path, database_url=database_url).model_copy(
         update={
             "runner_enabled": True,
             "runner_environment_policy_version": "env-test-v1",
@@ -61,9 +62,9 @@ def test_runner_is_fail_closed_by_default(client) -> None:
 
 
 def test_runner_confirmation_exact_inputs_phases_and_fresh_retry(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
-    with TestClient(create_app(_enabled(migrated_database_url))) as client:
+    with TestClient(create_app(_enabled(migrated_database_url, tmp_path))) as client:
         content = b"public class Main {}"
         confirmed = client.post(
             "/api/v1/runner/confirmations",
@@ -154,9 +155,9 @@ def test_runner_sensitive_content_exists_only_in_removable_body_tables(
 
 
 def test_missing_confirmation_body_rejects_run_without_partial_reservation(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         confirmation = _confirm(client, operation="compile")
         confirmation_id = confirmation.json()["id"]
@@ -190,7 +191,7 @@ def test_missing_confirmation_body_rejects_run_without_partial_reservation(
 
 
 def test_expired_output_body_is_unavailable_while_hash_metadata_survives(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(
         (
@@ -206,7 +207,7 @@ def test_expired_output_body_is_unavailable_while_hash_metadata_survives(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(
@@ -263,9 +264,9 @@ def test_runner_environment_excludes_host_secrets() -> None:
 
 
 def test_runner_rejects_path_traversal_and_hash_mismatch(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
-    with TestClient(create_app(_enabled(migrated_database_url))) as client:
+    with TestClient(create_app(_enabled(migrated_database_url, tmp_path))) as client:
         for logical_path, digest in (
             ("../Main.java", hashlib.sha256(b"x").hexdigest()),
             ("C:\\Main.java", hashlib.sha256(b"x").hexdigest()),
@@ -300,8 +301,10 @@ def _declared(path: str, content: bytes) -> DeclaredInput:
     )
 
 
-def test_runner_input_limits_accept_exact_boundaries_and_reject_plus_one() -> None:
-    settings = Settings()
+def test_runner_input_limits_accept_exact_boundaries_and_reject_plus_one(
+    tmp_path,
+) -> None:
+    settings = build_isolated_settings(tmp_path)
     exact_files = tuple(
         _declared(f"Source{index}.java", b"")
         for index in range(settings.runner_input_files_limit)
@@ -324,8 +327,8 @@ def test_runner_input_limits_accept_exact_boundaries_and_reject_plus_one() -> No
         )
 
 
-def test_runner_input_file_limit_is_checked_before_base64_decode() -> None:
-    settings = Settings()
+def test_runner_input_file_limit_is_checked_before_base64_decode(tmp_path) -> None:
+    settings = build_isolated_settings(tmp_path)
     invalid = DeclaredInput("Bad.java", "java-source", "not-base64", "bad")
     with pytest.raises(RunnerInputLimitError, match="100-file"):
         resolve_inputs_within_limits(
@@ -391,7 +394,7 @@ def _confirm_and_start(client, *, operation="test", key="threat-run"):
 
 
 def test_primary_runner_threat_model_with_fake_process_port(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     compile_outcome = RunnerProcessOutcome(
         1234,
@@ -414,7 +417,7 @@ def test_primary_runner_threat_model_with_fake_process_port(
         5,
     )
     fake = _FakeProcessPort((compile_outcome, test_outcome))
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client)
@@ -452,7 +455,7 @@ def test_primary_runner_threat_model_with_fake_process_port(
 
 
 def test_limit_breach_is_structured_truncated_and_cleanup_complete(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(
         (
@@ -468,7 +471,7 @@ def test_limit_breach_is_structured_truncated_and_cleanup_complete(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, operation="compile", key="limited")
@@ -486,7 +489,7 @@ def test_limit_breach_is_structured_truncated_and_cleanup_complete(
 
 
 def test_compile_and_test_share_wall_cpu_and_output_budgets(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(
         (
@@ -514,7 +517,7 @@ def test_compile_and_test_share_wall_cpu_and_output_budgets(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="shared-budgets")
@@ -539,7 +542,7 @@ def test_compile_and_test_share_wall_cpu_and_output_budgets(
 
 
 def test_exact_output_limit_still_allows_a_silent_test_phase(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(
         (
@@ -556,7 +559,7 @@ def test_exact_output_limit_still_allows_a_silent_test_phase(
             RunnerProcessOutcome(1235, 1235, 0, None, False, False, (), 10),
         )
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="exact-output-budget")
@@ -584,12 +587,12 @@ class _ManySmallFilesProcessPort(_FakeProcessPort):
 
 
 def test_aggregate_workspace_limit_catches_many_small_generated_files(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _ManySmallFilesProcessPort(
         (RunnerProcessOutcome(1234, 1234, 0, None, False, False, (), 10, 1),)
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="aggregate-temp-limit")
@@ -608,10 +611,10 @@ def test_aggregate_workspace_limit_catches_many_small_generated_files(
 
 
 def test_input_temp_limit_rejects_before_process_invocation(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(())
-    settings = _enabled(migrated_database_url).model_copy(
+    settings = _enabled(migrated_database_url, tmp_path).model_copy(
         update={"runner_temp_bytes": 32}
     )
     app = create_app(settings)
@@ -631,9 +634,9 @@ def test_input_temp_limit_rejects_before_process_invocation(
 
 
 def test_capabilities_detect_missing_and_incompatible(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
-    missing = _enabled(migrated_database_url).model_copy(
+    missing = _enabled(migrated_database_url, tmp_path).model_copy(
         update={"runner_javac_command": "definitely-not-a-java-command"}
     )
     with TestClient(create_app(missing)) as client:
@@ -641,7 +644,7 @@ def test_capabilities_detect_missing_and_incompatible(
             client.get("/api/v1/runner/capabilities").json()["capabilities"][0]["state"]
             == "missing"
         )
-    incompatible = _enabled(migrated_database_url).model_copy(
+    incompatible = _enabled(migrated_database_url, tmp_path).model_copy(
         update={"runner_java_version_prefix": "approved-java-never-matches"}
     )
     with TestClient(create_app(incompatible)) as client:
@@ -651,11 +654,13 @@ def test_capabilities_detect_missing_and_incompatible(
         )
 
 
-def test_cancelled_outcome_records_cleanup_failure(migrated_database_url: str) -> None:
+def test_cancelled_outcome_records_cleanup_failure(
+    migrated_database_url: str, tmp_path
+) -> None:
     fake = _FakeProcessPort(
         (RunnerProcessOutcome(1234, 1234, None, 15, False, True, (), 1),)
     )
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         app.state.runner_workspace_port = _CleanupFails(app.state.runner_workspace_port)
@@ -825,9 +830,9 @@ class _CreateFails:
 
 
 def test_runner_failure_is_terminal_and_cleanup_resolved(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         app.state.runner_workspace_port = _CreateFails()
         started = _confirm_and_start(client, operation="compile", key="create-fails")
@@ -844,9 +849,9 @@ def test_runner_failure_is_terminal_and_cleanup_resolved(
 
 
 def test_runner_reservation_replays_after_enqueue_failure(
-    migrated_database_url: str, monkeypatch
+    migrated_database_url: str, monkeypatch, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url))
+    app = create_app(_enabled(migrated_database_url, tmp_path))
     with TestClient(app) as client:
         confirmation = _confirm(client, operation="compile")
         body = {"confirmation_id": confirmation.json()["id"]}

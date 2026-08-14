@@ -20,6 +20,7 @@ from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, inspect, text
 
+from tests.conftest import build_isolated_settings
 from yuno.api.app import create_app
 from yuno.config import Settings, get_settings
 from yuno.shared.domain.errors import MigrationUnavailableError
@@ -264,13 +265,15 @@ def test_unmigrated_and_unknown_revision_recovery_actions_are_distinguishable(
 
 
 def test_create_app_lifespan_refuses_to_start_against_unmigrated_database(
-    database_url: str,
+    database_url: str, tmp_path: Path
 ) -> None:
     """Driven through `TestClient`/lifespan startup rather than calling
     `require_single_head` directly -- the guard being correct in isolation
     doesn't prove `create_app` actually invokes it before serving traffic.
     """
-    settings = Settings(database_url=database_url)  # never migrated
+    settings = build_isolated_settings(
+        tmp_path, database_url=database_url
+    )  # never migrated
     app = create_app(settings)
 
     with pytest.raises(MigrationUnavailableError), TestClient(app):
@@ -278,7 +281,7 @@ def test_create_app_lifespan_refuses_to_start_against_unmigrated_database(
 
 
 def test_create_app_lifespan_refuses_to_start_against_unknown_revision_database(
-    database_url: str,
+    database_url: str, tmp_path: Path
 ) -> None:
     engine = create_engine_for(database_url)
     try:
@@ -286,7 +289,7 @@ def test_create_app_lifespan_refuses_to_start_against_unknown_revision_database(
     finally:
         engine.dispose()
 
-    settings = Settings(database_url=database_url)
+    settings = build_isolated_settings(tmp_path, database_url=database_url)
     app = create_app(settings)
 
     with pytest.raises(MigrationUnavailableError), TestClient(app):

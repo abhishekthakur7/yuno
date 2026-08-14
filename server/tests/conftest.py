@@ -19,6 +19,7 @@ cache, so no fixture here needs to mutate the environment or call
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from alembic import command
@@ -59,14 +60,47 @@ def migrated_database_url(database_url: str) -> str:
     return database_url
 
 
+def build_isolated_settings(
+    tmp_path: Path, *, database_url: str | None = None, **overrides: object
+) -> Settings:
+    """The one place that builds a fully filesystem-isolated `Settings`.
+
+    `Settings` has three path fields whose defaults reach outside the repo
+    -- `structured_log_directory` and `provider_quarantine_root` default
+    under the real `Path.home()/"Library/Application Support/Yuno"`, and
+    `source_snapshot_root` defaults to `./yuno-source-snapshots` (relative
+    to CWD, i.e. inside the repo checkout). Every `create_app()` lifespan
+    touches all three: it `mkdir`s the quarantine root via
+    `FileSecureOutputStore`, and scans+deletes unreferenced files under
+    both the quarantine and snapshot roots via
+    `remove_unreferenced_provider_outputs`/`remove_unreferenced_snapshots`.
+    Left at their defaults, tests genuinely pollute (and delete files from)
+    the developer's real machine.
+
+    Callers that need `Settings(...)` directly -- rather than through the
+    `settings`/`client` fixtures below -- must route through this helper
+    instead, passing their own `tmp_path`, so there is exactly one
+    definition of "isolated test settings". `overrides` are applied last,
+    so callers can still layer on scenario-specific fields (e.g. runner
+    policy, or a deliberately unmigrated `database_url`) without losing
+    the path isolation.
+    """
+    kwargs: dict[str, object] = {
+        "structured_log_directory": tmp_path / "logs",
+        "provider_quarantine_root": tmp_path / "provider-quarantine",
+        "source_snapshot_root": tmp_path / "source-snapshots",
+        "export_privacy_review_approved": True,
+        "provider_capability_discovery_enabled": False,
+    }
+    if database_url is not None:
+        kwargs["database_url"] = database_url
+    kwargs.update(overrides)
+    return Settings(**kwargs)
+
+
 @pytest.fixture
 def settings(migrated_database_url: str, tmp_path) -> Settings:
-    return Settings(
-        database_url=migrated_database_url,
-        structured_log_directory=tmp_path / "logs",
-        export_privacy_review_approved=True,
-        provider_capability_discovery_enabled=False,
-    )
+    return build_isolated_settings(tmp_path, database_url=migrated_database_url)
 
 
 @pytest.fixture

@@ -44,9 +44,9 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 import yuno
+from tests.conftest import build_isolated_settings
 from tests.fixtures.canonical import CanonicalFixture, load_fixture
 from yuno.api.app import create_app
-from yuno.config import Settings
 from yuno.modules.canonical.domain import CanonicalGraphVersion
 from yuno.modules.canonical.publisher import publish_canonical_graph
 from yuno.modules.identity.domain import Role
@@ -329,7 +329,7 @@ def test_create_app_lifespan_refuses_to_start_after_failed_migration(tmp_path: P
     with pytest.raises(RuntimeError):
         command.upgrade(chain.config, "head")
 
-    settings = Settings(database_url=chain.database_url)
+    settings = build_isolated_settings(tmp_path, database_url=chain.database_url)
     app = create_app(settings)
 
     with pytest.raises(MigrationUnavailableError), TestClient(app):
@@ -428,7 +428,7 @@ def _grant_editorial_approver(database_url: str) -> tuple[str, UnitOfWorkFactory
 
 def test_create_app_lifespan_refuses_below_head_mid_chain_database(tmp_path: Path) -> None:
     database_url = _mid_chain_below_head_database_url(tmp_path)
-    settings = Settings(database_url=database_url)
+    settings = build_isolated_settings(tmp_path, database_url=database_url)
     app = create_app(settings)
 
     with pytest.raises(MigrationUnavailableError), TestClient(app):
@@ -436,10 +436,10 @@ def test_create_app_lifespan_refuses_below_head_mid_chain_database(tmp_path: Pat
 
 
 def test_create_app_lifespan_refuses_above_head_unknown_revision_database(
-    migrated_database_url: str,
+    migrated_database_url: str, tmp_path: Path
 ) -> None:
     database_url = _stamped_above_head_database_url(migrated_database_url)
-    settings = Settings(database_url=database_url)
+    settings = build_isolated_settings(tmp_path, database_url=database_url)
     app = create_app(settings)
 
     with pytest.raises(MigrationUnavailableError), TestClient(app):
