@@ -30,6 +30,7 @@ class DimensionOutcome(StrEnum):
     PASS = "pass"
     TRADE_OFF = "trade-off"
     FACTUAL_CORRECTION = "factual-correction"
+    NOT_DEMONSTRATED = "not-demonstrated"
     AMBIGUITY_UNRESOLVED = "ambiguity-unresolved"
 
 
@@ -353,15 +354,30 @@ def derive_progress(
             continue
         topic_transfers = transfers_by_topic.get(topic, [])
         topic_evidence = by_topic.get(topic, [])
-        outcomes = [
-            dimension.outcome
+        clear_dimensions = [
+            dimension
             for item in topic_evidence
             if item.assessment is not None
             and item.assessment.state is not AssessmentState.AMBIGUITY_UNRESOLVED
             for dimension in item.dimensions
             if dimension.outcome is not DimensionOutcome.AMBIGUITY_UNRESOLVED
         ]
+        outcomes = [dimension.outcome for dimension in clear_dimensions]
         ambiguity_only = bool(topic_evidence) and not outcomes
+        # IDK-009 section 9.2's negative outcomes and the critical-dimension
+        # precedence rule they drive: either critical dimension landing on
+        # `factual-correction` or `not-demonstrated` forces `unverified`
+        # ahead of every other row, while the same outcomes on a
+        # non-critical dimension only pull the cell down to `partial`.
+        negative_outcomes = (
+            DimensionOutcome.FACTUAL_CORRECTION,
+            DimensionOutcome.NOT_DEMONSTRATED,
+        )
+        positive_outcomes = (DimensionOutcome.PASS, DimensionOutcome.TRADE_OFF)
+        critical_negative = any(
+            dimension.is_critical and dimension.outcome in negative_outcomes
+            for dimension in clear_dimensions
+        )
         transfer_classification = (
             min(
                 (item.classification for item in topic_transfers),
@@ -376,17 +392,16 @@ def derive_progress(
             classification = ProgressClassification.NEW
         elif not outcomes and transfer_classification is not None:
             classification = transfer_classification
-        elif not outcomes:
+        elif (
+            not outcomes  # no clear result: ambiguity-only evidence.
+            or critical_negative  # section 9.2 row 2: precedence rule.
+            or not any(value in positive_outcomes for value in outcomes)
+            # section 9.2 row 3: clear results exist but none is positive.
+        ):
             classification = ProgressClassification.UNVERIFIED
-        elif DimensionOutcome.FACTUAL_CORRECTION in outcomes:
-            classification = (
-                ProgressClassification.PARTIAL
-                if any(
-                    value in (DimensionOutcome.PASS, DimensionOutcome.TRADE_OFF)
-                    for value in outcomes
-                )
-                else ProgressClassification.UNVERIFIED
-            )
+        elif any(value in negative_outcomes for value in outcomes):
+            # section 9.2 row 4: a non-critical negative outcome.
+            classification = ProgressClassification.PARTIAL
         else:
             classification = ProgressClassification.LIKELY_KNOWN
         if outcomes and transfer_classification is not None:
@@ -582,6 +597,18 @@ class Rubric:
     created_at: str
 
 
+#: IDK-009 section 6: the two critical stable dimensions, fixed by identity
+#: and invariant across all three rubric versions (the decision states "all
+#: three rubric versions use the same stable dimensions", and the critical
+#: column is per stable dimension, not per version). Criticality is
+#: therefore derived from `stable_dimension_id` rather than stored as an
+#: independent, settable field that a rubric manifest could omit or get
+#: wrong -- see `RubricDimension.is_critical`.
+CRITICAL_STABLE_DIMENSION_IDS = frozenset(
+    {"factual-and-mechanical-correctness", "assumptions-and-constraints"}
+)
+
+
 @dataclass(frozen=True)
 class RubricDimension:
     id: str
@@ -591,6 +618,17 @@ class RubricDimension:
     description: str
     ordinal: int
     evaluation_guidance: str
+
+    @property
+    def is_critical(self) -> bool:
+        """Whether a `factual-correction`/`not-demonstrated` result on this
+        dimension takes precedence over every other section 9.2
+        classification rule. Derived from `stable_dimension_id` against
+        IDK-009 section 6's fixed mapping so it cannot drift from the
+        decision or be silently left unset by a rubric manifest.
+        """
+
+        return self.stable_dimension_id in CRITICAL_STABLE_DIMENSION_IDS
 
 
 @dataclass(frozen=True)
@@ -673,6 +711,15 @@ class AssessmentDimensionResult:
     outcome: DimensionOutcome
     rationale: str
     evidence_refs: tuple[str, ...]
+    # Denormalized from the referenced `RubricDimension.is_critical` at
+    # assessment time (itself derived from `stable_dimension_id`, see
+    # `CRITICAL_STABLE_DIMENSION_IDS`), so the pure `derive_progress`
+    # rollup can apply IDK-009 section 9.2's critical-dimension precedence
+    # rule without a database lookup. No default: every real write goes
+    # through `service.perform_assessment`, which always sets this from
+    # the rubric dimension it references, so an unset value here would be
+    # a bug worth surfacing rather than silently defaulting to `False`.
+    is_critical: bool
 
 
 @dataclass(frozen=True)

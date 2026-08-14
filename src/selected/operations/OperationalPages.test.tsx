@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CanonicalUpdatesPage, ImportsPage, SearchPage, SettingsPage } from './OperationalPages'
+import { ROLE_LEVEL_COPY, ROLE_LEVEL_TITLE_VARIATION_HELPER, TARGET_CAPABILITY_HELPER } from '../core/CorePages'
 
 const profile = { experience: null, strengths: null, weaknesses: null, current_goal_id: 'goal-1', profile_revision: 1, updated_at: '2026-08-12T00:00:00Z' }
 const goal = { id: 'goal-1', name: 'Reliable consumers', path: 'learn', subject: 'Distributed systems', role: null, target_level: 'Senior', target_capability: 'implement', graph_version_id: 'graph-1', status: 'active', resume_position: null, resume_destination: '/app/learn-roadmap', dismissed_recommendation_keys: [], last_accessed_at: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' }
@@ -154,6 +155,36 @@ describe('server-backed settings and data lifecycle', () => {
     expect(goalPatch!.ifMatch).toBe('1')
     expect(goalPatch!.body).toEqual({ name: 'Reliable delivery systems', subject: 'Distributed delivery', target_level: 'Staff', target_capability: 'diagnose' })
     expect(await screen.findByText('Current goal settings saved.')).toBeInTheDocument()
+  })
+
+  it('shows the exact approved role-competency-copy-v1 labels and title-variation helper, programmatically associated with the Target level control', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      const read = settingsRead(request)
+      if (read) return read
+      return json({}, 404)
+    }))
+    renderSettings()
+    const level = await screen.findByRole('combobox', { name: 'Target level' })
+    expect(Array.from((level as HTMLSelectElement).options, (option) => option.text)).toEqual([
+      ROLE_LEVEL_COPY['Mid-level'].label,
+      ROLE_LEVEL_COPY.Senior.label,
+      ROLE_LEVEL_COPY.Staff.label,
+    ])
+    // Goal fixture's target_level is Senior; its exact approved description must be shown and
+    // programmatically associated with the control via its accessible description (aria-describedby).
+    const seniorDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Senior.description}`
+    expect(screen.getByRole('combobox', { name: 'Target level', description: seniorDescription })).toBe(level)
+
+    await userEvent.selectOptions(level, ROLE_LEVEL_COPY['Mid-level'].label)
+    const midDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY['Mid-level'].description}`
+    expect(screen.getByRole('combobox', { name: 'Target level', description: midDescription })).toBe(level)
+
+    // The target-capability helper must be the exact approved copy and programmatically associated
+    // with the capability control via its accessible description (aria-describedby).
+    const capability = screen.getByRole('combobox', { name: 'Target capability' })
+    expect(screen.getByText(TARGET_CAPABILITY_HELPER)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Target capability', description: TARGET_CAPABILITY_HELPER })).toBe(capability)
   })
 
   it('reloads the current goal and surfaces a stale revision failure', async () => {

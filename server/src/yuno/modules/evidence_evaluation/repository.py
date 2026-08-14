@@ -315,6 +315,7 @@ class SqlAlchemyEvidenceRepository(SqlAlchemyRepository):
         for dimension in dimensions:
             values = dimension.__dict__.copy()
             values["outcome"] = dimension.outcome.value
+            values["is_critical"] = int(dimension.is_critical)
             body = {
                 "rationale": values.pop("rationale"),
                 "evidence_refs_json": _json(values.pop("evidence_refs")),
@@ -791,6 +792,7 @@ def _assessment_dimension(
         DimensionOutcome(row.outcome),
         body.rationale,
         _tuple(body.evidence_refs_json),
+        bool(row.is_critical),
     )
 
 

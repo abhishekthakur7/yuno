@@ -325,6 +325,135 @@ def test_invalid_or_incomplete_evaluation_result_is_never_persisted(
         )
 
 
+def test_not_demonstrated_outcome_persists_with_its_critical_dimension_flag(
+    uow_factory: UnitOfWorkFactory,
+) -> None:
+    """IDK-009 section 6's fifth outcome (`not-demonstrated`, B13) and
+    section 9.2's critical-dimension flag round-trip through the real
+    repository and the `outcome`/`is_critical` CHECK constraints: the
+    rubric dimension whose `stable_dimension_id` is one of IDK-009
+    section 6's two critical dimensions carries `is_critical=True` onto
+    its assessment result (derived, not settable -- see
+    `RubricDimension.is_critical`), the non-critical one carries `False`,
+    and a `not-demonstrated` outcome is accepted and read back unchanged.
+    """
+    _graph_id, topic_id, goal_id = _seed(uow_factory)
+    with uow_factory() as uow:
+        owner = uow.owners.get_local_owner()
+        assert owner is not None
+        timestamp = now_text(SystemClock())
+        rubric = Rubric(
+            new_id(),
+            owner.id,
+            "fixture-task",
+            "implement",
+            "backend",
+            "senior",
+            "fixture-v0",
+            RubricStatus.FIXTURE,
+            "IDK-204 test fixture",
+            timestamp,
+        )
+        dimensions = (
+            RubricDimension(
+                new_id(),
+                rubric.id,
+                "factual-and-mechanical-correctness",
+                "Factual and mechanical correctness",
+                "The artifact preserves required mechanics/invariants.",
+                1,
+                "Critical per IDK-009 section 6.",
+            ),
+            RubricDimension(
+                new_id(),
+                rubric.id,
+                "trade-offs-and-consequences",
+                "Trade-offs and consequences",
+                "Alternatives and consequences connect to constraints.",
+                2,
+                "Not critical per IDK-009 section 6.",
+            ),
+        )
+        uow.evidence.add_rubric(rubric, dimensions)
+        evidence = create_evidence(
+            uow,
+            owner.id,
+            goal_id,
+            topic_stable_id=topic_id,
+            evidence_type="answer",
+            capability="implement",
+            summary="Queue design",
+            origin="learner-submit",
+            content="Use a ring buffer; assumes bounded capacity.",
+            content_version="v1",
+        )
+        uow.commit()
+
+    class NotDemonstratedAdapter:
+        def evaluate(self, request: EvaluationRequest) -> EvaluationResult:
+            del request
+            return EvaluationResult(
+                state=AssessmentState.FEEDBACK_READY,
+                dimensions=(
+                    EvaluationDimensionResult(
+                        "factual-and-mechanical-correctness",
+                        DimensionOutcome.NOT_DEMONSTRATED,
+                        "The response never shows the invariant holds.",
+                        ("evidence:answer",),
+                    ),
+                    EvaluationDimensionResult(
+                        "trade-offs-and-consequences",
+                        DimensionOutcome.TRADE_OFF,
+                        "The alternative is defensible and its consequence is explicit.",
+                        ("evidence:answer",),
+                    ),
+                ),
+                facts=(),
+                trade_offs=("This choice exchanges throughput for simpler ordering.",),
+                citations=("source:fixture",),
+                ambiguities=(),
+                feedback="Mechanics were not demonstrated; the trade-off is defensible.",
+                cross_question_candidate=None,
+                revision_invitation=None,
+                warnings=(),
+                limitation_labels=("fixture-evaluator",),
+            )
+
+    request = EvaluationRequest(
+        evidence.id,
+        "fixture-task",
+        rubric.id,
+        rubric.version,
+        ("Capacity is bounded.",),
+        "implement",
+        ("source:fixture",),
+        ("fixture:v0",),
+        "backend",
+        "senior",
+        "static",
+    )
+    with uow_factory() as uow:
+        assessment = perform_assessment(
+            uow, NotDemonstratedAdapter(), owner.id, request
+        )
+        uow.commit()
+
+    with uow_factory() as uow:
+        results = {
+            item.rubric_dimension_id: item
+            for item in uow.evidence.list_assessment_dimensions(owner.id, assessment.id)
+        }
+        by_stable_id = {
+            dimension.stable_dimension_id: dimension for dimension in dimensions
+        }
+        critical_result = results[by_stable_id["factual-and-mechanical-correctness"].id]
+        noncritical_result = results[by_stable_id["trade-offs-and-consequences"].id]
+        assert critical_result.outcome is DimensionOutcome.NOT_DEMONSTRATED
+        assert critical_result.is_critical is True
+        assert noncritical_result.outcome is DimensionOutcome.TRADE_OFF
+        assert noncritical_result.is_critical is False
+
+
 def test_evidence_and_assessment_api_use_real_storage_and_fake_adapter(
     client, uow_factory: UnitOfWorkFactory
 ) -> None:

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LearningStateProvider } from '../../shared/state'
-import { InterviewHub } from './CorePages'
+import { InterviewHub, ROLE_LEVEL_COPY, ROLE_LEVEL_TITLE_VARIATION_HELPER } from './CorePages'
 
 const profile = { experience: null, strengths: null, weaknesses: null, current_goal_id: 'goal-1', profile_revision: 1, updated_at: '2026-08-12T00:00:00Z' }
 const goal = { id: 'goal-1', name: 'Existing Learn goal', path: 'learn', subject: 'Messaging', role: null, target_level: 'Senior', target_capability: 'implement', graph_version_id: 'graph-1', status: 'active', resume_position: null, resume_destination: null, dismissed_recommendation_keys: [], last_accessed_at: null, row_version: 1, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' }
@@ -55,6 +55,57 @@ describe('API-backed Interview Prep hub', () => {
     expect(screen.getByText('Request a hint, submit, inspect feedback, and repair.')).toBeInTheDocument()
     expect(screen.getByText('Answer without hints, rubrics, or evaluation until completion.')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('Senior backend interview')).toBeInTheDocument()
+  })
+
+  it('associates the Role and level control with the exact title-variation helper and the selected level\'s approved description', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([goal])
+      if (request.url.endsWith('/interview-bundles')) return json([bundle])
+      if (request.url.endsWith('/refreshers')) return json([])
+      if (request.url.endsWith('/questions')) return json([])
+      return json({ message: 'Not found' }, 404)
+    }))
+    renderHub()
+
+    const levelSelect = await screen.findByRole('combobox', { name: 'Role and level' })
+    const description = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Senior.description}`
+    expect(screen.getByRole('combobox', { name: 'Role and level', description })).toBe(levelSelect)
+  })
+
+  it("derives the Interview prep eyebrow from the goal's actual target level using the approved IDK-004 label, for a Mid-level goal", async () => {
+    const midGoal = { ...goal, target_level: 'Mid-level' as const }
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([midGoal])
+      if (request.url.endsWith('/interview-bundles')) return json([{ ...bundle, target_level: 'Mid-level' }])
+      if (request.url.endsWith('/refreshers')) return json([])
+      if (request.url.endsWith('/questions')) return json([])
+      return json({ message: 'Not found' }, 404)
+    }))
+    renderHub()
+
+    const eyebrow = await screen.findByText(`Interview prep · ${ROLE_LEVEL_COPY['Mid-level'].label}`)
+    expect(eyebrow).toBeInTheDocument()
+    expect(eyebrow).toHaveClass('sb-eyebrow')
+  })
+
+  it("derives the Interview prep eyebrow from the goal's actual target level using the approved IDK-004 label, for a Staff goal", async () => {
+    const staffGoal = { ...goal, target_level: 'Staff' as const }
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const request = requestFrom(input, init)
+      if (request.url.endsWith('/profile')) return json(profile)
+      if (request.url.endsWith('/goals')) return json([staffGoal])
+      if (request.url.endsWith('/interview-bundles')) return json([{ ...bundle, target_level: 'Staff' }])
+      if (request.url.endsWith('/refreshers')) return json([])
+      if (request.url.endsWith('/questions')) return json([])
+      return json({ message: 'Not found' }, 404)
+    }))
+    renderHub()
+
+    expect(await screen.findByText(`Interview prep · ${ROLE_LEVEL_COPY.Staff.label}`)).toBeInTheDocument()
   })
 
   it('shows every real refresher linkage and an explicit stale state', async () => {

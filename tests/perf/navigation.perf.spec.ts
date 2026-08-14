@@ -5,7 +5,7 @@
 // checks that a measurement was actually taken (finite, non-negative, expected sample
 // count), never that a duration is acceptable.
 import { test, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test'
-import { CANONICAL_ROUTES } from '../../scripts/perf/measurement-set.mjs'
+import { CANONICAL_ROUTES, VIEWPORTS } from '../../scripts/perf/measurement-set.mjs'
 import { writeSamples, type Gap, type Sample } from './samples'
 
 const COLD_WARM_REPETITIONS = 5
@@ -16,6 +16,20 @@ const READINESS_TIMEOUT = 30_000
 /** How long one measurement stage may run before it is recorded as a gap instead. */
 const STAGE_DEADLINE = 5 * 60 * 1000
 const DEPTHS = ['Essential', 'Implementation', 'Production', 'Interview'] as const
+// The roadmap row's Customize toggle (aria-expanded, .sb-customize) is a collapsible
+// pattern that only exists below core.css's 1000px breakpoint -- at Desktop Chrome's
+// default viewport (~1280px) .sb-customize is `display:none` and .sb-roadmap-controls
+// is always shown inline instead, so a click on the (invisible, non-actionable) toggle
+// never resolves. Measure the interaction stage at the same 768x1024 viewport
+// scripts/perf/measurement-set.mjs's viewport-input-latency already exercises this
+// control at, where it is genuinely visible and clickable.
+const INTERACTION_VIEWPORT = VIEWPORTS.find(viewport => viewport.width === 768)!
+// Recorded in every roadmap-interaction method string below, not just in code comments:
+// a reader of the report sees these six numbers under a heading with no viewport in
+// it and would otherwise assume the default desktop viewport. They don't cover it --
+// see INTERACTION_VIEWPORT above for why -- so the report has to say so.
+const INTERACTION_VIEWPORT_NOTE =
+  'Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css\'s 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.'
 
 function pageIdForRoute(route: string): string {
   return route === '/' ? 'home' : route.replace(/^\/app\//, '')
@@ -142,7 +156,7 @@ async function measureCustomize(page: Page): Promise<Sample> {
     subject: 'Customize',
     unit: 'ms',
     values,
-    method: 'Alternating open/close clicks on the first roadmap row\'s Customize control, timed from click to its aria-expanded attribute flipping.',
+    method: `Alternating open/close clicks on the first roadmap row's Customize control, timed from click to its aria-expanded attribute flipping. ${INTERACTION_VIEWPORT_NOTE}`,
   }
 }
 
@@ -163,7 +177,7 @@ async function measureJump(page: Page): Promise<Sample> {
     subject: 'Jump',
     unit: 'ms',
     values,
-    method: 'Click on "Jump to current" from the roadmap, timed to the topic-studio route becoming the rendered root ([data-app][data-page="topic-studio"]).',
+    method: `Click on "Jump to current" from the roadmap, timed to the topic-studio route becoming the rendered root ([data-app][data-page="topic-studio"]). ${INTERACTION_VIEWPORT_NOTE}`,
   }
 }
 
@@ -185,7 +199,7 @@ async function measureSkipRestore(page: Page): Promise<Sample[]> {
     if (label === 'Skip') skipValues.push(duration)
     else restoreValues.push(duration)
   }
-  const method = 'Click on the first roadmap row\'s Skip/Restore control (native confirm() auto-accepted), timed from click to the button label reflecting the new state.'
+  const method = `Click on the first roadmap row's Skip/Restore control (native confirm() auto-accepted), timed from click to the button label reflecting the new state. ${INTERACTION_VIEWPORT_NOTE}`
   return [
     { measurement: 'roadmap-interaction', subject: 'Skip', unit: 'ms', values: skipValues, method },
     { measurement: 'roadmap-interaction', subject: 'Restore', unit: 'ms', values: restoreValues, method },
@@ -213,24 +227,39 @@ async function measureDepth(page: Page): Promise<Sample> {
     subject: 'depth',
     unit: 'ms',
     values,
-    method: 'Cycling the second roadmap row\'s Depth select through every depth value (native confirm() auto-accepted), timed from selectOption to the "Your override" note reflecting the new depth.',
+    method: `Cycling the second roadmap row's Depth select through every depth value (native confirm() auto-accepted), timed from selectOption to the "Your override" note reflecting the new depth. ${INTERACTION_VIEWPORT_NOTE}`,
   }
 }
 
-/** Alternately move the second row earlier/later; times click to that row's title text changing (reorder settled). */
+// Row 9 (0-indexed)/row 10 is the one adjacent pair in the seeded 60-topic roadmap
+// without a canonical PREREQUISITE edge between them: dsa (rows 0-9) is its own
+// 10-topic prerequisite chain, separate from the java -> spring_boot -> aws ->
+// system_design -> rdb chain that fills rows 10-59 (server/scripts/
+// seed_performance_dataset.py's _SUBJECT_CHAIN). Every other adjacent pair sits
+// inside one of those chains, so the roadmap correctly rejects reordering it
+// (validate_order_constraint: "... is an unmodified prerequisite of ... that
+// prerequisite cannot be reversed") and a click there never produces a visible
+// change to wait on.
+const ORDER_BOUNDARY_ROW_INDEX = 9
+
+/** Move row 10 "later" against row 11 repeatedly; times click to that row-slot's title text changing (reorder settled). */
 async function measureOrder(page: Page): Promise<Sample> {
   await openRoadmap(page)
   const values: number[] = []
   for (let iteration = 0; iteration < INTERACTION_REPETITIONS; iteration += 1) {
-    const row = page.locator('.sb-roadmap-row').nth(1)
+    const row = page.locator('.sb-roadmap-row').nth(ORDER_BOUNDARY_ROW_INDEX)
     await ensureCustomizeOpen(row)
     const title = row.locator('.sb-lesson-link strong')
     const beforeTitle = await title.textContent()
-    const direction = iteration % 2 === 0 ? 'earlier' : 'later'
-    const orderButton = direction === 'earlier' ? row.locator('.sb-order button').first() : row.locator('.sb-order button').last()
+    // Always "later": each move is the previous move's own reverse, which the server
+    // treats as replacing that override rather than a conflict, so this oscillates row
+    // 10 and row 11 against each other -- a real, always-valid move every iteration.
+    const orderButton = row.locator('.sb-order button').last()
     const start = Date.now()
     await orderButton.click()
-    await expect(row.locator('.sb-lesson-link strong')).not.toHaveText(beforeTitle ?? '')
+    // READINESS_TIMEOUT, not the 5s default: same reasoning as measureRoadmapRender --
+    // a reorder that settles slowly is a larger recorded number, not a failure to discard.
+    await expect(row.locator('.sb-lesson-link strong')).not.toHaveText(beforeTitle ?? '', { timeout: READINESS_TIMEOUT })
     values.push(Date.now() - start)
   }
   return {
@@ -238,12 +267,12 @@ async function measureOrder(page: Page): Promise<Sample> {
     subject: 'order',
     unit: 'ms',
     values,
-    method: 'Alternately clicking "move earlier"/"move later" on the roadmap\'s second row (native confirm() auto-accepted), timed from click to that row-slot\'s topic title changing.',
+    method: `Repeatedly clicking "move later" on the roadmap's row 10 (native confirm() auto-accepted), oscillating it against row 11 -- the one adjacent pair in the seeded roadmap without a canonical prerequisite edge between them -- timed from click to that row-slot's topic title changing. ${INTERACTION_VIEWPORT_NOTE}`,
   }
 }
 
 async function measureRoadmapInteraction(browser: Browser): Promise<{ samples: Sample[]; gaps: Gap[] }> {
-  const context = await browser.newContext()
+  const context = await browser.newContext({ viewport: INTERACTION_VIEWPORT })
   const page = await context.newPage()
   page.on('dialog', dialog => void dialog.accept())
   const samples: Sample[] = []

@@ -10,7 +10,7 @@ above it; an untethered number is not a valid report entry.
 - **os**: platform: darwin, release: 27.0.0
 - **runtime**: node: v24.19.0, python: Python 3.13.5, uv: uv 0.11.29 (Homebrew 2026-07-15 aarch64-apple-darwin)
 - **toolchain**: pnpm: 9.15.0, playwright: 1.62.1, vite: 8.2.1
-- **dataset**: canonical_topic_count: 60, evidence_count: 5, generated_artifact_count: 3, goal_count: 2, graph_version_id: 01M00860J2EAKG0JCJZT8R25XY, graph_version_label: perf-canonical-v1, import_count: 2, job_count: 3, notebook_count: 4, relation_count: 68, search_document_count: 134
+- **dataset**: canonical_topic_count: 60, evidence_count: 5, generated_artifact_count: 3, goal_count: 2, graph_version_id: 01M00YFMFEEV15VRV1562HD9GV, graph_version_label: perf-canonical-v1, import_count: 2, job_count: 3, notebook_count: 4, relation_count: 68, search_document_count: 134
 
 ## What this report does not set
 
@@ -35,9 +35,9 @@ produce that document.
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 82 | 98 | 110 | 110 | 110 | 110 |
+| 5 | 83 | 86 | 105 | 105 | 105 | 105 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 82, 110 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 83, 105 ms
 
 ### /app/onboarding
 
@@ -47,7 +47,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 82, 110 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 78 | 79 | 85 | 85 | 85 | 85 |
+| 5 | 87 | 92 | 101 | 101 | 101 | 101 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -59,9 +59,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 74 | 76 | 77 | 77 | 77 | 77 |
+| 5 | 85 | 94 | 97 | 97 | 97 | 97 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 85 ms
 
 ### /app/topic-studio
 
@@ -71,9 +71,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 85 | 87 | 92 | 92 | 92 | 92 |
+| 5 | 101 | 124 | 149 | 149 | 149 | 149 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 92 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### /app/interview-hub
 
@@ -83,9 +83,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 92 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 80 | 81 | 88 | 88 | 88 | 88 |
+| 5 | 93 | 100 | 106 | 106 | 106 | 106 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 88 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 93 ms
 
 ### /app/practice
 
@@ -95,7 +95,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 88 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 78 | 79 | 80 | 80 | 80 | 80 |
+| 5 | 92 | 94 | 102 | 102 | 102 | 102 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -107,7 +107,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 70 | 70 | 77 | 77 | 77 | 77 |
+| 5 | 78 | 82 | 87 | 87 | 87 | 87 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -119,7 +119,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 81 | 91 | 95 | 95 | 95 | 95 |
+| 5 | 92 | 102 | 107 | 107 | 107 | 107 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -131,7 +131,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 79 | 81 | 89 | 89 | 89 | 89 |
+| 5 | 92 | 110 | 113 | 113 | 113 | 113 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -143,9 +143,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 77 | 79 | 81 | 81 | 81 | 81 |
+| 5 | 81 | 94 | 162 | 162 | 162 | 162 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 162 ms
 
 ### /app/canonical-updates
 
@@ -155,9 +155,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 73 | 74 | 78 | 78 | 78 | 78 |
+| 5 | 74 | 84 | 86 | 86 | 86 | 86 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 74 ms
 
 ### /app/search
 
@@ -167,9 +167,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 74 | 75 | 77 | 77 | 77 | 77 |
+| 5 | 78 | 82 | 96 | 96 | 96 | 96 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 74, 77 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 96 ms
 
 ### /app/jobs
 
@@ -179,9 +179,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 74, 77 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 74 | 75 | 81 | 81 | 81 | 81 |
+| 5 | 80 | 82 | 87 | 87 | 87 | 87 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 81 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 80, 87 ms
 
 ### /app/settings
 
@@ -191,7 +191,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 81 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 84 | 88 | 97 | 97 | 97 | 97 |
+| 5 | 92 | 96 | 102 | 102 | 102 | 102 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -208,9 +208,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 24 | 26 | 38 | 38 | 38 | 38 |
+| 5 | 21 | 25 | 53 | 53 | 53 | 53 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 38 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 53 ms
 
 ### /app/onboarding
 
@@ -219,9 +219,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 38 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 30 | 31 | 47 | 47 | 47 | 47 |
+| 5 | 22 | 25 | 39 | 39 | 39 | 39 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 47 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 39 ms
 
 ### /app/learn-roadmap
 
@@ -230,7 +230,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 47 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 29 | 30 | 49 | 49 | 49 | 49 |
+| 5 | 24 | 26 | 36 | 36 | 36 | 36 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -241,9 +241,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 25 | 29 | 45 | 45 | 45 | 45 |
+| 5 | 23 | 27 | 46 | 46 | 46 | 46 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 46 ms
 
 ### /app/interview-hub
 
@@ -252,9 +252,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 24 | 26 | 34 | 34 | 34 | 34 |
+| 5 | 25 | 29 | 43 | 43 | 43 | 43 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 34 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### /app/practice
 
@@ -263,7 +263,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 34 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 33 | 39 | 43 | 43 | 43 | 43 |
+| 5 | 24 | 25 | 29 | 29 | 29 | 29 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -274,7 +274,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 24 | 31 | 48 | 48 | 48 | 48 |
+| 5 | 22 | 23 | 25 | 25 | 25 | 25 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -285,9 +285,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 26 | 27 | 39 | 39 | 39 | 39 |
+| 5 | 25 | 32 | 49 | 49 | 49 | 49 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 39 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 49 ms
 
 ### /app/evidence
 
@@ -296,7 +296,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 39 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 24 | 25 | 26 | 26 | 26 | 26 |
+| 5 | 24 | 25 | 34 | 34 | 34 | 34 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -307,9 +307,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 20 | 21 | 21 | 21 | 21 | 21 |
+| 5 | 24 | 30 | 43 | 43 | 43 | 43 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 20 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 43 ms
 
 ### /app/canonical-updates
 
@@ -318,9 +318,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 20 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 20 | 21 | 23 | 23 | 23 | 23 |
+| 5 | 28 | 32 | 48 | 48 | 48 | 48 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 20, 23 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### /app/search
 
@@ -329,9 +329,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 20, 23 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 21 | 22 | 26 | 26 | 26 | 26 |
+| 5 | 32 | 37 | 38 | 38 | 38 | 38 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 26 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### /app/jobs
 
@@ -340,9 +340,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 26 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 21 | 24 | 26 | 26 | 26 | 26 |
+| 5 | 30 | 37 | 43 | 43 | 43 | 43 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 30, 43 ms
 
 ### /app/settings
 
@@ -351,9 +351,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 25 | 27 | 45 | 45 | 45 | 45 |
+| 5 | 25 | 39 | 45 | 45 | 45 | 45 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ## Full-roadmap render at the representative dataset size
 
@@ -361,10 +361,16 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
 - unit: ms
 - spec §8.6 bullet: full-roadmap render and interaction
 
-### Gap
+### /app/learn-roadmap
 
 - producer: `client-navigation`
-- reason: measurement stage threw: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+- method: A fresh browser context per repetition; timed from page.goto to the first roadmap row visible and its Customize control enabled, at the seeded dataset size.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 5 | 179 | 185 | 194 | 194 | 194 | 194 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ## Roadmap interaction (Customize, Jump, Skip, Restore, depth, order)
 
@@ -372,10 +378,71 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
 - unit: ms
 - spec §8.6 bullet: full-roadmap render and interaction
 
-### Gap
+### Customize
 
 - producer: `client-navigation`
-- reason: measurement stage threw: browserContext.close: Target page, context or browser has been closed
+- method: Alternating open/close clicks on the first roadmap row's Customize control, timed from click to its aria-expanded attribute flipping. Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 5 | 30 | 33 | 98 | 98 | 98 | 98 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 98 ms
+
+### Jump
+
+- producer: `client-navigation`
+- method: Click on "Jump to current" from the roadmap, timed to the topic-studio route becoming the rendered root ([data-app][data-page="topic-studio"]). Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 5 | 41 | 47 | 89 | 89 | 89 | 89 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 89 ms
+
+### Skip
+
+- producer: `client-navigation`
+- method: Click on the first roadmap row's Skip/Restore control (native confirm() auto-accepted), timed from click to the button label reflecting the new state. Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 3 | 103 | 110 | 111 | 111 | 111 | 111 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+
+### Restore
+
+- producer: `client-navigation`
+- method: Click on the first roadmap row's Skip/Restore control (native confirm() auto-accepted), timed from click to the button label reflecting the new state. Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 2 | 101 | 101 | 123 | 123 | 123 | 123 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+
+### depth
+
+- producer: `client-navigation`
+- method: Cycling the second roadmap row's Depth select through every depth value (native confirm() auto-accepted), timed from selectOption to the "Your override" note reflecting the new depth. Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 5 | 100 | 103 | 209 | 209 | 209 | 209 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 209 ms
+
+### order
+
+- producer: `client-navigation`
+- method: Repeatedly clicking "move later" on the roadmap's row 10 (native confirm() auto-accepted), oscillating it against row 11 -- the one adjacent pair in the seeded roadmap without a canonical prerequisite edge between them -- timed from click to that row-slot's topic title changing. Measured in a 768x1024 browser context (all six roadmap-interaction subjects share this context): below core.css's 1000px breakpoint, .sb-customize (the Customize toggle) is visible and .sb-roadmap-controls is reachable only after toggling it open; above that breakpoint .sb-customize is absent and .sb-roadmap-controls is shown inline instead. This measurement does not exercise that wide-viewport inline-controls path.
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 5 | 120 | 214 | 216 | 216 | 216 | 216 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ## FTS query latency
 
@@ -390,9 +457,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 45 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.35754198324866593 | 0.3913329856004566 | 2.6077090005856007 | 2.6077090005856007 | 2.6077090005856007 | 2.6077090005856007 |
+| 5 | 0.3481250023469329 | 0.4497080226428807 | 2.5356659898534417 | 2.5356659898534417 | 2.5356659898534417 | 2.5356659898534417 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 2.6077090005856007 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 2.5356659898534417 ms
 
 ### aws
 
@@ -401,9 +468,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 2.6077090005856007 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.32804100192151964 | 0.3366250020917505 | 0.49620901700109243 | 0.49620901700109243 | 0.49620901700109243 | 0.49620901700109243 |
+| 5 | 0.33070900826714933 | 0.3903330070897937 | 0.46975002624094486 | 0.46975002624094486 | 0.46975002624094486 | 0.46975002624094486 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.49620901700109243 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### Representative
 
@@ -412,9 +479,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.49620901700109243 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.306583009660244 | 0.3187500115018338 | 0.6150839908514172 | 0.6150839908514172 | 0.6150839908514172 | 0.6150839908514172 |
+| 5 | 0.3101250040344894 | 0.32725001801736653 | 0.8963749860413373 | 0.8963749860413373 | 0.8963749860413373 | 0.8963749860413373 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.6150839908514172 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.8963749860413373 ms
 
 ### notebook
 
@@ -423,9 +490,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.6150839908514172 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.2824580005835742 | 0.29141700360924006 | 0.3011660010088235 | 0.3011660010088235 | 0.3011660010088235 | 0.3011660010088235 |
+| 5 | 0.28483301866799593 | 0.29062500107102096 | 0.46195799950510263 | 0.46195799950510263 | 0.46195799950510263 | 0.46195799950510263 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.3011660010088235 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.46195799950510263 ms
 
 ### evidence
 
@@ -434,9 +501,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.3011660010088235 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.2936249948106706 | 0.30120901647023857 | 0.3282079997006804 | 0.3282079997006804 | 0.3282079997006804 | 0.3282079997006804 |
+| 5 | 0.3017919952981174 | 0.31599999056197703 | 0.3482080064713955 | 0.3482080064713955 | 0.3482080064713955 | 0.3482080064713955 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.3282079997006804 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ## Deterministic stale-fallback search latency
 
@@ -451,9 +518,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.3282079997006804 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 5 | 0.2672499977052212 | 0.2779159985948354 | 0.4600000102072954 | 0.4600000102072954 | 0.4600000102072954 | 0.4600000102072954 |
+| 5 | 0.2732080174610019 | 0.286291993688792 | 0.43737501255236566 | 0.43737501255236566 | 0.43737501255236566 | 0.43737501255236566 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.4600000102072954 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.43737501255236566 ms
 
 ## Server-emitted job event to corresponding visible UI state change
 
@@ -461,38 +528,40 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 0.4600000102072954 ms
 - unit: ms
 - spec §8.6 bullet: SSE-to-visible-state latency
 
+### search-index rebuild #0
+
+- producer: `client-jobs-sse`
+- method: Correlated by job id 01M00YG27V2J0APE5EPHVKZ9QC and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
+
+Sample of one (ms): 871
+
 ### search-index rebuild #1
 
 - producer: `client-jobs-sse`
-- method: Correlated by job id 01M0086AYFN7P4YQBZ7D672VKQ and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
+- method: Correlated by job id 01M00YG38PSS4GTGASEE0V0T0Q and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
 
-Sample of one (ms): 950
+Sample of one (ms): 949
 
 ### search-index rebuild #2
 
 - producer: `client-jobs-sse`
-- method: Correlated by job id 01M0086BXMEVF2PH0Z1315E2BT and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
+- method: Correlated by job id 01M00YG47TKGCVDB2HE03530C4 and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
 
-Sample of one (ms): 867
+Sample of one (ms): 982
 
 ### search-index rebuild #3
 
 - producer: `client-jobs-sse`
-- method: Correlated by job id 01M0086CTCJ7BDQXFM17XW1DZA and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
+- method: Correlated by job id 01M00YG582R2KM6STCKAFAH4K0 and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
 
-Sample of one (ms): 962
+Sample of one (ms): 925
 
 ### search-index rebuild #4
 
 - producer: `client-jobs-sse`
-- method: Correlated by job id 01M0086DT8MQ1R2KJF0PEKP1FS and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
+- method: Correlated by job id 01M00YG66XS4ZTCZKJ1CZY0MXD and terminal state 'succeeded': server-emitted event.timestamp (row.created_at, same-machine wall clock) to the in-page Date.now() at which the /app/jobs list row's rendered status text first reached 'succeeded' (MutationObserver-detected).
 
-Sample of one (ms): 956
-
-### Gap: search-index rebuild #0
-
-- producer: `client-jobs-sse`
-- reason: the /app/jobs list showed job 01M0086ATQT09K4EAKPB8Q0EEQ as succeeded, but no matching SSE 'job' event (id+state) was ever received by the instrumented EventSource -- the visible change cannot be attributed to a specific server-emitted event.
+Sample of one (ms): 951
 
 ## Interactive job start latency while background-lane work runs
 
@@ -500,30 +569,19 @@ Sample of one (ms): 956
 - unit: ms
 - spec §8.6 bullet: interactive job start while background work runs
 
-### 01M00860JSXN1Z9ARTYKYKSDE2/perf-topic-dsa-01
+### 01M00YFMGA9N31B7A0ZVPT5SZN/perf-topic-dsa-01
 
 - producer: `client-jobs-sse`
 - method: Real background-lane import-parse jobs (800, 1600, 3200, 4800, 6400 lines) enqueued and confirmed 'running' via polling GET /jobs/{id} before each timed POST to start a real interactive-lane tutor-turn job; timed from request send to the 202 response. This measurement OBSERVES that the interactive start completed while background-lane work was running; it certifies nothing about D8 non-blocking behaviour (Appendix H D8 is observed here, never asserted).
 - notes: Each attempt used a differently sized synthetic background import so a longer-running attempt was available if a shorter one finished before "running" could be confirmed; attempts that never confirmed "running" are recorded as gaps, not timed.
 
-Sample of one (ms): 2260
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 4 | 1139 | 2085 | 5497 | 5497 | 5497 | 5497 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### Gap: attempt 0 (800 lines)
-
-- producer: `client-jobs-sse`
-- reason: the background-lane job reached a terminal state before its running status could be observed by polling; it cannot be treated as "genuinely running" for this attempt.
-
-### Gap: attempt 1 (1600 lines)
-
-- producer: `client-jobs-sse`
-- reason: the background-lane job reached a terminal state before its running status could be observed by polling; it cannot be treated as "genuinely running" for this attempt.
-
-### Gap: attempt 3 (4800 lines)
-
-- producer: `client-jobs-sse`
-- reason: the background-lane job reached a terminal state before its running status could be observed by polling; it cannot be treated as "genuinely running" for this attempt.
-
-### Gap: attempt 4 (6400 lines)
 
 - producer: `client-jobs-sse`
 - reason: the background-lane job reached a terminal state before its running status could be observed by polling; it cannot be treated as "genuinely running" for this attempt.
@@ -541,9 +599,9 @@ Sample of one (ms): 2260
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 205 | 5.642834003083408 | 10.681666986783966 | 15.531500015640631 | 17.431542015401646 | 22.678041976178065 | 77.66512501984835 |
+| 171 | 6.5123329986818135 | 11.941167002078146 | 17.00291599263437 | 18.934666994027793 | 24.55737499985844 | 85.59804101241753 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 18.954458995722234, 22.398917004466057, 22.66762498766184, 22.678041976178065, 28.590125002665445, 77.66512501984835 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 21.421375015052035, 23.532000021077693, 24.55737499985844, 85.59804101241753 ms
 
 ### concurrent-query:search-during-import-parse
 
@@ -552,9 +610,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 18.954458995722234, 22.3989
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 205 | 0.5496669909916818 | 2.5202090037055314 | 4.797125002369285 | 5.737166007747874 | 11.048332991776988 | 17.556375009007752 |
+| 171 | 0.6007920019328594 | 2.554249978857115 | 4.469541017897427 | 5.309000000124797 | 9.529167000437155 | 11.52095801080577 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 6.323832989437506, 6.571124977199361, 8.06987498071976, 8.343792025698349, 9.443291986826807, 9.649665997130796, 10.625541995977983, 11.048332991776988, 12.089500000001863, 17.556375009007752 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 5.670292011927813, 6.313416000921279, 7.083416014211252, 7.590542023535818, 9.529167000437155, 11.52095801080577 ms
 
 ### operation-duration:import-parse
 
@@ -563,9 +621,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 6.323832989437506, 6.571124
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 25 | 85.10949998162687 | 117.02237502322532 | 157.08220799569972 | 159.46699999039993 | 191.43516701296903 | 191.43516701296903 |
+| 25 | 81.93124999525025 | 102.04529200564139 | 129.16766700800508 | 135.06500000949018 | 241.13862501690164 | 241.13862501690164 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 191.43516701296903 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 241.13862501690164 ms
 
 ## Search-index rebuild effect on concurrent navigation and search responsiveness
 
@@ -580,9 +638,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 191.43516701296903 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 195 | 6.1250000144355 | 9.471208992181346 | 11.974791006650776 | 13.940208009444177 | 15.36091699381359 | 35.982165980385616 |
+| 150 | 7.1179580118041486 | 8.218582981498912 | 9.909082989906892 | 10.63745899591595 | 16.394833015510812 | 25.51583299646154 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 14.908667013514787, 14.914375002263114, 14.917791006155312, 14.922457979992032, 15.36091699381359, 35.982165980385616 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 10.798625007737428, 11.128583981189877, 11.197124986210838, 11.911209003301337, 16.394833015510812, 25.51583299646154 ms
 
 ### concurrent-query:search-during-index-rebuild
 
@@ -591,9 +649,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 14.908667013514787, 14.9143
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 195 | 0.5725000228267163 | 1.1993750231340528 | 2.024374989559874 | 2.4657920002937317 | 3.9433339843526483 | 4.008749994682148 |
+| 150 | 0.5911660264246166 | 1.0121660016011447 | 1.3454160070978105 | 1.607834012247622 | 2.2177080099936575 | 2.3967500019352883 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 2.798959001665935, 2.9457920172717422, 3.0032090144231915, 3.310540982056409, 3.4517919993959367, 3.4644579864107072, 3.467792004812509, 3.9433339843526483, 4.008749994682148 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 1.4908339944668114, 1.5151250117924064, 1.5486250049434602, 1.5751669998280704, 1.607834012247622, 1.6791670059319586, 1.8500000005587935, 1.886208017822355, 1.9232920021750033, 2.090958005283028, 2.2177080099936575, 2.3967500019352883 ms
 
 ### operation-duration:index-rebuild
 
@@ -602,9 +660,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 2.798959001665935, 2.945792
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 15 | 109.88979099784046 | 128.771166986553 | 168.7688330130186 | 254.4261250004638 | 254.4261250004638 | 254.4261250004638 |
+| 15 | 83.9824580179993 | 98.65541697945446 | 106.29745799815282 | 109.46212499402463 | 109.46212499402463 | 109.46212499402463 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 254.4261250004638 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ## Server CPU under the representative dataset
 
@@ -619,7 +677,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 254.4261250004638 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 3 | 97.17003700550825 | 97.59338326759801 | 99.01183567683638 | 99.01183567683638 | 99.01183567683638 | 99.01183567683638 |
+| 3 | 98.13816407628995 | 98.87173746209449 | 99.3325743345177 | 99.3325743345177 | 99.3325743345177 | 99.3325743345177 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -636,7 +694,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 3 | 112181248 | 112197632 | 112214016 | 112214016 | 112214016 | 112214016 |
+| 3 | 112427008 | 112459776 | 112459776 | 112459776 | 112459776 | 112459776 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -651,14 +709,14 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 - producer: `server-measurements`
 - method: os.path.getsize on the seeded database file.
 
-Sample of one (bytes): 25747456
+Sample of one (bytes): 26435584
 
 ### perf.db-wal
 
 - producer: `server-measurements`
 - method: os.path.getsize on the seeded database file.
 
-Sample of one (bytes): 10197032
+Sample of one (bytes): 10283552
 
 ### perf.db-shm
 
@@ -1071,6 +1129,50 @@ Sample of one (px): 0
 - unit: ms
 - spec §8.6 bullet: 390/768/1366/1440 viewport overflow and input latency
 
+### /app/search text input @ 1440x1000
+
+- producer: `client-viewport`
+- method: keyboard keypress events (Locator.pressSequentially) to the input reflecting the typed value, rAF-polled
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 6 | 11.437291999995068 | 15.187541999999667 | 33.681125000002794 | 33.681125000002794 | 33.681125000002794 | 33.681125000002794 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 33.681125000002794 ms
+
+### /app/imports select @ 1440x1000
+
+- producer: `client-viewport`
+- method: Locator.selectOption (real change event) to the select reflecting the chosen value, rAF-polled
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 6 | 5.6386249999995925 | 7.967917000001762 | 12.406999999999243 | 12.406999999999243 | 12.406999999999243 | 12.406999999999243 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 5.6386249999995925, 12.406999999999243 ms
+
+### /app/search text input @ 1366x768
+
+- producer: `client-viewport`
+- method: keyboard keypress events (Locator.pressSequentially) to the input reflecting the typed value, rAF-polled
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 6 | 10.33112500000425 | 12.023292000005313 | 28.37774999999965 | 28.37774999999965 | 28.37774999999965 | 28.37774999999965 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 28.37774999999965 ms
+
+### /app/imports select @ 1366x768
+
+- producer: `client-viewport`
+- method: Locator.selectOption (real change event) to the select reflecting the chosen value, rAF-polled
+
+| count | min | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|
+| 6 | 7.742041999998037 | 8.525291999998444 | 11.106375000003027 | 11.106375000003027 | 11.106375000003027 | 11.106375000003027 |
+
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+
 ### /app/search text input @ 768x1024
 
 - producer: `client-viewport`
@@ -1078,7 +1180,7 @@ Sample of one (px): 0
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 10.873958000003768 | 13.59112499999901 | 34.020041999996465 | 34.020041999996465 | 34.020041999996465 | 34.020041999996465 |
+| 6 | 7.05487500000163 | 8.767124999998487 | 18.06329199999891 | 18.06329199999891 | 18.06329199999891 | 18.06329199999891 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -1089,7 +1191,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 8.331874999996217 | 8.845874999999069 | 20.04200000000128 | 20.04200000000128 | 20.04200000000128 | 20.04200000000128 |
+| 6 | 7.284417000002577 | 8.115792000004149 | 14.912125000002561 | 14.912125000002561 | 14.912125000002561 | 14.912125000002561 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -1100,9 +1202,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 30.074415999995836 | 32.9699580000015 | 88.38708300000144 | 88.38708300000144 | 88.38708300000144 | 88.38708300000144 |
+| 6 | 29.850791000004392 | 34.1204579999976 | 54.13762500000303 | 54.13762500000303 | 54.13762500000303 | 54.13762500000303 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 88.38708300000144 ms
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### /app/search text input @ 390x844
 
@@ -1111,9 +1213,9 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 88.38708300000144 ms
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 8.016542000004847 | 10.226166999993438 | 16.83258300000307 | 16.83258300000307 | 16.83258300000307 | 16.83258300000307 |
+| 6 | 9.729250000003958 | 10.612709000000905 | 20.621791999998095 | 20.621791999998095 | 20.621791999998095 | 20.621791999998095 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 20.621791999998095 ms
 
 ### /app/imports select @ 390x844
 
@@ -1122,7 +1224,7 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 4.954624999998487 | 5.428542000001471 | 8.425374999998894 | 8.425374999998894 | 8.425374999998894 | 8.425374999998894 |
+| 6 | 7.107750000002852 | 8.248999999996158 | 12.102666999999201 | 12.102666999999201 | 12.102666999999201 | 12.102666999999201 |
 
 Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
@@ -1133,95 +1235,39 @@ Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 | count | min | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|
-| 6 | 26.50129200000083 | 33.43066700000054 | 54.575583999998344 | 54.575583999998344 | 54.575583999998344 | 54.575583999998344 |
+| 6 | 28.147957999994105 | 37.57866700000159 | 39.230209000001196 | 39.230209000001196 | 39.230209000001196 | 39.230209000001196 |
 
-Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): 26.50129200000083, 54.575583999998344 ms
-
-### Gap: text input @ 1440x1000
-
-- producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
-
-Locator: locator('#so-search-input')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for locator('#so-search-input')[22m
-
-
-### Gap: select @ 1440x1000
-
-- producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
-
-Locator: getByRole('combobox', { name: 'Format' })
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for getByRole('combobox', { name: 'Format' })[22m
-
+Outliers (beyond 1.5x IQR from Q1/Q3, nearest-rank): none
 
 ### Gap: button @ 1440x1000
 
 - producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+- reason: control was not reachable against the seeded dataset: expect(locator).toBeVisible() failed
 
-Locator: locator('.sb-customize').first()
+Locator:  locator('.sb-customize').first()
 Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
+Received: hidden
+Timeout:  5000ms
 
 Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for locator('.sb-customize').first()[22m
-
-
-### Gap: text input @ 1366x768
-
-- producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
-
-Locator: locator('#so-search-input')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for locator('#so-search-input')[22m
-
-
-### Gap: select @ 1366x768
-
-- producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
-
-Locator: getByRole('combobox', { name: 'Format' })
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for getByRole('combobox', { name: 'Format' })[22m
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('.sb-customize').first()
+    10 × locator resolved to <button class="sb-customize" aria-expanded="false" aria-controls="sb-controls-perf-topic-dsa-01">…</button>
+       - unexpected value "hidden"
 
 
 ### Gap: button @ 1366x768
 
 - producer: `client-viewport`
-- reason: control was not reachable against the seeded dataset: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+- reason: control was not reachable against the seeded dataset: expect(locator).toBeVisible() failed
 
-Locator: locator('.sb-customize').first()
+Locator:  locator('.sb-customize').first()
 Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
+Received: hidden
+Timeout:  5000ms
 
 Call log:
-[2m  - Expect "toBeVisible" with timeout 5000ms[22m
-[2m  - waiting for locator('.sb-customize').first()[22m
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('.sb-customize').first()
+    10 × locator resolved to <button class="sb-customize" aria-expanded="false" aria-controls="sb-controls-perf-topic-dsa-01">…</button>
+       - unexpected value "hidden"

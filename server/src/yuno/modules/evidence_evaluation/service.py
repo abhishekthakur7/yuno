@@ -381,6 +381,7 @@ def perform_assessment(
             item.outcome,
             item.rationale,
             item.evidence_refs,
+            dimensions_by_stable_id[item.dimension_id].is_critical,
         )
         for item in result.dimensions
     )

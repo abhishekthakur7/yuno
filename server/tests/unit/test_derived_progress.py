@@ -19,11 +19,87 @@ from yuno.modules.evidence_evaluation.domain import (
 NOW = "2026-08-12T12:00:00.000000Z"
 
 
-def _item(topic: str, suffix: str, outcome: DimensionOutcome, *, ambiguous=False):
+def _item(topic: str, suffix: str, outcome: DimensionOutcome, *, ambiguous=False, is_critical=False):
     evidence = Evidence(f"e-{suffix}", "owner", "goal", topic, "fixture", "implement", suffix, "summary", "test", "2026-08-01T00:00:00.000000Z")
     assessment = Assessment(f"a-{suffix}", "owner", "goal", evidence.id, None, "rubric", "fixture-v0", AssessmentState.AMBIGUITY_UNRESOLVED if ambiguous else AssessmentState.FEEDBACK_READY, "task", "implement", None, None, "fixture", (), (), (), (), (), (), (), "feedback", None, None, (), (), None, False, "2026-08-01T00:00:00.000000Z")
-    dimension = AssessmentDimensionResult(f"d-{suffix}", "owner", "goal", assessment.id, "rd", outcome, "why", (evidence.id,))
+    dimension = AssessmentDimensionResult(f"d-{suffix}", "owner", "goal", assessment.id, "rd", outcome, "why", (evidence.id,), is_critical)
     return ProgressEvidence(evidence, assessment, (dimension,))
+
+
+def _two_dimension_item(
+    topic: str,
+    suffix: str,
+    *,
+    critical_outcome: DimensionOutcome,
+    noncritical_outcome: DimensionOutcome,
+):
+    """One assessment with two clear dimension results: `rd-critical`
+    (`is_critical=True`) and `rd-noncritical` (`is_critical=False`), for
+    proving IDK-009 section 9.2's critical-dimension precedence rule.
+    """
+    evidence = Evidence(f"e-{suffix}", "owner", "goal", topic, "fixture", "implement", suffix, "summary", "test", "2026-08-01T00:00:00.000000Z")
+    assessment = Assessment(f"a-{suffix}", "owner", "goal", evidence.id, None, "rubric", "fixture-v0", AssessmentState.FEEDBACK_READY, "task", "implement", None, None, "fixture", (), (), (), (), (), (), (), "feedback", None, None, (), (), None, False, "2026-08-01T00:00:00.000000Z")
+    dimensions = (
+        AssessmentDimensionResult(f"d-{suffix}-critical", "owner", "goal", assessment.id, "rd-critical", critical_outcome, "why", (evidence.id,), True),
+        AssessmentDimensionResult(f"d-{suffix}-noncritical", "owner", "goal", assessment.id, "rd-noncritical", noncritical_outcome, "why", (evidence.id,), False),
+    )
+    return ProgressEvidence(evidence, assessment, dimensions)
+
+
+def test_not_demonstrated_is_the_fifth_closed_outcome_vocabulary_member():
+    assert {member.value for member in DimensionOutcome} == {
+        "pass",
+        "trade-off",
+        "factual-correction",
+        "not-demonstrated",
+        "ambiguity-unresolved",
+    }
+
+
+def test_critical_dimension_negative_outcome_forces_unverified_over_partial():
+    """IDK-009 section 9.2: a `factual-correction`/`not-demonstrated` result
+    on a non-critical dimension only pulls the cell to `partial` (row 4),
+    but the same outcome on a critical dimension forces `unverified` (row
+    2), taking precedence over every row below it -- even though both cases
+    have a clear positive result elsewhere in the same assessment.
+    """
+    noncritical_not_demonstrated = derive_progress(
+        "goal", ("one",),
+        (_two_dimension_item("one", "nc-nd", critical_outcome=DimensionOutcome.PASS, noncritical_outcome=DimensionOutcome.NOT_DEMONSTRATED),),
+        (), (), NOW, "fixture-v0",
+    )
+    assert noncritical_not_demonstrated.learning_states[0].classification is ProgressClassification.PARTIAL
+
+    critical_not_demonstrated = derive_progress(
+        "goal", ("one",),
+        (_two_dimension_item("one", "c-nd", critical_outcome=DimensionOutcome.NOT_DEMONSTRATED, noncritical_outcome=DimensionOutcome.PASS),),
+        (), (), NOW, "fixture-v0",
+    )
+    assert critical_not_demonstrated.learning_states[0].classification is ProgressClassification.UNVERIFIED
+
+    noncritical_factual_correction = derive_progress(
+        "goal", ("one",),
+        (_two_dimension_item("one", "nc-fc", critical_outcome=DimensionOutcome.PASS, noncritical_outcome=DimensionOutcome.FACTUAL_CORRECTION),),
+        (), (), NOW, "fixture-v0",
+    )
+    assert noncritical_factual_correction.learning_states[0].classification is ProgressClassification.PARTIAL
+
+    critical_factual_correction = derive_progress(
+        "goal", ("one",),
+        (_two_dimension_item("one", "c-fc", critical_outcome=DimensionOutcome.FACTUAL_CORRECTION, noncritical_outcome=DimensionOutcome.PASS),),
+        (), (), NOW, "fixture-v0",
+    )
+    assert critical_factual_correction.learning_states[0].classification is ProgressClassification.UNVERIFIED
+
+    # Same-cell proficiency rollup (per-topic minimum) carries the split too.
+    baseline = derive_progress(
+        "goal", ("one",),
+        (_two_dimension_item("one", "base", critical_outcome=DimensionOutcome.PASS, noncritical_outcome=DimensionOutcome.PASS),),
+        (), (), NOW, "fixture-v0",
+    )
+    assert baseline.proficiency.classification is ProgressClassification.LIKELY_KNOWN
+    assert noncritical_not_demonstrated.proficiency.classification is ProgressClassification.PARTIAL
+    assert critical_not_demonstrated.proficiency.classification is ProgressClassification.UNVERIFIED
 
 
 def test_fixture_derivation_is_pure_under_randomized_replay_order():

@@ -226,6 +226,10 @@ class RubricDimensionRow(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     owner_id: Mapped[str] = mapped_column(Text, ForeignKey("owners.id"), nullable=False)
     rubric_id: Mapped[str] = mapped_column(Text, nullable=False)
+    # `is_critical` is deliberately not a column here: IDK-009 section 6
+    # fixes criticality per `stable_dimension_id`, invariant across rubric
+    # versions, so `RubricDimension.is_critical` derives it from that
+    # column instead of storing an independent, possibly-unset flag.
     stable_dimension_id: Mapped[str] = mapped_column(Text, nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     body_hash: Mapped[str] = mapped_column(Text, nullable=False)
@@ -381,7 +385,7 @@ class AssessmentDimensionResultRow(Base):
             name="uq_assessment_dimension_results_dimension",
         ),
         CheckConstraint(
-            "outcome IN ('pass','trade-off','factual-correction','ambiguity-unresolved')",
+            "outcome IN ('pass','trade-off','factual-correction','not-demonstrated','ambiguity-unresolved')",
             name="outcome_valid",
         ),
     )
@@ -391,6 +395,10 @@ class AssessmentDimensionResultRow(Base):
     assessment_id: Mapped[str] = mapped_column(Text, nullable=False)
     rubric_dimension_id: Mapped[str] = mapped_column(Text, nullable=False)
     outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    # Denormalized from `rubric_dimensions.is_critical` at write time (see
+    # `AssessmentDimensionResult.is_critical`), so IDK-009 section 9.2's
+    # critical-dimension precedence rule can be applied without a join.
+    is_critical: Mapped[int] = boolean_column("is_critical", default=False)
     body_hash: Mapped[str] = mapped_column(Text, nullable=False)
 
 

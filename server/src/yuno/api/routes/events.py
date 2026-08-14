@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
+from starlette.concurrency import run_in_threadpool
 
 from yuno.api.contracts import JobEventResponse
 from yuno.api.dependencies import get_owner_id
@@ -59,7 +60,20 @@ async def stream_events(
 ) -> AsyncIterator[str]:
     cursor = last_event_id
     while not await request.is_disconnected():
-        frames = retained_event_frames(
+        # `retained_event_frames` opens a synchronous, blocking DB session.
+        # Calling it directly from this coroutine would run that blocking
+        # I/O on the single ASGI event loop thread, stalling every other
+        # coroutine (including unrelated requests, and every other client's
+        # own poll) for its duration. Verified empirically: with the direct
+        # call, opening 20 concurrent SSE connections against a real
+        # uvicorn server made even an unrelated, otherwise-instant route
+        # (`GET /api/v1/jobs`, ~90ms baseline) time out completely (>10s),
+        # matching the "data-dependent routes stop rendering" symptom.
+        # `run_in_threadpool` moves the blocking call off the loop so polls
+        # from different clients (and unrelated requests) can genuinely
+        # overlap instead of fully serializing.
+        frames = await run_in_threadpool(
+            retained_event_frames,
             request.app.state.session_factory,
             request.app.state.clock,
             owner_id,
@@ -84,7 +98,7 @@ async def stream_events(
         }
     },
 )
-def get_events(
+async def get_events(
     request: Request,
     owner_id: Annotated[str, Depends(get_owner_id)],
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,

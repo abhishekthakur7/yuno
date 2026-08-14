@@ -12,15 +12,15 @@ Three areas, each a distinct acceptance criterion of the ticket:
    docstring), so calling it would fail every parametrized case.
 
 2. `test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss`
-   -- builds one database at `f06c40340400` (head-minus-one; the *only*
-   schema difference from head is the two `language_valid` CHECK
-   constraints this ticket's migration narrows, so every ORM
-   model/service used below works against it identically to head),
-   seeds spec §4.8's representative scenarios through the real
-   services/repositories the product itself uses (never
-   `Base.metadata.create_all`, never hand-written INSERTs for governed
-   domain data), snapshots every governed table, upgrades to `head`, and
-   asserts byte-for-byte preservation.
+   -- builds one database at `GOVERNED_DATA_LOSS_BASELINE` (currently
+   `fb1c910aedc7`'s own parent; see that constant's docstring for why this
+   is a distinct constant from `HEAD_MINUS_ONE` below and what its one
+   deliberate schema-difference exception is), seeds spec §4.8's
+   representative scenarios through the real services/repositories the
+   product itself uses (never `Base.metadata.create_all`, never
+   hand-written INSERTs for governed domain data), snapshots every
+   governed table, upgrades to `head`, and asserts byte-for-byte
+   preservation.
 
    Represented (all ten named in spec §4.8 / this ticket):
      1. two goals with cross-goal transferred evidence
@@ -73,11 +73,15 @@ Three areas, each a distinct acceptance criterion of the ticket:
      9. a completed Mock transcript -- `interview.service.create_bundle`
         / `create_mock_run` / `validate_mock_completion` /
         `evidence_evaluation.service.create_evidence` /
-        `reserve_mock_completion`, then
+        `reserve_mock_completion` seeded at the baseline like everything
+        else, then (deliberately *after* `command.upgrade(config,
+        "head")` -- see `GOVERNED_DATA_LOSS_BASELINE`)
         `api.routes.interview.run_mock_final_evaluation_job` called
         directly (again, the dispatcher's job-handler body) with a rubric
         seeded via `test_mock_report_api.py::_seed_rubric` and a fixture
-        `EvaluationAdapter`.
+        `EvaluationAdapter`. Still a real service call end to end, just
+        one that happens post-upgrade rather than pre-upgrade for this
+        one migration cycle.
     10. a deliberately stale FTS5 projection -- `uow.search.rebuild(...)`
         (the real projection build), then one more real write
         (`create_evidence`) *after* that rebuild with no further rebuild.
@@ -192,12 +196,36 @@ from yuno.shared.infrastructure.database import (
 )
 from yuno.unit_of_work import create_unit_of_work_factory
 
-# The Java-only runner revision's `down_revision` -- narrowing the two
-# `language_valid` CHECK constraints (and the bounded relational-placeholder
-# disposal that precedes it) is the *entire* schema diff to `head`. Every
-# ORM model and application service used below therefore works identically
-# against a database at this revision as it does at `head`.
+# The Java-only runner revision's (`c5b1e70a94d2`) own `down_revision`.
+# Narrowing the two `language_valid` CHECK constraints (and the bounded
+# relational-placeholder disposal that precedes it) is that revision's
+# *entire* schema diff from here, which is what
+# `test_relational_placeholder_disposal_is_bounded_and_controls_survive`
+# and `test_language_python_row_stops_the_migration_with_a_diagnostic`
+# below exercise: they need the pre-narrowing CHECK (permitting a hand-
+# inserted `language='relational'` row) still in force at this baseline,
+# so this stays pinned to the runner migration's own parent regardless of
+# which revision is current `head`.
 HEAD_MINUS_ONE = "f06c40340400"
+
+# `fb1c910aedc7`'s (IDK-204) own `down_revision` -- currently `head`'s
+# parent too. Used only by `test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss`,
+# which validates *that* migration's zero-governed-data-loss property.
+# Every ORM model/service the representative fixture below uses works
+# identically against a database at this revision as it does at `head`,
+# with one deliberate exception: `fb1c910aedc7` adds
+# `assessment_dimension_results.is_critical` (NOT NULL, no client-side
+# default omission -- `service.perform_assessment` always writes a real
+# value), so a fresh assessment cannot be created at this baseline through
+# live application code. Module docstring item 9's final evaluation step
+# is therefore seeded *after* `command.upgrade(config, "head")` instead of
+# before, and `assessments`/`assessment_dimension_results` are proven
+# writable-and-correctly-shaped post-upgrade rather than
+# preserved-byte-for-byte-across-upgrade (they hold zero rows before that
+# migration ever runs, so "preservation" would otherwise be a vacuous
+# empty-list check). Every other governed table is unaffected and keeps
+# the byte-for-byte proof.
+GOVERNED_DATA_LOSS_BASELINE = "c5b1e70a94d2"
 
 
 # ---------------------------------------------------------------------------
@@ -283,10 +311,11 @@ def _publish_fixture(
     Mirrors `canonical.publisher.publish_canonical_graph`'s steps 2-7
     exactly: same `uow.canonical.*` calls in the same order, same
     idempotent topic-identity-reuse check. It skips only step 1's
-    `require_single_head(engine)` -- this fixture database deliberately
-    targets `f06c40340400` (head-minus-one), and the real publisher
-    refusing exactly that is IDK-501/IDK-101's own subject, not something
-    this helper should route around by construction.
+    `require_single_head(engine)` -- every caller in this module
+    deliberately targets a below-`head` baseline (`HEAD_MINUS_ONE` or
+    `GOVERNED_DATA_LOSS_BASELINE`), and the real publisher refusing
+    exactly that is IDK-501/IDK-101's own subject, not something this
+    helper should route around by construction.
     """
     fixture = load_fixture(fixture_name)
     assert fixture.approval is not None
@@ -446,9 +475,19 @@ class _FixtureEvaluationAdapter:
         )
 
 
-def _seed_completed_mock_transcript(
+def _seed_mock_transcript_ready_for_final_evaluation(
     uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str, topic_stable_id: str, *, suffix: str
 ) -> str:
+    """Everything module docstring item 9 needs *except* the final
+    evaluation: bundle, run, reserved completion evidence. Split out from
+    the final `run_mock_final_evaluation_job` call (see
+    `_run_mock_final_evaluation` below) because that call is the one piece
+    of this fixture set that writes `assessments`/`assessment_dimension_results`
+    -- the two tables `fb1c910aedc7` (IDK-204) adds `is_critical` to, so a
+    database at `GOVERNED_DATA_LOSS_BASELINE` (that migration's own parent)
+    cannot accept that specific write yet. Every other governed table this
+    module seeds predates that migration and is unaffected by it.
+    """
     rubric = _seed_rubric(uow_factory)
     with uow_factory() as uow:
         bundle = create_bundle(
@@ -509,16 +548,20 @@ def _seed_completed_mock_transcript(
         reserve_mock_completion(uow, owner_id, run_id, draft, new_id(), evidence.id)
         uow.commit()
 
-    # `run_mock_final_evaluation_job` is the dispatcher's job-handler body for
-    # `evaluate_mock_final`; calling it directly runs the identical
-    # `perform_assessment` + `complete_mock_evaluation` persistence the
-    # dispatcher would run asynchronously (module docstring item 9).
+    return run_id
+
+
+def _run_mock_final_evaluation(uow_factory: UnitOfWorkFactory, owner_id: str, run_id: str) -> None:
+    """`run_mock_final_evaluation_job` is the dispatcher's job-handler body
+    for `evaluate_mock_final`; calling it directly runs the identical
+    `perform_assessment` + `complete_mock_evaluation` persistence the
+    dispatcher would run asynchronously (module docstring item 9).
+    """
     run_mock_final_evaluation_job(
         JobRequest("evaluate_mock_final", owner_id, {"run_id": run_id}),
         uow_factory,
         _FixtureEvaluationAdapter(),
     )
-    return run_id
 
 
 def _seed_active_job(session_factory: sessionmaker, owner_id: str) -> str:
@@ -604,11 +647,17 @@ def test_every_revision_upgrades_forward_to_head_with_matching_schema(revision: 
 #     data loss.
 # ---------------------------------------------------------------------------
 
-# Every table this fixture writes into, dumped whole and compared
-# before/after. Deliberately excludes `runner_confirmations`/`runner_records`
-# and their satellite tables: this fixture seeds zero rows in them (that is
+# Every table this fixture writes into *before* the upgrade, dumped whole
+# and compared before/after. Deliberately excludes
+# `runner_confirmations`/`runner_records` and their satellite tables: this
+# fixture seeds zero rows in them (that is
 # `test_relational_placeholder_disposal_is_bounded_and_controls_survive`'s
 # job below), so their equality here would be a trivial empty-list check.
+# Also excludes `assessments`/`assessment_dimension_results`: see
+# `GOVERNED_DATA_LOSS_BASELINE`'s docstring -- module docstring item 9's
+# final evaluation writes those two only *after* the upgrade, so they are
+# asserted separately (writable-and-correctly-shaped post-upgrade, not
+# preserved-across-upgrade).
 _GOVERNED_TABLES: tuple[str, ...] = (
     "goal_workspaces",
     "evidence",
@@ -640,8 +689,6 @@ _GOVERNED_TABLES: tuple[str, ...] = (
     "interview_bundle_items",
     "interview_runs",
     "interview_turns",
-    "assessments",
-    "assessment_dimension_results",
     "audit_events",
     "search_index_state",
     "search_documents",
@@ -769,9 +816,13 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
         "recovery_job_id": _seed_job_requiring_startup_recovery(session_factory, owner_id),
     }
 
-    # 9. A completed Mock transcript.
+    # 9. A Mock transcript ready for its final evaluation (bundle, run,
+    # reserved completion evidence). The final evaluation step -- the only
+    # part of this fixture set that writes `assessments`/
+    # `assessment_dimension_results` -- runs after the upgrade to `head`;
+    # see `GOVERNED_DATA_LOSS_BASELINE`'s docstring for why.
     mock_goal = _create_fixture_goal(uow_factory, owner_id, v1.id, "Representative Mock fixture goal")
-    ids["mock_run_id"] = _seed_completed_mock_transcript(
+    ids["mock_run_id"] = _seed_mock_transcript_ready_for_final_evaluation(
         uow_factory, owner_id, mock_goal.id, "fixture-topic-alpha", suffix="representative"
     )
 
@@ -784,12 +835,17 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
 
 def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tmp_path: Path) -> None:
     url = f"sqlite+pysqlite:///{tmp_path / 'representative.db'}"
-    config = _config_at(url, HEAD_MINUS_ONE)
+    config = _config_at(url, GOVERNED_DATA_LOSS_BASELINE)
     engine, uow_factory, session_factory = _engine_and_uow_factory(url)
     try:
         ids = _build_representative_fixture(uow_factory, session_factory)
 
         before = {table: _dump_table(engine, table) for table in _GOVERNED_TABLES}
+        # Nothing pre-existing to lose: module docstring item 9's final
+        # evaluation (the only writer of these two tables) is deliberately
+        # seeded after the upgrade -- see `GOVERNED_DATA_LOSS_BASELINE`.
+        assert _dump_table(engine, "assessments") == []
+        assert _dump_table(engine, "assessment_dimension_results") == []
         artifact_before = _row(engine, "generated_artifacts", ids["artifact_id"])
         with engine.connect() as connection:
             jobs_dedupe_before = dict(connection.execute(text("SELECT id, dedupe_key FROM jobs")).all())
@@ -806,6 +862,21 @@ def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tm
         after = {table: _dump_table(engine, table) for table in _GOVERNED_TABLES}
         for table in _GOVERNED_TABLES:
             assert after[table] == before[table], f"{table!r} changed across the upgrade"
+
+        # Module docstring item 9's final evaluation: the migration under
+        # test (`fb1c910aedc7`) leaves `assessments`/
+        # `assessment_dimension_results` in a working, correctly-shaped
+        # state for a fresh real-service write immediately after upgrading
+        # -- the positive counterpart to the "zero data loss" proof above
+        # for the two tables that migration actually changes.
+        _run_mock_final_evaluation(uow_factory, ids["owner_id"], ids["mock_run_id"])
+        assessments = _dump_table(engine, "assessments")
+        dimension_results = _dump_table(engine, "assessment_dimension_results")
+        assert len(assessments) == 1
+        assert assessments[0]["state"] == "feedback-ready"
+        assert len(dimension_results) == 1
+        assert dimension_results[0]["outcome"] == "pass"
+        assert dimension_results[0]["is_critical"] == 0
 
         # The D3 cache key (`uq_generated_artifacts_d3_exact_key`'s own
         # columns) and `body_hash` unchanged, named explicitly per the

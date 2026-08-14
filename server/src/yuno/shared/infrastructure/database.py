@@ -29,11 +29,32 @@ def create_engine_for(url: str) -> Engine:
     -- the job the learner started is lost either way at expiry, so the
     only thing a short timeout buys is losing it sooner. It is a ceiling,
     not a delay: an uncontended write never waits at all.
+
+    `pool_size=20, max_overflow=30` (ceiling 50) replaces SQLAlchemy's
+    stock default (5 + 10 = 15), which is just the library's generic
+    default and was never sized for this app. This is a capacity fix, not
+    a leak workaround -- IDK-504 traced a `QueuePool limit ... reached`
+    failure to `GET /api/v1/events` (`api/routes/events.py`) blocking the
+    ASGI event loop on a synchronous per-poll DB read; that starvation bug
+    is fixed at the source (the read now runs via
+    `starlette.concurrency.run_in_threadpool`). With that fix applied, a
+    burst of 50 concurrent short-lived SSE connections (the shape of the
+    IDK-504 perf sweep: many browser contexts opening `/events` at once,
+    each independently resolving `get_owner_id` and then polling) still
+    peaked at exactly 15 concurrently checked-out connections against the
+    stock 5+10 pool, with 46/50 connections timing out; raising the
+    ceiling to 50 carried the same burst with 0 errors and a measured peak
+    of 45 concurrent checkouts, then returned to 0 once every client
+    disconnected. Every connection here is a short-lived WAL reader, which
+    SQLite serves cheaply and concurrently, so sizing for this burst adds
+    memory/thread headroom, not contention risk.
     """
-    engine = create_engine(url)
+    engine = create_engine(url, pool_size=20, max_overflow=30)
 
     @event.listens_for(engine, "connect")
-    def _set_sqlite_pragma(dbapi_connection: sqlite3.Connection, _connection_record: object) -> None:
+    def _set_sqlite_pragma(
+        dbapi_connection: sqlite3.Connection, _connection_record: object
+    ) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")

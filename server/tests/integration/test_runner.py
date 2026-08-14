@@ -14,12 +14,18 @@ from sqlalchemy import create_engine, inspect, text
 from tests.conftest import build_isolated_settings
 from yuno.api.app import create_app
 from yuno.config import Settings
-from yuno.modules.runner.adapters import LocalRunnerProcessPort
+from yuno.modules.runner.adapters import LocalRunnerProcessPort, detect_command
 from yuno.modules.runner.domain import (
     DeclaredInput,
     OutputChunk,
     ProcessLimits,
     RunnerProcessOutcome,
+)
+from yuno.modules.runner.platform_probe import (
+    PLATFORM_UNVERIFIABLE,
+    UNSUPPORTED_PLATFORM,
+    PlatformSnapshot,
+    evaluate_platform,
 )
 from yuno.modules.runner.ports import RunnerProcessSpec
 from yuno.modules.runner.service import (
@@ -28,6 +34,17 @@ from yuno.modules.runner.service import (
     resolve_inputs_within_limits,
 )
 from yuno.shared.domain.errors import RunnerInputLimitError
+
+# The exact IDK-005 section 1 approved row: Ubuntu 24.04 LTS on x86_64/arm64,
+# no WSL/container marker. Tests that exercise execution behavior (limits,
+# cleanup, cancellation, ...) fake this platform so they pass regardless of
+# the actual host OS, mirroring how `app.state.runner_process_port` is
+# overridden below instead of running real subprocess execution end to end.
+_APPROVED_PLATFORM_SNAPSHOT = PlatformSnapshot(
+    system_name="Linux",
+    machine="x86_64",
+    os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+)
 
 
 def _enabled(database_url: str, tmp_path) -> Settings:
@@ -54,6 +71,15 @@ def _enabled(database_url: str, tmp_path) -> Settings:
     )
 
 
+def _enabled_app(database_url: str, tmp_path, **overrides):
+    settings = _enabled(database_url, tmp_path)
+    if overrides:
+        settings = settings.model_copy(update=overrides)
+    app = create_app(settings)
+    app.state.runner_platform_probe = lambda: _APPROVED_PLATFORM_SNAPSHOT
+    return app
+
+
 def test_runner_is_fail_closed_by_default(client) -> None:
     payload = client.get("/api/v1/runner/capabilities").json()
     assert payload["enabled"] is False
@@ -64,7 +90,7 @@ def test_runner_is_fail_closed_by_default(client) -> None:
 def test_runner_confirmation_exact_inputs_phases_and_fresh_retry(
     migrated_database_url: str, tmp_path
 ) -> None:
-    with TestClient(create_app(_enabled(migrated_database_url, tmp_path))) as client:
+    with TestClient(_enabled_app(migrated_database_url, tmp_path)) as client:
         content = b"public class Main {}"
         confirmed = client.post(
             "/api/v1/runner/confirmations",
@@ -157,7 +183,7 @@ def test_runner_sensitive_content_exists_only_in_removable_body_tables(
 def test_missing_confirmation_body_rejects_run_without_partial_reservation(
     migrated_database_url: str, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         confirmation = _confirm(client, operation="compile")
         confirmation_id = confirmation.json()["id"]
@@ -207,7 +233,7 @@ def test_expired_output_body_is_unavailable_while_hash_metadata_survives(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(
@@ -266,7 +292,7 @@ def test_runner_environment_excludes_host_secrets() -> None:
 def test_runner_rejects_path_traversal_and_hash_mismatch(
     migrated_database_url: str, tmp_path
 ) -> None:
-    with TestClient(create_app(_enabled(migrated_database_url, tmp_path))) as client:
+    with TestClient(_enabled_app(migrated_database_url, tmp_path)) as client:
         for logical_path, digest in (
             ("../Main.java", hashlib.sha256(b"x").hexdigest()),
             ("C:\\Main.java", hashlib.sha256(b"x").hexdigest()),
@@ -417,7 +443,7 @@ def test_primary_runner_threat_model_with_fake_process_port(
         5,
     )
     fake = _FakeProcessPort((compile_outcome, test_outcome))
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client)
@@ -471,7 +497,7 @@ def test_limit_breach_is_structured_truncated_and_cleanup_complete(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, operation="compile", key="limited")
@@ -517,7 +543,7 @@ def test_compile_and_test_share_wall_cpu_and_output_budgets(
             ),
         )
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="shared-budgets")
@@ -559,7 +585,7 @@ def test_exact_output_limit_still_allows_a_silent_test_phase(
             RunnerProcessOutcome(1235, 1235, 0, None, False, False, (), 10),
         )
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="exact-output-budget")
@@ -592,7 +618,7 @@ def test_aggregate_workspace_limit_catches_many_small_generated_files(
     fake = _ManySmallFilesProcessPort(
         (RunnerProcessOutcome(1234, 1234, 0, None, False, False, (), 10, 1),)
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, key="aggregate-temp-limit")
@@ -614,10 +640,7 @@ def test_input_temp_limit_rejects_before_process_invocation(
     migrated_database_url: str, tmp_path
 ) -> None:
     fake = _FakeProcessPort(())
-    settings = _enabled(migrated_database_url, tmp_path).model_copy(
-        update={"runner_temp_bytes": 32}
-    )
-    app = create_app(settings)
+    app = _enabled_app(migrated_database_url, tmp_path, runner_temp_bytes=32)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         started = _confirm_and_start(client, operation="compile", key="pre-spawn-temp")
@@ -636,22 +659,210 @@ def test_input_temp_limit_rejects_before_process_invocation(
 def test_capabilities_detect_missing_and_incompatible(
     migrated_database_url: str, tmp_path
 ) -> None:
-    missing = _enabled(migrated_database_url, tmp_path).model_copy(
-        update={"runner_javac_command": "definitely-not-a-java-command"}
+    missing = _enabled_app(
+        migrated_database_url,
+        tmp_path,
+        runner_javac_command="definitely-not-a-java-command",
     )
-    with TestClient(create_app(missing)) as client:
+    with TestClient(missing) as client:
         assert (
             client.get("/api/v1/runner/capabilities").json()["capabilities"][0]["state"]
             == "missing"
         )
-    incompatible = _enabled(migrated_database_url, tmp_path).model_copy(
-        update={"runner_java_version_prefix": "approved-java-never-matches"}
+    incompatible = _enabled_app(
+        migrated_database_url,
+        tmp_path,
+        runner_java_version_prefix="approved-java-never-matches",
     )
-    with TestClient(create_app(incompatible)) as client:
+    with TestClient(incompatible) as client:
         assert (
             client.get("/api/v1/runner/capabilities").json()["capabilities"][0]["state"]
             == "incompatible"
         )
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "expected_code"),
+    (
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "fedora", "VERSION_ID": "24.04"},
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "22.04"},
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="riscv64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(system_name="Darwin", machine="arm64", os_release=None),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(system_name="Windows", machine="AMD64", os_release=None),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+                wsl_env_present=True,
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+                kernel_osrelease="5.15.0-microsoft-standard-WSL2",
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+                dockerenv_present=True,
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+                containerenv_present=True,
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+                cgroup_text="12:pids:/docker/abcdef0123456789",
+            ),
+            UNSUPPORTED_PLATFORM,
+        ),
+        (
+            PlatformSnapshot(system_name="Linux", machine="x86_64", os_release=None),
+            PLATFORM_UNVERIFIABLE,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux", machine="x86_64", os_release={"ID": "ubuntu"}
+            ),
+            PLATFORM_UNVERIFIABLE,
+        ),
+        (
+            PlatformSnapshot(
+                system_name="Linux",
+                machine="x86_64",
+                os_release={"VERSION_ID": "24.04"},
+            ),
+            PLATFORM_UNVERIFIABLE,
+        ),
+    ),
+)
+def test_evaluate_platform_rejects_every_unapproved_row(
+    snapshot: PlatformSnapshot, expected_code: str
+) -> None:
+    outcome = evaluate_platform(snapshot)
+    assert outcome.diagnostic_code == expected_code
+
+
+def test_evaluate_platform_accepts_the_exact_approved_row() -> None:
+    outcome = evaluate_platform(_APPROVED_PLATFORM_SNAPSHOT)
+    assert outcome.diagnostic_code is None
+    assert (outcome.os, outcome.version, outcome.arch) == ("linux", "24.04", "x86_64")
+
+
+def test_evaluate_platform_accepts_normalized_arm64() -> None:
+    outcome = evaluate_platform(
+        PlatformSnapshot(
+            system_name="Linux",
+            machine="aarch64",
+            os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
+        )
+    )
+    assert outcome.diagnostic_code is None
+    assert outcome.arch == "arm64"
+
+
+def test_detect_command_gates_supported_on_platform_before_command_check() -> None:
+    # `/usr/bin/true` always exits 0, so absent the platform gate this would
+    # report `supported` on a host outside the approved matrix -- exactly
+    # the IDK-005 section 1 violation this gate exists to close.
+    result = detect_command(
+        "java",
+        "compile-and-test",
+        "/usr/bin/true",
+        None,
+        platform_probe=lambda: PlatformSnapshot(
+            system_name="Darwin", machine="arm64", os_release=None
+        ),
+    )
+    assert result["state"] == "incompatible"
+    assert result["diagnostic_code"] == UNSUPPORTED_PLATFORM
+
+    unverifiable = detect_command(
+        "java",
+        "compile-and-test",
+        "/usr/bin/true",
+        None,
+        platform_probe=lambda: PlatformSnapshot(
+            system_name="Linux", machine="x86_64", os_release=None
+        ),
+    )
+    assert unverifiable["state"] == "incompatible"
+    assert unverifiable["diagnostic_code"] == PLATFORM_UNVERIFIABLE
+
+    supported = detect_command(
+        "java",
+        "compile-and-test",
+        "/usr/bin/true",
+        None,
+        platform_probe=lambda: _APPROVED_PLATFORM_SNAPSHOT,
+    )
+    assert supported["state"] == "supported"
+    assert supported["diagnostic_code"] is None
+
+
+def test_capabilities_endpoint_reports_unsupported_platform_and_platform_unverifiable(
+    migrated_database_url: str, tmp_path
+) -> None:
+    unsupported = _enabled_app(migrated_database_url, tmp_path)
+    unsupported.state.runner_platform_probe = lambda: PlatformSnapshot(
+        system_name="Darwin", machine="arm64", os_release=None
+    )
+    with TestClient(unsupported) as client:
+        item = client.get("/api/v1/runner/capabilities").json()["capabilities"][0]
+        assert item["state"] == "incompatible"
+
+    unverifiable = _enabled_app(migrated_database_url, tmp_path)
+    unverifiable.state.runner_platform_probe = lambda: PlatformSnapshot(
+        system_name="Linux", machine="x86_64", os_release=None
+    )
+    with TestClient(unverifiable) as client:
+        item = client.get("/api/v1/runner/capabilities").json()["capabilities"][0]
+        assert item["state"] == "incompatible"
 
 
 def test_cancelled_outcome_records_cleanup_failure(
@@ -660,7 +871,7 @@ def test_cancelled_outcome_records_cleanup_failure(
     fake = _FakeProcessPort(
         (RunnerProcessOutcome(1234, 1234, None, 15, False, True, (), 1),)
     )
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_process_port = fake
         app.state.runner_workspace_port = _CleanupFails(app.state.runner_workspace_port)
@@ -832,7 +1043,7 @@ class _CreateFails:
 def test_runner_failure_is_terminal_and_cleanup_resolved(
     migrated_database_url: str, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         app.state.runner_workspace_port = _CreateFails()
         started = _confirm_and_start(client, operation="compile", key="create-fails")
@@ -851,7 +1062,7 @@ def test_runner_failure_is_terminal_and_cleanup_resolved(
 def test_runner_reservation_replays_after_enqueue_failure(
     migrated_database_url: str, monkeypatch, tmp_path
 ) -> None:
-    app = create_app(_enabled(migrated_database_url, tmp_path))
+    app = _enabled_app(migrated_database_url, tmp_path)
     with TestClient(app) as client:
         confirmation = _confirm(client, operation="compile")
         body = {"confirmation_id": confirmation.json()["id"]}

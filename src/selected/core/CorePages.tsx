@@ -44,6 +44,28 @@ type Navigate = (page: CorePage | string, mode?: InterviewMode, selection?: Inte
 type PageProps = { navigate: Navigate; selection?: InterviewSelection }
 const DEPTHS: readonly Depth[] = ['Essential', 'Implementation', 'Production', 'Interview']
 
+// role-competency-copy-v1 — approved verbatim in docs/decisions/IDK-004-role-level-competencies.md §2.
+// One versioned copy registry (IDK-004 §5) shared by onboarding, goal Settings, and Interview Prep role/level controls.
+export const ROLE_LEVEL_COPY_VERSION = 'role-competency-copy-v1'
+export const ROLE_LEVEL_HEADING = 'Choose the scope you want to practice'
+export const ROLE_LEVEL_AUDIENCE_NOTE = 'Yuno is for backend engineers who have already shipped software. It does not include an absolute-beginner track.'
+export const ROLE_LEVEL_TITLE_VARIATION_HELPER = 'Titles vary across companies. Choose the description closest to the scope you want to practice—not necessarily your current title. You can change it later. This choice changes scenario breadth and evaluation expectations; it does not validate a title or predict hiring, promotion, or job performance.'
+export const TARGET_CAPABILITY_HELPER = 'Level sets the scope of practice. Capability sets what you want to demonstrate now. Choose one; you can edit it before confirming the goal and later in Settings.'
+export const ROLE_LEVEL_COPY: Record<GoalCreate['target_level'], { label: string; description: string }> = {
+  'Mid-level': {
+    label: 'Mid-level backend engineer',
+    description: 'Work within a bounded service or data path, with attention to correctness, testability, direct failures, and local operational consequences.',
+  },
+  Senior: {
+    label: 'Senior backend engineer',
+    description: 'Work across an end-to-end multi-service and data flow, including partial failure, rollout, recovery, observability, and alternatives under constraints.',
+  },
+  Staff: {
+    label: 'Staff-level backend engineer',
+    description: 'Work across systems and teams, including decision boundaries, migration and rollback, second-order failure, capacity, cost, ownership, governance, and exceptions.',
+  },
+}
+
 function providerStartFailure(error: unknown, action: string) {
   if (error instanceof ApiError && error.status === 412) return `Waiting for disclosure. Accept the current provider-network disclosure in Settings, then ${action}.`
   if (error instanceof ApiError && error.status === 503) return `The selected provider is unavailable or misconfigured. Review provider status in Settings, then ${action}.`
@@ -361,9 +383,13 @@ export function Onboarding({ navigate }: PageProps) {
       <PageIntro eyebrow="Goal setup · 1 of 2" title="Shape your classroom"><span>For experienced backend engineers. Set the target; every inferred state remains editable.</span></PageIntro>
       <div className="sb-form-grid">
         <fieldset><legend>Primary path</legend><div className="sb-segments">{(['Learn', 'Interview Prep'] as const).map(value => <button type="button" key={value} className={path === value ? 'is-selected' : ''} aria-pressed={path === value} onClick={() => setPath(value)}>{value === 'Learn' ? <BookOpen size={18} /> : <MessageSquareText size={18} />}{value}</button>)}</div></fieldset>
-        <label>Target level<select value={targetLevel} onChange={e => setTargetLevel(e.target.value as typeof targetLevel)}><option>Mid-level</option><option>Senior</option><option>Staff</option></select><small>Yuno’s MVP curriculum is for experienced backend engineers and does not include a beginner track.</small></label>
+        <fieldset className="sb-wide"><legend>{ROLE_LEVEL_HEADING}</legend><small>{ROLE_LEVEL_AUDIENCE_NOTE}</small>
+          <label>Target level<select id="sb-onboarding-target-level" aria-describedby="sb-onboarding-target-level-helper sb-onboarding-target-level-description" value={targetLevel} onChange={e => setTargetLevel(e.target.value as typeof targetLevel)}><option value="Mid-level">{ROLE_LEVEL_COPY['Mid-level'].label}</option><option value="Senior">{ROLE_LEVEL_COPY.Senior.label}</option><option value="Staff">{ROLE_LEVEL_COPY.Staff.label}</option></select></label>
+          <small id="sb-onboarding-target-level-helper">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</small>
+          <small id="sb-onboarding-target-level-description">{ROLE_LEVEL_COPY[targetLevel].description}</small>
+        </fieldset>
         <label>{path === 'Learn' ? 'Subject' : 'Role'}<input value={subjectOrRole} onChange={(event) => setSubjectOrRole(event.target.value)} /></label>
-        <label>Target capability<select value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as GoalCreate['target_capability'])}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
+        <label>Target capability<select aria-describedby="sb-onboarding-target-capability-helper" value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as GoalCreate['target_capability'])}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select><small id="sb-onboarding-target-capability-helper">{TARGET_CAPABILITY_HELPER}</small></label>
         <label className="sb-wide">Goal name<input value={goalName} onChange={e => setGoalName(e.target.value)} /></label>
         <fieldset className="sb-wide"><legend>Starting evidence · optional</legend><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'take'} onChange={() => setDiagnosticChoice('take')} /><span><strong>Take a short diagnostic</strong><small>Questions adapt to your saved responses and confidence. This does not mark completion.</small></span></label><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'skip'} onChange={() => setDiagnosticChoice('skip')} /><span><strong>Skip diagnostic</strong><small>Go directly to a conservative roadmap preview without a later forced retake.</small></span></label></fieldset>
         <label className="sb-wide">Optional {path === 'Learn' ? 'notes' : 'questions'} · untrusted seed<textarea value={seed} onChange={e => setSeed(e.target.value)} placeholder={path === 'Learn' ? 'Paste plain text or Markdown notes for later review.' : 'Paste questions you want to review later.'} /><small>Captured verbatim on the local server and visibly marked untrusted until you review it later in Imports. It is never treated as truth or evidence.</small><Button type="button" tone="quiet" onClick={() => setSeed('')}>Skip {path === 'Learn' ? 'notes' : 'questions'}</Button></label>
@@ -738,9 +764,9 @@ export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown
 }
 
 const INTERVIEW_ROLE_LEVELS: readonly { label: string; level: InterviewLevel }[] = [
-  { label: 'Mid-level backend engineer', level: 'Mid-level' },
-  { label: 'Senior backend engineer', level: 'Senior' },
-  { label: 'Staff-level backend engineer', level: 'Staff' },
+  { label: ROLE_LEVEL_COPY['Mid-level'].label, level: 'Mid-level' },
+  { label: ROLE_LEVEL_COPY.Senior.label, level: 'Senior' },
+  { label: ROLE_LEVEL_COPY.Staff.label, level: 'Staff' },
 ]
 
 function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
@@ -793,7 +819,7 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
             <nav aria-label="Interview bundles">{bundles.map(bundle => <button key={bundle.id} className={bundle.id === selected.id ? 'is-selected' : ''} aria-pressed={bundle.id === selected.id} onClick={() => onSelect(bundle.id)}><strong>{bundle.name}</strong><small>{INTERVIEW_ROLE_LEVELS.find(option => option.level === bundle.target_level)?.label ?? `${bundle.target_level} backend engineer`}</small></button>)}</nav>
             <form onSubmit={event => { event.preventDefault(); save() }}>
               <label>Bundle name<input value={name} onChange={event => setName(event.target.value)} /></label>
-              <label>Role and level<select aria-label="Role and level" value={level} onChange={event => setLevel(event.target.value as InterviewLevel)}>{INTERVIEW_ROLE_LEVELS.map(option => <option key={option.level} value={option.level}>{option.label}</option>)}</select></label>
+              <label>Role and level<select aria-label="Role and level" aria-describedby="sb-bundle-level-helper sb-bundle-level-description" value={level} onChange={event => setLevel(event.target.value as InterviewLevel)}>{INTERVIEW_ROLE_LEVELS.map(option => <option key={option.level} value={option.level}>{option.label}</option>)}</select><small id="sb-bundle-level-helper">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</small><small id="sb-bundle-level-description">{ROLE_LEVEL_COPY[level].description}</small></label>
               <fieldset><legend>Subjects</legend>{selected.items.slice().sort((a, b) => a.position - b.position).map(item => <label key={item.id} className={!item.is_optional ? 'is-required' : ''}><input type="checkbox" checked={item.included} disabled={!item.is_optional || interview.update.isPending} onChange={() => toggle(item)} /><span><strong>{item.subject}</strong><small>{item.is_optional ? 'Optional · independently included' : 'Technical · required'}</small></span></label>)}</fieldset>
               <footer><Button type="submit" disabled={!name.trim() || interview.update.isPending}>{interview.update.isPending ? 'Saving…' : 'Save bundle'}</Button><Button type="button" tone="secondary" disabled={interview.copy.isPending} onClick={() => interview.copy.mutate({ bundleId: selected.id, body: { name: `${selected.name} copy` } }, { onSuccess: bundle => onSelect(bundle.id) })}>Copy bundle</Button><Button type="button" tone="quiet" disabled={interview.remove.isPending} onClick={() => { if (window.confirm(`Delete ${selected.name}?`)) interview.remove.mutate(selected, { onSuccess: () => onSelect(null) }) }}>Delete</Button></footer>
             </form>
@@ -875,7 +901,9 @@ export function InterviewHub({ navigate, mode, selection }: PageProps & { mode?:
     if (mode === 'refresher' && interview.refreshers.data?.every(item => item.state === 'unavailable')) return 'unavailable'
     return 'ready'
   })()
-  return <main className="sb-page sb-interview" data-interview-state={rootState}><PageIntro eyebrow="Interview prep · Senior backend" title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro>
+  const currentLevel = workspace.currentGoal?.target_level
+  const eyebrow = currentLevel ? `Interview prep · ${ROLE_LEVEL_COPY[currentLevel].label}` : 'Interview prep'
+  return <main className="sb-page sb-interview" data-interview-state={rootState}><PageIntro eyebrow={eyebrow} title="Choose the mode you need"><span>Generic product-company context; no company-specific or hiring-readiness claim.</span></PageIntro>
     {activeChoice && <section className="sb-mode-detail" data-testid="interview-mode-detail" data-mode={mode}>
       <span>{activeChoice.meta}</span>
       <activeChoice.Icon />

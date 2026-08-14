@@ -8,13 +8,30 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from math import ceil
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
 
 from yuno.modules.runner.domain import OutputChunk, RunnerProcessOutcome
+from yuno.modules.runner.platform_probe import (
+    PlatformSnapshot,
+    default_platform_snapshot,
+    evaluate_platform,
+)
 from yuno.modules.runner.ports import RunnerProcessSpec
 from yuno.shared.infrastructure.processes import process_identity
+
+_PLATFORM_DIAGNOSTIC_DETAIL = {
+    "unsupported-platform": (
+        "Host platform, architecture, or virtualization layer is outside "
+        "the IDK-005 approved runner matrix (Ubuntu 24.04 LTS, x86_64 or "
+        "arm64, host or VM only)."
+    ),
+    "platform-unverifiable": (
+        "Host platform identity could not be verified from local OS metadata."
+    ),
+}
 
 
 def memory_limit_enforced() -> bool:
@@ -35,14 +52,33 @@ def workspace_usage(path: Path) -> tuple[int, int]:
 
 
 def detect_command(
-    language: str, capability: str, command: str | None, prefix: str | None
+    language: str,
+    capability: str,
+    command: str | None,
+    prefix: str | None,
+    *,
+    platform_probe: Callable[[], PlatformSnapshot] = default_platform_snapshot,
 ) -> dict[str, str]:
+    # IDK-005 section 1/3: a Java item may only report `supported` on the
+    # approved Ubuntu 24.04 x86_64/arm64 host-or-VM row. This gate runs
+    # before any command/version check and is independent of the separate
+    # `runner_enabled` activation gate in `service.policy_ready`.
+    platform_outcome = evaluate_platform(platform_probe())
+    if platform_outcome.diagnostic_code is not None:
+        return {
+            "language": language,
+            "capability": capability,
+            "state": "incompatible",
+            "diagnostic_code": platform_outcome.diagnostic_code,
+            "detail": _PLATFORM_DIAGNOSTIC_DETAIL[platform_outcome.diagnostic_code],
+        }
     path = shutil.which(command) if command else None
     if path is None:
         return {
             "language": language,
             "capability": capability,
             "state": "missing",
+            "diagnostic_code": None,
             "detail": "Configured toolchain command is not present.",
         }
     if prefix:
@@ -60,12 +96,14 @@ def detect_command(
                 "language": language,
                 "capability": capability,
                 "state": "incompatible",
+                "diagnostic_code": None,
                 "detail": "Detected toolchain does not match the approved version prefix.",
             }
     return {
         "language": language,
         "capability": capability,
         "state": "supported",
+        "diagnostic_code": None,
         "detail": "Configured toolchain detected at request time.",
     }
 

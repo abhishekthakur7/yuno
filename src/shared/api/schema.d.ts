@@ -2603,7 +2603,7 @@ export interface components {
          * DimensionOutcome
          * @enum {string}
          */
-        DimensionOutcome: "pass" | "trade-off" | "factual-correction" | "ambiguity-unresolved";
+        DimensionOutcome: "pass" | "trade-off" | "factual-correction" | "not-demonstrated" | "ambiguity-unresolved";
         /** DisclosureAcceptRequest */
         DisclosureAcceptRequest: {
             /** Disclosure Version */

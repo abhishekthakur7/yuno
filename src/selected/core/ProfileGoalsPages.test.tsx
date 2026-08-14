@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LearningStateProvider } from '../../shared/state'
 import type { GoalWorkspace } from '../../shared/api/profile-goals'
-import { Home, Onboarding, Roadmap } from './CorePages'
+import { Home, Onboarding, ROLE_LEVEL_AUDIENCE_NOTE, ROLE_LEVEL_COPY, ROLE_LEVEL_HEADING, ROLE_LEVEL_TITLE_VARIATION_HELPER, Roadmap, TARGET_CAPABILITY_HELPER } from './CorePages'
 import type { DiagnosticSession } from '../../shared/api/diagnostics'
 
 const profile = { experience: null, strengths: null, weaknesses: null, current_goal_id: null, profile_revision: 1, updated_at: '2026-08-12T00:00:00Z' }
@@ -244,17 +244,39 @@ describe('profile-backed goal pages', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'System design interviews' })).not.toBeInTheDocument())
   })
 
-  it('offers only approved target levels with the audience statement', async () => {
+  it('offers only approved target levels with the exact role-competency-copy-v1 copy, programmatically associated with the level control', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestFrom(input, init).url
       if (url.endsWith('/canonical/versions')) return json([{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }])
       if (url.endsWith('/profile')) return json(profile)
+      if (url.endsWith('/diagnostics/active')) return json({ message: 'Not found' }, 404)
       return json([])
     }))
     renderPage(<Onboarding navigate={vi.fn()} />)
-    const level = await screen.findByRole('combobox', { name: /Target level/i })
-    expect(Array.from((level as HTMLSelectElement).options, (option) => option.text)).toEqual(['Mid-level', 'Senior', 'Staff'])
-    expect(screen.getByText(/for experienced backend engineers and does not include a beginner track/i)).toBeInTheDocument()
+    expect(await screen.findByText(ROLE_LEVEL_HEADING)).toBeInTheDocument()
+    expect(screen.getByText(ROLE_LEVEL_AUDIENCE_NOTE)).toBeInTheDocument()
+    expect(screen.getByText(ROLE_LEVEL_TITLE_VARIATION_HELPER)).toBeInTheDocument()
+
+    const level = screen.getByRole('combobox', { name: /Target level/i })
+    expect(Array.from((level as HTMLSelectElement).options, (option) => option.text)).toEqual([
+      ROLE_LEVEL_COPY['Mid-level'].label,
+      ROLE_LEVEL_COPY.Senior.label,
+      ROLE_LEVEL_COPY.Staff.label,
+    ])
+    // Default selection is Senior; its exact approved description must be shown and programmatically
+    // associated with the level control via its accessible description (aria-describedby).
+    const seniorDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Senior.description}`
+    expect(screen.getByRole('combobox', { name: /Target level/i, description: seniorDescription })).toBe(level)
+
+    await userEvent.selectOptions(level, ROLE_LEVEL_COPY.Staff.label)
+    const staffDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Staff.description}`
+    expect(screen.getByRole('combobox', { name: /Target level/i, description: staffDescription })).toBe(level)
+
+    // The target-capability helper must be the exact approved copy and programmatically associated
+    // with the capability control via its accessible description (aria-describedby).
+    const capability = screen.getByRole('combobox', { name: /Target capability/i })
+    expect(screen.getByText(TARGET_CAPABILITY_HELPER)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Target capability/i, description: TARGET_CAPABILITY_HELPER })).toBe(capability)
   })
 
   it('skips every optional setup step and opens the persisted roadmap preview', async () => {

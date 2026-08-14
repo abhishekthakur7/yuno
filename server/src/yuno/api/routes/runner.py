@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
@@ -30,6 +31,10 @@ from yuno.modules.runner.models import (
     RunnerRecordBodyRow,
     RunnerRecordRow,
 )
+from yuno.modules.runner.platform_probe import (
+    PlatformSnapshot,
+    default_platform_snapshot,
+)
 from yuno.modules.runner.repository import RunnerRepository
 from yuno.modules.runner.service import (
     capabilities,
@@ -49,11 +54,27 @@ from yuno.shared.domain.ids import new_id
 router = APIRouter(tags=["runner"])
 
 
+def _resolve_platform_probe(request: Request) -> Callable[[], PlatformSnapshot]:
+    """Production always uses the real OS probe. Tests may set
+    `app.state.runner_platform_probe` to a fake snapshot factory, mirroring
+    how `app.state.runner_process_port` is overridden for the process port.
+    """
+    return (
+        getattr(request.app.state, "runner_platform_probe", None)
+        or default_platform_snapshot
+    )
+
+
 @router.get("/runner/capabilities", response_model=RunnerCapabilitiesResponse)
-def get_capabilities(settings: Annotated[Settings, Depends(get_settings_dependency)]):
+def get_capabilities(
+    request: Request, settings: Annotated[Settings, Depends(get_settings_dependency)]
+):
+    platform_probe = _resolve_platform_probe(request)
     return capabilities(
         settings,
-        detect_command,
+        lambda language, capability, command, prefix: detect_command(
+            language, capability, command, prefix, platform_probe=platform_probe
+        ),
         memory_limit_is_enforced=memory_limit_enforced(),
     )
 
@@ -81,6 +102,7 @@ def confirm_runner(
             body.capability,
             settings.runner_javac_command,
             settings.runner_java_version_prefix,
+            platform_probe=_resolve_platform_probe(request),
         )
         row = create_confirmation(
             session,

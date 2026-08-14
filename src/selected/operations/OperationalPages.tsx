@@ -38,6 +38,7 @@ import { deleteInterviewSessionBody } from '../../shared/api/interview'
 import { cancelJob, jobsQueryOptions, retryJob } from '../../shared/api/jobs'
 import { acceptCanonicalUpdate, canonicalUpdateQueryOptions, decideCanonicalUpdate, type CanonicalUpdateItem, type CanonicalUpdateResolution } from '../../shared/api/canonical-updates'
 import { ApiError } from '../../shared/api/queries'
+import { ROLE_LEVEL_COPY, ROLE_LEVEL_TITLE_VARIATION_HELPER, TARGET_CAPABILITY_HELPER } from '../core/CorePages'
 import { JobConnectionStatus } from '../../shared/job-events'
 import './operations.css'
 
@@ -363,8 +364,11 @@ function CurrentGoalSettings({ workspace }: { workspace: ReturnType<typeof usePr
   return <section className="so-panel"><div className="so-panel-head"><div><SlidersHorizontal size={20} /><h2>Current goal</h2></div><span className="so-chip so-chip--gray">{goal.path === 'learn' ? 'Learning' : 'Interview'}</span></div>
     <label>Goal name<input type="text" value={name} onChange={(event) => setName(event.target.value)} /></label>
     <label>{goal.path === 'learn' ? 'Subject' : 'Role'}<input type="text" value={context} onChange={(event) => setContext(event.target.value)} /></label>
-    <label>Target level<select value={targetLevel} onChange={(event) => setTargetLevel(event.target.value as typeof targetLevel)}><option>Mid-level</option><option>Senior</option><option>Staff</option></select></label>
-    <label>Target capability<select value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as typeof targetCapability)}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
+    <label>Target level<select aria-describedby="so-target-level-helper so-target-level-description" value={targetLevel} onChange={(event) => setTargetLevel(event.target.value as typeof targetLevel)}><option value="Mid-level">{ROLE_LEVEL_COPY['Mid-level'].label}</option><option value="Senior">{ROLE_LEVEL_COPY.Senior.label}</option><option value="Staff">{ROLE_LEVEL_COPY.Staff.label}</option></select></label>
+    <p id="so-target-level-helper" className="so-help">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</p>
+    <p id="so-target-level-description" className="so-help">{ROLE_LEVEL_COPY[targetLevel].description}</p>
+    <label>Target capability<select aria-describedby="so-target-capability-helper" value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as typeof targetCapability)}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select></label>
+    <p id="so-target-capability-helper" className="so-help">{TARGET_CAPABILITY_HELPER}</p>
     <p className="so-help">This edit applies only to the current goal. Its server revision protects concurrent changes.</p>
     {workspace.saveGoal.isError && <p className="so-error" role="alert">{stale ? 'The goal changed before this save. The latest revision was reloaded; review it before saving again.' : 'The current goal was not saved. Review the values and try again.'}</p>}
     {workspace.saveGoal.isSuccess && unchanged && <p className="so-help" role="status">Current goal settings saved.</p>}

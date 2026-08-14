@@ -18,6 +18,16 @@ import { writeSamples, type Sample, type Gap } from './samples'
 const APP_ROOT = '[data-app="yuno-learning"]'
 const REPETITIONS = 6
 
+// Playwright colours its assertion messages, and those escape codes would end up in a
+// committed report; strip them so a recorded gap reason is readable plain text.
+function stripAnsi(message: string): string {
+  return message.replace(/\u001b\[[0-9;]*m/g, '')
+}
+
+function gapReason(error: unknown): string {
+  return stripAnsi(error instanceof Error ? error.message : String(error))
+}
+
 const samples: Sample[] = []
 const gaps: Gap[] = []
 
@@ -70,7 +80,7 @@ test('viewport-overflow: 14 canonical routes at each required viewport', async (
         gaps.push({
           measurement: 'viewport-overflow',
           subject,
-          reason: `route did not load against the seeded backend: ${error instanceof Error ? error.message : String(error)}`,
+          reason: `route did not load against the seeded backend: ${gapReason(error)}`,
         })
       }
     }
@@ -195,7 +205,7 @@ test('viewport-input-latency: text input, select and button controls at each req
         gaps.push({
           measurement: 'viewport-input-latency',
           subject: `${control.label} @ ${viewport.width}x${viewport.height}`,
-          reason: `control was not reachable against the seeded dataset: ${error instanceof Error ? error.message : String(error)}`,
+          reason: `control was not reachable against the seeded dataset: ${gapReason(error)}`,
         })
       }
     }
