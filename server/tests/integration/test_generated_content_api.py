@@ -239,6 +239,11 @@ def _source(
     return source.id
 
 
+# Generous on purpose: these gates wait on events, so a healthy run fires them
+# in milliseconds. The timeout only bounds a genuinely stuck run.
+_GATE_TIMEOUT = 60.0
+
+
 @dataclass
 class FakeGenerationAdapter:
     body: str
@@ -650,6 +655,90 @@ def test_explicit_regeneration_swaps_only_after_success_and_failure_keeps_prior_
     assert preserved["generation"]["retryable"] is True
 
 
+def test_two_concurrent_generate_calls_single_flight_to_one_persisted_attempt(
+    client: TestClient,
+    engine: Engine,
+    uow_factory: UnitOfWorkFactory,
+) -> None:
+    """Two overlapping generate requests collapse to one job and one attempt.
+
+    The gates below wait on `threading.Event`s rather than sleeping, but their
+    timeout still has to outlast the background dispatcher thread being
+    scheduled. An earlier version used 5s, which is a wall-clock bet that fails
+    whenever the machine is loaded -- the previous flake in this file. The
+    generous `_GATE_TIMEOUT` costs nothing on a healthy run (the events fire in
+    milliseconds) and only matters when the alternative is a false failure.
+
+    Note the blocking happens inside the fake adapter's `generate()`, which runs
+    outside any write transaction, so this test does not contend on SQLite's
+    single-writer lock the way an overlapping *enqueue* would.
+    """
+    goal_id, topic_id = _goal(client, uow_factory, suffix="concurrent")
+    source_id = _source(
+        uow_factory, availability=SourceAvailability.AVAILABLE, suffix="concurrent"
+    )
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingAdapter(FakeGenerationAdapter):
+        def generate(self, request: GenerateRequest) -> GenerateResult:
+            entered.set()
+            assert release.wait(timeout=_GATE_TIMEOUT), "blocking adapter was never released"
+            return super().generate(request)
+
+    adapter = BlockingAdapter("Single-flight body.", source_id)
+    install_provider_fake(client, adapter)
+    results: list[object] = []
+    first = threading.Thread(
+        target=lambda: results.append(
+            _generate(client, goal_id, topic_id, key="concurrent-a")
+        )
+    )
+    first.start()
+    try:
+        assert entered.wait(timeout=_GATE_TIMEOUT), "first generation never reached adapter"
+        second = _generate(client, goal_id, topic_id, key="concurrent-b")
+    finally:
+        release.set()
+        first.join(timeout=_GATE_TIMEOUT)
+    assert not first.is_alive()
+    first_response = results[0]
+    assert first_response.status_code == 202
+    assert second.status_code == 202
+    assert second.json()["job_id"] == first_response.json()["job_id"]
+    assert second.json()["deduplicated"] is True
+    wait_for_job(client, first_response)
+    assert adapter.calls == 1
+
+    first_replay = _generate(client, goal_id, topic_id, key="concurrent-a")
+    joined_replay = _generate(client, goal_id, topic_id, key="concurrent-b")
+    assert first_replay.status_code == joined_replay.status_code == 202
+    assert first_replay.json()["job_id"] == first_response.json()["job_id"]
+    assert joined_replay.json()["job_id"] == first_response.json()["job_id"]
+    assert first_replay.json()["deduplicated"] is True
+    assert joined_replay.json()["deduplicated"] is True
+    assert adapter.calls == 1
+
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM generated_artifacts")
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM learning_content_idempotency")
+            ).scalar_one()
+            == 2
+        )
+        assert (
+            connection.execute(
+                text("SELECT count(*) FROM artifact_generation_attempts")
+            ).scalar_one()
+            == 1
+        )
+
 def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
     client: TestClient,
     engine: Engine,
@@ -662,6 +751,14 @@ def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
     adapter = FakeGenerationAdapter("Keyed body.", source_id)
     install_provider_fake(client, adapter)
     essential = _generate(client, goal_id, topic_id, key="included-essential")
+    # Await the first job before enqueuing the second. This test is about cache
+    # *keys* being distinct per layer, not about concurrency: overlapping the two
+    # made a second writer wait on SQLite's single-writer lock, and once that wait
+    # exceeded `busy_timeout` (5s, see infrastructure/database.py) the loser raised
+    # `OperationalError`, which the provider boundary's blanket `except Exception`
+    # reports as the misleading `process-failed`. Serialising keeps every assertion
+    # below intact and removes an interleaving the assertions never depended on.
+    wait_for_job(client, essential)
     production = client.post(
         f"/api/v1/goals/{goal_id}/topics/{topic_id}/generate",
         params={"layer": "Production"},
@@ -669,7 +766,6 @@ def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
     )
     assert essential.status_code == production.status_code == 202
     assert essential.json()["job_id"] != production.json()["job_id"]
-    wait_for_job(client, essential)
     wait_for_job(client, production)
     assert adapter.calls == 2
     with engine.connect() as connection:
