@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
+
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from yuno.modules.provider.domain import (
     ProviderFailureClassification,
@@ -58,6 +61,38 @@ class UnavailableAdapter:
 
     def invoke(self, *_args, **_kwargs):
         raise UnavailableError("Provider configuration is unavailable.")
+
+
+class CrashingAdapter:
+    """A provider whose process itself dies mid-invocation."""
+
+    provider = ProviderName.CODEX.value
+    adapter_version = "crashing"
+    contract_version = "crashing"
+
+    def invoke(self, *_args, **_kwargs):
+        raise RuntimeError("provider process crashed unexpectedly")
+
+
+class LockTimeoutAdapter:
+    """Simulates the diagnosed defect: a SQLite `busy_timeout` (5000ms,
+    `shared/infrastructure/database.py`) expiring under concurrent writers
+    while the adapter is invoked, exactly like the preserved failing run
+    that motivated this fix (5.407s call vs. 0.0017s for the identical
+    request through the identical fake adapter). No provider process is
+    involved, so this must not be reported the same way as `CrashingAdapter`.
+    """
+
+    provider = ProviderName.CODEX.value
+    adapter_version = "lock-timeout"
+    contract_version = "lock-timeout"
+
+    def invoke(self, *_args, **_kwargs):
+        raise OperationalError(
+            "UPDATE provider_requests SET lifecycle=? WHERE id=?",
+            (),
+            sqlite3.OperationalError("database is locked"),
+        )
 
 
 def _provider_execution_context(client):
@@ -240,3 +275,83 @@ def test_unavailable_provider_is_a_recoverable_configuration_failure(client) -> 
         ProviderFailureClassification.AUTHENTICATION_UNAVAILABLE
     )
     assert result.retryable is True
+
+
+def test_crashed_provider_process_is_classified_process_failed(client, engine) -> None:
+    owner_id, job, disclosure_id = _provider_execution_context(client)
+
+    result = execute_provider(
+        client.app.state.uow_factory,
+        CrashingAdapter(),
+        ProviderInput(
+            owner_id=owner_id,
+            goal_id=None,
+            job_id=job.job_id,
+            purpose="evaluation",
+            context={"answer_ref": "answer-1"},
+            context_ref_hash="context-hash",
+            disclosure_id=disclosure_id,
+            output_schema_version="evaluation-v1",
+        ),
+        validator=None,
+    )
+
+    assert result.state is ProviderResultState.FAILED
+    assert result.failure_classification is ProviderFailureClassification.PROCESS_FAILED
+    assert result.retryable is True
+    with engine.connect() as connection:
+        persisted = connection.execute(
+            text(
+                "SELECT diagnostic_classification FROM provider_requests "
+                "WHERE job_id = :job_id"
+            ),
+            {"job_id": job.job_id},
+        ).scalar_one()
+    assert persisted == "process-failed"
+
+
+def test_storage_lock_timeout_is_classified_distinctly_from_a_process_failure(
+    client, engine
+) -> None:
+    """Reproduces the diagnosed defect: `execute_provider`'s blanket
+    `except Exception` used to collapse a SQLite `busy_timeout` expiry
+    (`sqlalchemy.exc.OperationalError`, no provider process involved) into
+    the same `process-failed` classification as a genuinely crashed CLI.
+    A lock timeout must now be its own retryable classification, so an
+    operator (or a retry policy) can tell contention apart from a crash.
+    """
+    owner_id, job, disclosure_id = _provider_execution_context(client)
+
+    result = execute_provider(
+        client.app.state.uow_factory,
+        LockTimeoutAdapter(),
+        ProviderInput(
+            owner_id=owner_id,
+            goal_id=None,
+            job_id=job.job_id,
+            purpose="evaluation",
+            context={"answer_ref": "answer-1"},
+            context_ref_hash="context-hash",
+            disclosure_id=disclosure_id,
+            output_schema_version="evaluation-v1",
+        ),
+        validator=None,
+    )
+
+    assert result.state is ProviderResultState.FAILED
+    assert result.failure_classification is (
+        ProviderFailureClassification.STORAGE_CONTENTION
+    )
+    assert result.failure_classification is not (
+        ProviderFailureClassification.PROCESS_FAILED
+    )
+    assert result.retryable is True
+    with engine.connect() as connection:
+        persisted = connection.execute(
+            text(
+                "SELECT diagnostic_classification FROM provider_requests "
+                "WHERE job_id = :job_id"
+            ),
+            {"job_id": job.job_id},
+        ).scalar_one()
+    assert persisted == "storage-contention"

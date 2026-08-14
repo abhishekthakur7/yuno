@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from tests.job_assertions import wait_for_job
 from tests.provider_fakes import (
@@ -277,6 +278,24 @@ class FakeGenerationAdapter:
                 ),
                 GeneratedClaim("Routine explanatory content.", "routine"),
             ),
+        )
+
+
+class LockTimeoutGenerationAdapter(FakeGenerationAdapter):
+    """Simulates the diagnosed defect at the fake-adapter boundary: a
+    SQLite `busy_timeout` (5000ms, `shared/infrastructure/database.py`)
+    expiring under concurrent writers while a `generate_topic_content`
+    provider call is in flight, exactly like the preserved failing run
+    that motivated this fix (5.407s call vs. 0.0017s for the identical
+    request through the identical fake adapter).
+    """
+
+    def generate(self, request: GenerateRequest) -> GenerateResult:
+        self.calls += 1
+        raise OperationalError(
+            "UPDATE provider_requests SET lifecycle=? WHERE id=?",
+            (),
+            sqlite3.OperationalError("database is locked"),
         )
 
 
@@ -839,6 +858,53 @@ def test_invalid_generation_result_rolls_back_artifact_snapshot_claims_and_citat
     assert artifact.body_ref is None
     assert artifact.body_hash is None
     assert artifact.current_snapshot_id is None
+
+
+def test_storage_contention_cause_is_recoverable_from_job_diagnostic_not_lost_as_process_failed(
+    client: TestClient,
+    engine: Engine,
+    uow_factory: UnitOfWorkFactory,
+) -> None:
+    """This is the exact defect the preserved failing run diagnosed: a
+    `generate_topic_content` job failed because a SQLite lock timeout
+    (`OperationalError`) fired inside the provider boundary. Before this
+    fix, `execute_provider`'s blanket `except Exception` collapsed that
+    into `process-failed`, and `apply_operation`/`ReplayAdapter` in
+    `api/app.py` then discarded the exception entirely behind the fixed
+    string `job-operation-failed` / `external-operation-failed`, leaving
+    only `job_bodies.diagnostic` as a place to recover the real cause —
+    and even that column held nothing useful. Both are fixed now: the
+    classification is distinct and retryable, and the underlying cause is
+    recoverable from `job_bodies.diagnostic`, while the HTTP response
+    still only ever reports the generic, scrubbed diagnostic.
+    """
+    goal_id, topic_id = _goal(client, uow_factory, suffix="storage-contention")
+    source_id = _source(
+        uow_factory, availability=SourceAvailability.AVAILABLE, suffix="storage-contention"
+    )
+    adapter = LockTimeoutGenerationAdapter("unused", source_id)
+    install_provider_fake(client, adapter)
+
+    response = _generate(client, goal_id, topic_id, key="storage-contention")
+    assert response.status_code == 202
+    completed = wait_for_job(client, response, "failed")
+    assert adapter.calls == 1
+
+    # The HTTP-facing diagnostic stays generic by design: `safe_job_diagnostic`
+    # (api/contracts.py) deliberately scrubs it regardless of cause.
+    assert completed["diagnostic"] == "job-execution-failure"
+
+    job_id = response.json()["job_id"]
+    with engine.connect() as connection:
+        diagnostic = connection.execute(
+            text("SELECT diagnostic FROM job_bodies WHERE job_id = :job_id"),
+            {"job_id": job_id},
+        ).scalar_one()
+    assert diagnostic is not None
+    # The real cause — a storage-layer lock timeout, not a crashed provider
+    # process — is now recoverable from the DB-only diagnostic column.
+    assert "storage-contention" in diagnostic
+    assert "process-failed" not in diagnostic
 
 
 def test_schema_invalid_result_is_quarantined_and_never_replaces_prior_ready_content(

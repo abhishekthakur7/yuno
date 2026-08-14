@@ -36,6 +36,7 @@ class ProviderFailureClassification(StrEnum):
     NONZERO_EXIT = "nonzero-exit"
     PROVIDER_REPORTED_FAILURE = "provider-reported-failure"
     PROCESS_FAILED = "process-failed"
+    STORAGE_CONTENTION = "storage-contention"
     OUTPUT_LIMIT = "output-limit"
     CANCELLED = "cancelled"
     SCHEMA_INVALID = "schema-invalid"

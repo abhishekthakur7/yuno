@@ -177,6 +177,28 @@ def _publish_export(package, uow_factory):
         return operation
 
 
+def _operation_failure_diagnostic(exc: Exception, *, prefix: str) -> str:
+    """Reduce an arbitrary job-operation exception to a bounded, safe string.
+
+    Both `apply_operation` and `ReplayAdapter` (below) catch exceptions a
+    domain operation or a live provider call can raise — including ones
+    that wrap provider payloads or learner content in their message — so
+    only the exception's type name is unconditionally safe to record.
+    `current_state` is the one message-adjacent attribute the domain error
+    taxonomy (`shared/domain/errors.py`) restricts to short, enum-like
+    values (a `.value` off some state/classification enum, never free
+    text), so it is safe to fold in when present: it is what lets a
+    provider `STORAGE_CONTENTION`/`PROCESS_FAILED`/etc. classification
+    survive the `UnavailableError` raised at the provider boundary
+    (`api/provider_runtime.py`) all the way to this job's diagnostic.
+    """
+    classification = getattr(exc, "current_state", None)
+    diagnostic = f"{prefix}:{type(exc).__name__}"
+    if isinstance(classification, str) and classification:
+        diagnostic = f"{diagnostic}:{classification}"
+    return diagnostic
+
+
 def _complete_delete(request: JobRequest, uow_factory):
     with uow_factory() as uow:
         operation_id = str(request.payload["operation_id"])
@@ -363,7 +385,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except JobPreparedFailure:
                     raise
                 except Exception as exc:
-                    raise JobPreparedFailure("job-operation-failed") from exc
+                    diagnostic = _operation_failure_diagnostic(
+                        exc, prefix="job-operation-failed"
+                    )
+                    log_event(
+                        "job.operation.failed",
+                        owner_id=execution.request.owner_id,
+                        goal_id=execution.request.goal_id,
+                        job_id=execution.request.requested_job_id,
+                        correlation_id=execution.request.correlation_id,
+                        request_id=execution.request.request_id,
+                        lifecycle="failed",
+                        diagnostic_classification=diagnostic,
+                    )
+                    raise JobPreparedFailure(diagnostic) from exc
                 if published is None:
                     if not execution.request.request_ref:
                         raise RuntimeError(
@@ -397,11 +432,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             class ReplayAdapter:
                 def __init__(
-                    self, method: str, value: object, failure: Exception | None
+                    self,
+                    method: str,
+                    value: object,
+                    failure: Exception | None,
+                    diagnostic: str = "external-operation-failed",
                 ) -> None:
                     self.method = method
                     self.value = value
                     self.failure = failure
+                    self.diagnostic = diagnostic
 
                 def __getattr__(self, name: str):
                     if name != self.method:
@@ -409,9 +449,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
                     def replay(*_args, **_kwargs):
                         if self.failure is not None:
-                            raise JobPreparedFailure(
-                                "external-operation-failed"
-                            ) from self.failure
+                            raise JobPreparedFailure(self.diagnostic) from self.failure
                         return self.value
 
                     return replay
@@ -445,6 +483,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         external_failure = RuntimeError(
                             f"Job {kind!r} did not reach its external operation."
                         )
+                    external_diagnostic = "external-operation-failed"
+                    if external_failure is not None:
+                        external_diagnostic = _operation_failure_diagnostic(
+                            external_failure, prefix="external-operation-failed"
+                        )
+                        log_event(
+                            "job.operation.failed",
+                            owner_id=execution.request.owner_id,
+                            goal_id=execution.request.goal_id,
+                            job_id=execution.request.requested_job_id,
+                            correlation_id=execution.request.correlation_id,
+                            request_id=execution.request.request_id,
+                            lifecycle="failed",
+                            diagnostic_classification=external_diagnostic,
+                        )
                     execution.checkpoint()
                     return JobCompletion(
                         result_for(kind, execution),
@@ -453,7 +506,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             execution,
                             session,
                             operation,
-                            ReplayAdapter(method, external_result, external_failure),
+                            ReplayAdapter(
+                                method,
+                                external_result,
+                                external_failure,
+                                external_diagnostic,
+                            ),
                         ),
                     )
 

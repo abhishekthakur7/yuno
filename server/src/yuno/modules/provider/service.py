@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 
 from yuno.modules.audit.domain import AuditEvent
@@ -153,6 +154,30 @@ def require_disclosure(
     return disclosure
 
 
+_SQLITE_CONTENTION_CODES = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+
+
+def _is_storage_contention(exc: BaseException) -> bool:
+    """Whether `exc` is SQLite refusing a write because another writer holds the lock.
+
+    Deliberately narrower than "is a `sqlite3.OperationalError`": that class
+    also covers a missing table and a corrupt database image, and reporting
+    those as contention would only move the mislabelling somewhere else.
+    `SQLITE_BUSY`/`SQLITE_LOCKED` are the two contention codes, and the driver
+    sets `sqlite_errorcode` on every exception it raises; the message check is
+    the fallback for an exception constructed without the driver (which is how
+    a test simulates one).
+    """
+    cause = exc if isinstance(exc, sqlite3.OperationalError) else getattr(exc, "orig", None)
+    if not isinstance(cause, sqlite3.OperationalError):
+        return False
+    code = getattr(cause, "sqlite_errorcode", None)
+    if code is not None:
+        return code in _SQLITE_CONTENTION_CODES
+    message = str(cause).lower()
+    return "locked" in message or "busy" in message
+
+
 def execute_provider(
     uow_factory: UnitOfWorkFactory,
     adapter: ProviderPort,
@@ -243,7 +268,19 @@ def execute_provider(
             ),
             retryable=True,
         )
-    except Exception:  # noqa: BLE001 -- external provider boundary is fail-closed
+    except Exception as exc:  # noqa: BLE001 -- external provider boundary is fail-closed
+        # A storage-layer lock timeout (e.g. SQLite `busy_timeout`,
+        # `shared/infrastructure/database.py`, exceeded under concurrent
+        # writers) is not a process failure: no provider process was
+        # involved, so it must not collapse into PROCESS_FAILED, or an
+        # operator can't tell "the CLI crashed" apart from "a writer was
+        # waiting on a lock". This module must stay framework-free (spec
+        # SYS-01/NFR-07, enforced by `lint-imports`), so SQLAlchemy's own
+        # exception classes can't be imported here to `isinstance`-check
+        # against; instead this recognises the condition by the stdlib
+        # DBAPI cause SQLAlchemy always preserves as `.orig` on the
+        # exception it raises.
+        contention = _is_storage_contention(exc)
         result = ProviderResult(
             state=ProviderResultState.FAILED,
             provider=ProviderName(adapter.provider),
@@ -252,7 +289,11 @@ def execute_provider(
             schema_version=request.output_schema_version,
             payload=None,
             result_hash=None,
-            failure_classification=ProviderFailureClassification.PROCESS_FAILED,
+            failure_classification=(
+                ProviderFailureClassification.STORAGE_CONTENTION
+                if contention
+                else ProviderFailureClassification.PROCESS_FAILED
+            ),
             retryable=True,
         )
     with uow_factory() as uow:
