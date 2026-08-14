@@ -283,7 +283,8 @@ class FakeGenerationAdapter:
 
 class LockTimeoutGenerationAdapter(FakeGenerationAdapter):
     """Simulates the diagnosed defect at the fake-adapter boundary: a
-    SQLite `busy_timeout` (5000ms, `shared/infrastructure/database.py`)
+    SQLite `busy_timeout` (`shared/infrastructure/database.py`, 5000ms at
+    the time of the recorded run, since raised to 30000ms)
     expiring under concurrent writers while a `generate_topic_content`
     provider call is in flight, exactly like the preserved failing run
     that motivated this fix (5.407s call vs. 0.0017s for the identical
@@ -773,7 +774,7 @@ def test_changing_an_included_layer_component_creates_a_distinct_cache_entry(
     # Await the first job before enqueuing the second. This test is about cache
     # *keys* being distinct per layer, not about concurrency: overlapping the two
     # made a second writer wait on SQLite's single-writer lock, and once that wait
-    # exceeded `busy_timeout` (5s, see infrastructure/database.py) the loser raised
+    # exceeded `busy_timeout` (see infrastructure/database.py) the loser raised
     # `OperationalError`, which the provider boundary's blanket `except Exception`
     # reports as the misleading `process-failed`. Serialising keeps every assertion
     # below intact and removes an interleaving the assertions never depended on.

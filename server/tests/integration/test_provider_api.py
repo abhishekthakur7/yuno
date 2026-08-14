@@ -75,8 +75,9 @@ class CrashingAdapter:
 
 
 class LockTimeoutAdapter:
-    """Simulates the diagnosed defect: a SQLite `busy_timeout` (5000ms,
-    `shared/infrastructure/database.py`) expiring under concurrent writers
+    """Simulates the diagnosed defect: a SQLite `busy_timeout`
+    (`shared/infrastructure/database.py`, 5000ms at the time of the
+    recorded run, since raised to 30000ms) expiring under concurrent writers
     while the adapter is invoked, exactly like the preserved failing run
     that motivated this fix (5.407s call vs. 0.0017s for the identical
     request through the identical fake adapter). No provider process is

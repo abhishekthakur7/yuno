@@ -20,6 +20,15 @@ def create_engine_for(url: str) -> Engine:
     foreign_keys=ON` on every new DBAPI connection, plus `journal_mode=WAL`
     and a `busy_timeout` so concurrent readers don't fail immediately
     against a writer.
+
+    WAL permits exactly one writer, so a contended write waits rather than
+    failing. `busy_timeout` bounds that wait: on expiry SQLite raises
+    "database is locked", which the provider service classifies as
+    `storage-contention` and surfaces as a failed job. 30s is chosen over
+    the previous 5s because a wait is recoverable and a failed job is not
+    -- the job the learner started is lost either way at expiry, so the
+    only thing a short timeout buys is losing it sooner. It is a ceiling,
+    not a delay: an uncontended write never waits at all.
     """
     engine = create_engine(url)
 
@@ -28,7 +37,7 @@ def create_engine_for(url: str) -> Engine:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
     return engine
