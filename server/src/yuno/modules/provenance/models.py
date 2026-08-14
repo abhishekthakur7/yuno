@@ -19,14 +19,34 @@ class SourceRow(Base):
     __tablename__ = "sources"
     __table_args__ = (
         UniqueConstraint("id", "owner_id", name="uq_sources_id_owner"),
+        ForeignKeyConstraint(
+            ["superseded_by_source_id", "owner_id"],
+            ["sources.id", "sources.owner_id"],
+            name="fk_sources_superseded_by_source_owner",
+        ),
         CheckConstraint("length(trim(origin)) > 0", name="origin_non_blank"),
         CheckConstraint("length(trim(source_type)) > 0", name="source_type_non_blank"),
         CheckConstraint(
-            "length(trim(license_status)) > 0", name="license_status_non_blank"
+            "license_status IN ('approved-open-license','approved-link-only')",
+            name="license_status_valid",
         ),
         CheckConstraint(
             "availability_status IN ('available','unavailable','withdrawn')",
             name="availability_status_valid",
+        ),
+        CheckConstraint(
+            "withdrawal_reason IN ("
+            "'license-revoked',"
+            "'license-changed-incompatible',"
+            "'publisher-retracted',"
+            "'factually-superseded',"
+            "'registry-declined'"
+            ") OR withdrawal_reason IS NULL",
+            name="withdrawal_reason_valid",
+        ),
+        CheckConstraint(
+            "(availability_status = 'withdrawn') = (withdrawal_reason IS NOT NULL)",
+            name="withdrawal_reason_required_iff_withdrawn",
         ),
         Index(
             "ix_sources_owner_availability",
@@ -42,6 +62,8 @@ class SourceRow(Base):
     body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     license_status: Mapped[str] = mapped_column(Text, nullable=False)
     availability_status: Mapped[str] = mapped_column(Text, nullable=False)
+    withdrawal_reason: Mapped[str | None] = mapped_column(Text)
+    superseded_by_source_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = utc_timestamp_column()
     updated_at: Mapped[str] = utc_timestamp_column()
     body: Mapped[SourceBodyRow | None] = relationship(

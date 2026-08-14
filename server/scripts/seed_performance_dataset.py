@@ -282,6 +282,64 @@ def _provision_owner(uow_factory) -> str:
     return owner.id
 
 
+def _build_basis_ref(manifest: CanonicalGraphManifest) -> str:
+    """IDK-002 section 4's `basis_ref` contract, enforced by
+    `validate_basis_ref` (`canonical/validation.py`) since migration
+    `4747447ccaa3`'s `basis_ref_valid` JSON CHECK. This dataset's initial
+    publish has no real editorial review behind it (same synthetic-fixture
+    caveat `tests/fixtures/canonical/data/v1_approved.json`'s own
+    `basis_ref.notes` states), so every `*_reviewed`/`*_total` pair is set
+    to the manifest's own real topic counts (satisfying section 4's
+    exhaustive-review equality check) rather than to an arbitrary number.
+    """
+    topic_count = len(manifest.topics)
+    payload = {
+        "basis_ref_version": "editorial-approval-basis-v1",
+        "policy_identifier": "editorial-approval-criteria-v1",
+        "reviewed_manifest_hash": manifest.manifest_hash,
+        "checklist_completed_at": "2026-08-01T00:00:00.000000Z",
+        "review_kind": "initial",
+        "diff_against_version_label": None,
+        "curriculum_boundary_review": {
+            "result": "pass",
+            "topics_reviewed": topic_count,
+            "topics_total": topic_count,
+        },
+        "dsa_scenario_review": {
+            "result": "pass",
+            "dsa_topics_reviewed": _DSA_TOPIC_COUNT,
+            "dsa_topics_total": _DSA_TOPIC_COUNT,
+        },
+        "dag_identity_review": {
+            "result": "pass",
+            "reused_stable_ids_confirmed": 0,
+            "reused_stable_ids_total": 0,
+        },
+        "source_citation_review": {
+            "structural_result": "pass",
+            "live_check_result": "pass",
+            "structural_claims_reviewed": 0,
+            "structural_claims_total": 0,
+            "live_check_sample_size": 0,
+            "live_check_population_size": 0,
+        },
+        "layer_reversal_review": {
+            "result": "pass",
+            "topics_reviewed": topic_count,
+            "topics_total": topic_count,
+        },
+        "half_seed_immutability_check": {"result": "pass"},
+        "diff_review": None,
+        "approver_is_sole_content_author": True,
+        "notes": (
+            "IDK-504 performance-dataset seed basis_ref -- synthetic, not a "
+            "real editorial review; reviewed_manifest_hash only matches this "
+            "script's own generated manifest."
+        ),
+    }
+    return json.dumps(payload)
+
+
 def _publish_graph(uow_factory, engine, owner_id: str):
     manifest, topic_identity_slugs = _build_manifest()
     return publish_canonical_graph(
@@ -289,7 +347,7 @@ def _publish_graph(uow_factory, engine, owner_id: str):
         uow_factory=uow_factory,
         manifest=manifest,
         actor_owner_id=owner_id,
-        basis_ref="perf-dataset-approval-basis",
+        basis_ref=_build_basis_ref(manifest),
         topic_identity_slugs=topic_identity_slugs,
     )
 
@@ -379,8 +437,10 @@ def _source(uow_factory, owner_id: str, source_id: str, suffix: str) -> str:
             title=f"Perf dataset source {suffix}",
             publisher="Perf dataset publisher",
             canonical_url=f"https://example.invalid/perf/{suffix}",
-            license_status="fixture-approved",
+            license_status="approved-open-license",
             availability_status=SourceAvailability.AVAILABLE,
+            withdrawal_reason=None,
+            superseded_by_source_id=None,
             created_at="2026-08-01T00:00:00.000000Z",
             updated_at="2026-08-01T00:00:00.000000Z",
         )

@@ -12,6 +12,14 @@ class SourceAvailability(StrEnum):
     WITHDRAWN = "withdrawn"
 
 
+class SourceWithdrawalReason(StrEnum):
+    LICENSE_REVOKED = "license-revoked"
+    LICENSE_CHANGED_INCOMPATIBLE = "license-changed-incompatible"
+    PUBLISHER_RETRACTED = "publisher-retracted"
+    FACTUALLY_SUPERSEDED = "factually-superseded"
+    REGISTRY_DECLINED = "registry-declined"
+
+
 class ClaimType(StrEnum):
     FACT = "fact"
     TRADE_OFF = "trade-off"
@@ -37,6 +45,8 @@ class Source:
     canonical_url: str | None
     license_status: str
     availability_status: SourceAvailability
+    withdrawal_reason: SourceWithdrawalReason | None
+    superseded_by_source_id: str | None
     created_at: str
     updated_at: str
 

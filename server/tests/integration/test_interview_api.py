@@ -148,8 +148,10 @@ def _seed_source(uow_factory: UnitOfWorkFactory, *, suffix: str) -> Source:
             f"Interview source {suffix}",
             "Fixture publisher",
             f"https://example.invalid/{suffix}",
-            "fixture-approved",
+            "approved-open-license",
             SourceAvailability.AVAILABLE,
+            None,
+            None,
             timestamp,
             timestamp,
         )

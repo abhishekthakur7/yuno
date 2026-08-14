@@ -33,7 +33,11 @@ from yuno.modules.learning_content.domain import (
     GenerateRequest,
     GenerateResult,
 )
-from yuno.modules.provenance.domain import Source, SourceAvailability
+from yuno.modules.provenance.domain import (
+    Source,
+    SourceAvailability,
+    SourceWithdrawalReason,
+)
 from yuno.modules.provider.domain import (
     ProviderName,
     ProviderResult,
@@ -230,8 +234,12 @@ def _source(
             f"Source {suffix}",
             "Fixture publisher",
             f"https://example.invalid/{suffix}",
-            "fixture-approved",
+            "approved-open-license",
             availability,
+            SourceWithdrawalReason.PUBLISHER_RETRACTED
+            if availability == SourceAvailability.WITHDRAWN
+            else None,
+            None,
             timestamp,
             timestamp,
         )

@@ -6,6 +6,8 @@ import hashlib
 import json
 from collections.abc import Sequence
 
+from sqlalchemy import update
+
 from yuno.modules.provenance.domain import (
     ArtifactProvenanceRef,
     ArtifactProvenanceSnapshot,
@@ -17,6 +19,7 @@ from yuno.modules.provenance.domain import (
     SourceAvailability,
     SourceRetrievalCommand,
     SourceSnapshot,
+    SourceWithdrawalReason,
 )
 from yuno.modules.provenance.models import (
     ArtifactProvenanceRefRow,
@@ -55,6 +58,30 @@ class SqlAlchemySourceRepository(SqlAlchemyRepository):
             owner_scoped_select(SourceRow, owner_id).where(SourceRow.id == source_id)
         ).one_or_none()
         return _source(row) if row else None
+
+    def update_source(
+        self,
+        owner_id: str,
+        source_id: str,
+        updated_at: str,
+        changes: dict[str, object],
+    ) -> Source | None:
+        values = {
+            key: value.value
+            if isinstance(value, SourceAvailability | SourceWithdrawalReason)
+            else value
+            for key, value in changes.items()
+        }
+        values["updated_at"] = updated_at
+        result = self._session.execute(
+            update(SourceRow)
+            .where(SourceRow.owner_id == owner_id, SourceRow.id == source_id)
+            .values(**values)
+        )
+        if result.rowcount != 1:
+            return None
+        self._session.flush()
+        return self.get_source(owner_id, source_id)
 
     def list_sources(self, owner_id: str) -> Sequence[Source]:
         rows = (
@@ -266,6 +293,10 @@ def _source(row: SourceRow) -> Source | None:
         row.body.canonical_url,
         row.license_status,
         SourceAvailability(row.availability_status),
+        SourceWithdrawalReason(row.withdrawal_reason)
+        if row.withdrawal_reason is not None
+        else None,
+        row.superseded_by_source_id,
         row.created_at,
         row.updated_at,
     )

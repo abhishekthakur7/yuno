@@ -12,13 +12,18 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
+from sqlalchemy import delete, select, text
 
 from yuno.modules.provenance.domain import (
     SourceRetrievalRequest,
     SourceRetrievalResult,
 )
+from yuno.modules.provenance.models import SourceSnapshotBodyRow
+from yuno.modules.provenance.ports import ProvenanceUnitOfWork
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import DomainValidationError
+from yuno.shared.domain.hashing import hash_payload
+from yuno.shared.domain.ids import new_id
 
 
 class HttpSourceRetrievalAdapter:
@@ -282,3 +287,97 @@ def remove_unreferenced_snapshots(root: Path, referenced: set[str]) -> int:
         path.unlink()
         removed += 1
     return removed
+
+
+def purge_license_revoked_snapshot_bodies(
+    uow: ProvenanceUnitOfWork, *, owner_id: str, source_id: str, now: str
+) -> int:
+    """Purge every persisted snapshot body for one source (IDK-003 §12.4).
+
+    IDK-003 §6's "License-revocation purge" row and §8's `license-revoked`/
+    `license-changed-incompatible` branch both require: the persisted
+    full-body file for every one of the source's snapshots stops being
+    served immediately and is deleted, while each `source_snapshots`
+    metadata row (`content_hash`/`retrieved_at`/`status`) is retained
+    untouched. This is a primitive -- it does not check `withdrawal_reason`
+    or `availability_status` itself; the caller decides whether to invoke
+    it (per the task brief).
+
+    `source_snapshots` cannot be written at all: migration
+    `6ee79a009c2a_generated_content_cache_and_provenance.py` (lines
+    525-539) creates `trg_source_snapshots_no_update`,
+    `trg_source_snapshots_no_insert_replace`, and
+    `trg_source_snapshots_no_delete`, so this function never touches that
+    table. Only `source_snapshot_bodies` -- the pointer row holding each
+    snapshot's `content_ref` into content-addressed storage -- is deleted;
+    that table carries no such trigger (verified: no migration creates a
+    trigger naming `source_snapshot_bodies`).
+
+    This mirrors `SqlAlchemyDataLifecycleRepository.purge_goal_bodies`
+    (`data_lifecycle/repository.py:303-340`): delete the `*_bodies`
+    pointer row and record a `file_cleanup_intents` row per deleted
+    pointer so `execute_pending_cleanup`
+    (`data_lifecycle/service.py:116-142`) unlinks the actual file out of
+    transaction, against `ApprovedCleanupRoots.source`, through the
+    `source-snapshot:` scheme `_resolve_cleanup_path` already wires up
+    (`data_lifecycle/service.py:211-215`). The cleanup-intent insert uses
+    raw SQL naming the `file_cleanup_intents` table, exactly as
+    `purge_goal_bodies` uses raw SQL to delete from `source_snapshot_bodies`
+    -- in both directions this is what keeps the write off the *other*
+    module's ORM models, per this repo's "Module independence" import-linter
+    contract (`server/pyproject.toml`), which forbids
+    `yuno.modules.provenance` importing `yuno.modules.data_lifecycle` (and
+    vice versa).
+
+    `uow.session` -- the shared SQLAlchemy `Session` -- is not part of the
+    `ProvenanceUnitOfWork` Protocol (`ports.py` declares only `provenance:
+    SourceRepository`), but every object that actually satisfies that
+    Protocol at runtime is the composition root `SqlAlchemyUnitOfWork`
+    (`yuno/unit_of_work.py`), whose `session` property
+    (`unit_of_work.py:193-196`) exists for exactly this kind of
+    cross-cutting write; `api/provider_selection.py:59,70` already reaches
+    `uow.session` the same way. No protocol method exists to delete a
+    `source_snapshot_bodies` row or insert a `file_cleanup_intents` row,
+    so there is no narrower legitimate seam available without editing
+    `ports.py`/`repository.py`, which this task does not own.
+
+    Idempotent: a second call finds no remaining `source_snapshot_bodies`
+    rows for `source_id` (already deleted by the first call), so it purges
+    nothing and returns 0.
+    """
+    session = uow.session
+    content_refs = (
+        session.execute(
+            select(SourceSnapshotBodyRow.content_ref).where(
+                SourceSnapshotBodyRow.owner_id == owner_id,
+                SourceSnapshotBodyRow.source_id == source_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for content_ref in content_refs:
+        session.execute(
+            text(
+                "INSERT INTO file_cleanup_intents "
+                "(id, owner_id, goal_id, kind, path_ref, path_hash, status, "
+                "failure_classification, attempts, created_at, updated_at, "
+                "completed_at) "
+                "VALUES (:id, :owner_id, NULL, 'source-snapshot', :path_ref, "
+                ":path_hash, 'pending', NULL, 0, :now, :now, NULL)"
+            ),
+            {
+                "id": new_id(),
+                "owner_id": owner_id,
+                "path_ref": content_ref,
+                "path_hash": hash_payload(content_ref),
+                "now": now,
+            },
+        )
+    result = session.execute(
+        delete(SourceSnapshotBodyRow).where(
+            SourceSnapshotBodyRow.owner_id == owner_id,
+            SourceSnapshotBodyRow.source_id == source_id,
+        )
+    )
+    return result.rowcount or 0

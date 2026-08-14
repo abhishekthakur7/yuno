@@ -138,7 +138,7 @@ from tests.fixtures.canonical import load_fixture
 from tests.integration.test_evidence_transfer_delete import (
     _seed as _seed_evidence_transfer,
 )
-from tests.integration.test_generated_content_api import FakeGenerationAdapter, _source
+from tests.integration.test_generated_content_api import FakeGenerationAdapter
 from tests.integration.test_mock_report_api import _seed_rubric
 from yuno.api.contracts import DepthOverrideRequest, SkipDecisionRequest
 from yuno.api.routes.interview import run_mock_final_evaluation_job
@@ -182,7 +182,6 @@ from yuno.modules.learning_content.domain import TopicLayer
 from yuno.modules.learning_content.service import reserve_generation, run_generation
 from yuno.modules.profiles_goals.domain import GoalPath, TargetCapability, TargetLevel
 from yuno.modules.profiles_goals.service import create_goal, ensure_profile
-from yuno.modules.provenance.domain import SourceAvailability
 from yuno.modules.search.domain import SearchIndexStatus
 from yuno.modules.settings_data.service import ensure_owner_settings
 from yuno.shared.application.jobs import JobLane, JobRequest
@@ -208,22 +207,47 @@ from yuno.unit_of_work import create_unit_of_work_factory
 # which revision is current `head`.
 HEAD_MINUS_ONE = "f06c40340400"
 
-# `fb1c910aedc7`'s (IDK-204) own `down_revision` -- currently `head`'s
-# parent too. Used only by `test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss`,
-# which validates *that* migration's zero-governed-data-loss property.
-# Every ORM model/service the representative fixture below uses works
-# identically against a database at this revision as it does at `head`,
-# with one deliberate exception: `fb1c910aedc7` adds
-# `assessment_dimension_results.is_critical` (NOT NULL, no client-side
-# default omission -- `service.perform_assessment` always writes a real
-# value), so a fresh assessment cannot be created at this baseline through
-# live application code. Module docstring item 9's final evaluation step
-# is therefore seeded *after* `command.upgrade(config, "head")` instead of
-# before, and `assessments`/`assessment_dimension_results` are proven
-# writable-and-correctly-shaped post-upgrade rather than
-# preserved-byte-for-byte-across-upgrade (they hold zero rows before that
-# migration ever runs, so "preservation" would otherwise be a vacuous
-# empty-list check). Every other governed table is unaffected and keeps
+# `fb1c910aedc7`'s (IDK-204) own `down_revision` -- `head`'s parent at the
+# time this constant was introduced; two migrations (`4747447ccaa3`,
+# `4cb74877e4ba`) have landed on top of `fb1c910aedc7` since, so this is
+# now `head`'s great-grandparent, not its parent. It is deliberately *not*
+# bumped forward to track `head`: doing so would shrink the span of
+# migrations `test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss`
+# actually exercises. `4747447ccaa3`'s CHECK has its own dedicated
+# coverage (`tests/integration/test_canonical_basis_ref_constraint.py`);
+# `4cb74877e4ba`'s CHECKs have no dedicated test of their own as of this
+# writing (only the raw-SQL seeding below, which targets a baseline
+# *before* that migration and so never inserts a row the new CHECKs would
+# reject) -- a gap, not something this file's baseline choice papers over.
+# Used only by
+# `test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss`,
+# which validates the zero-governed-data-loss property across this whole
+# span. Every ORM model/service the representative fixture below uses
+# works identically against a database at this revision as it does at
+# `head`, with two deliberate exceptions:
+#   1. `fb1c910aedc7` adds `assessment_dimension_results.is_critical`
+#      (NOT NULL, no client-side default omission -- `service
+#      .perform_assessment` always writes a real value), so a fresh
+#      assessment cannot be created at this baseline through live
+#      application code. Module docstring item 9's final evaluation step
+#      is therefore seeded *after* `command.upgrade(config, "head")`
+#      instead of before, and `assessments`/`assessment_dimension_results`
+#      are proven writable-and-correctly-shaped post-upgrade rather than
+#      preserved-byte-for-byte-across-upgrade (they hold zero rows before
+#      that migration ever runs, so "preservation" would otherwise be a
+#      vacuous empty-list check).
+#   2. `4cb74877e4ba` adds `sources.withdrawal_reason`/
+#      `sources.superseded_by_source_id`. `provenance.repository
+#      .add_source` sets every field the *current* `Source` dataclass
+#      carries (`SourceRow(**source.__dict__)`), including those two, so
+#      it cannot run against this baseline's `sources` table, which lacks
+#      both columns. `_seed_generated_artifact`'s backing `Source` row is
+#      therefore seeded via raw SQL (`_insert_source_at_baseline`) instead
+#      -- `sources`/`source_bodies` are not in `_GOVERNED_TABLES` (nothing
+#      in this fixture set treats them as data whose preservation this
+#      test proves), so this exception costs the test nothing it claims
+#      to assert.
+# Every other governed table is unaffected by either exception and keeps
 # the byte-for-byte proof.
 GOVERNED_DATA_LOSS_BASELINE = "c5b1e70a94d2"
 
@@ -281,7 +305,12 @@ def _dump_table(engine: Engine, table: str) -> list[dict]:
     before/after equality check across ~30 differently-shaped tables needs.
     """
     with engine.connect() as connection:
-        rows = [dict(row) for row in connection.execute(text(f"SELECT * FROM {table}")).mappings().all()]
+        rows = [
+            dict(row)
+            for row in connection.execute(text(f"SELECT * FROM {table}"))
+            .mappings()
+            .all()
+        ]
     return sorted(rows, key=lambda row: json.dumps(row, sort_keys=True, default=str))
 
 
@@ -289,7 +318,8 @@ def _row(engine: Engine, table: str, row_id: str, column: str = "id") -> dict:
     with engine.connect() as connection:
         return dict(
             connection.execute(
-                text(f"SELECT * FROM {table} WHERE {column} = :value"), {"value": row_id}
+                text(f"SELECT * FROM {table} WHERE {column} = :value"),
+                {"value": row_id},
             )
             .mappings()
             .one()
@@ -299,7 +329,8 @@ def _row(engine: Engine, table: str, row_id: str, column: str = "id") -> dict:
 def _count(engine: Engine, table: str, column: str, value: str) -> int:
     with engine.connect() as connection:
         return connection.execute(
-            text(f"SELECT count(*) FROM {table} WHERE {column} = :value"), {"value": value}
+            text(f"SELECT count(*) FROM {table} WHERE {column} = :value"),
+            {"value": value},
         ).scalar_one()
 
 
@@ -373,7 +404,9 @@ def _publish_fixture(
     return version
 
 
-def _create_fixture_goal(uow_factory: UnitOfWorkFactory, owner_id: str, graph_version_id: str, name: str):
+def _create_fixture_goal(
+    uow_factory: UnitOfWorkFactory, owner_id: str, graph_version_id: str, name: str
+):
     with uow_factory() as uow:
         goal = create_goal(
             uow,
@@ -391,7 +424,50 @@ def _create_fixture_goal(uow_factory: UnitOfWorkFactory, owner_id: str, graph_ve
     return goal
 
 
+def _insert_source_at_baseline(
+    connection, *, id_: str, owner_id: str, suffix: str, timestamp: str
+) -> None:
+    """A `sources` row (+ its `source_bodies` row), via raw SQL -- the same
+    convention `_insert_runner_confirmation` below uses, and for the same
+    reason: the live path cannot run against this baseline by
+    construction, not merely by inconvenience.
+
+    `provenance.repository.add_source` does `SourceRow(**source.__dict__)`,
+    which sets *every* field the current `Source` dataclass carries,
+    including `withdrawal_reason`/`superseded_by_source_id` (added by
+    `4cb74877e4ba`). Both `HEAD_MINUS_ONE` and `GOVERNED_DATA_LOSS_BASELINE`
+    stamp a database strictly before that migration, so `sources` has
+    neither column yet at those baselines -- the ORM insert would name a
+    column the stamped schema doesn't have
+    (`OperationalError: table sources has no column named
+    withdrawal_reason`). This inserts only the columns both baselines'
+    `sources`/`source_bodies` tables actually have.
+    """
+    connection.execute(
+        text(
+            "INSERT INTO sources "
+            "(id,owner_id,origin,source_type,body_hash,license_status,availability_status,created_at,updated_at) "
+            "VALUES (:id,:owner_id,'fixture','documentation','source-body-hash-fixture',"
+            "'approved-open-license','available',:ts,:ts)"
+        ),
+        {"id": id_, "owner_id": owner_id, "ts": timestamp},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO source_bodies (source_id,owner_id,title,publisher,canonical_url) "
+            "VALUES (:id,:owner_id,:title,'Representative fixture publisher',:url)"
+        ),
+        {
+            "id": id_,
+            "owner_id": owner_id,
+            "title": f"Representative fixture source {suffix}",
+            "url": f"https://example.invalid/representative/{suffix}",
+        },
+    )
+
+
 def _seed_generated_artifact(
+    engine: Engine,
     uow_factory: UnitOfWorkFactory,
     owner_id: str,
     goal_id: str,
@@ -403,9 +479,22 @@ def _seed_generated_artifact(
     functions the HTTP route composes (`reserve_generation` then
     `run_generation`) -- see module docstring's item 6 for why the
     dispatcher/provider-disclosure layer around them is skipped rather
-    than faked.
+    than faked. The backing `Source` row is the one exception: seeded via
+    `_insert_source_at_baseline` (raw SQL) rather than through
+    `test_generated_content_api._source`/`add_source` -- see that helper's
+    docstring for why the live ORM path cannot run at either baseline this
+    module seeds.
     """
-    source_id = _source(uow_factory, availability=SourceAvailability.AVAILABLE, suffix=suffix)
+    source_id = f"representative-fixture-source-{suffix}"
+    timestamp = now_text(SystemClock())
+    with engine.begin() as connection:
+        _insert_source_at_baseline(
+            connection,
+            id_=source_id,
+            owner_id=owner_id,
+            suffix=suffix,
+            timestamp=timestamp,
+        )
     with uow_factory() as uow:
         _ref, attempt, _dispatch = reserve_generation(
             uow,
@@ -416,17 +505,28 @@ def _seed_generated_artifact(
             f"representative-generate-{suffix}",
         )
         uow.commit()
-    adapter = FakeGenerationAdapter(f"Representative fixture body for {suffix}.", source_id)
+    adapter = FakeGenerationAdapter(
+        f"Representative fixture body for {suffix}.", source_id
+    )
     return run_generation(uow_factory, adapter, owner_id, attempt.id)
 
 
 def _apply_depth_override(
-    uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str, topic_stable_id: str, depth: str, key: str
+    uow_factory: UnitOfWorkFactory,
+    owner_id: str,
+    goal_id: str,
+    topic_stable_id: str,
+    depth: str,
+    key: str,
 ) -> None:
     with uow_factory() as uow:
         post_depth(
             goal_id,
-            DepthOverrideRequest(topic_stable_id=topic_stable_id, depth=depth, reason="Representative fixture."),
+            DepthOverrideRequest(
+                topic_stable_id=topic_stable_id,
+                depth=depth,
+                reason="Representative fixture.",
+            ),
             owner_id,
             uow,
             key,
@@ -434,12 +534,21 @@ def _apply_depth_override(
 
 
 def _apply_skip_decision(
-    uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str, topic_stable_id: str, skipped: bool, key: str
+    uow_factory: UnitOfWorkFactory,
+    owner_id: str,
+    goal_id: str,
+    topic_stable_id: str,
+    skipped: bool,
+    key: str,
 ) -> None:
     with uow_factory() as uow:
         post_skip(
             goal_id,
-            SkipDecisionRequest(topic_stable_id=topic_stable_id, skipped=skipped, reason="Representative fixture."),
+            SkipDecisionRequest(
+                topic_stable_id=topic_stable_id,
+                skipped=skipped,
+                reason="Representative fixture.",
+            ),
             owner_id,
             uow,
             key,
@@ -476,7 +585,12 @@ class _FixtureEvaluationAdapter:
 
 
 def _seed_mock_transcript_ready_for_final_evaluation(
-    uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str, topic_stable_id: str, *, suffix: str
+    uow_factory: UnitOfWorkFactory,
+    owner_id: str,
+    goal_id: str,
+    topic_stable_id: str,
+    *,
+    suffix: str,
 ) -> str:
     """Everything module docstring item 9 needs *except* the final
     evaluation: bundle, run, reserved completion evidence. Split out from
@@ -530,9 +644,9 @@ def _seed_mock_transcript_ready_for_final_evaluation(
         bundle = get_bundle(uow, owner_id, run.bundle_id)
         item = next(value for value in bundle.items if value.id == run.bundle_item_id)
         assert item.topic_stable_id is not None
-        transcript = [{"kind": turn.kind.value, "body": turn.body} for turn in run.turns] + [
-            {"kind": "answer", "body": draft}
-        ]
+        transcript = [
+            {"kind": turn.kind.value, "body": turn.body} for turn in run.turns
+        ] + [{"kind": "answer", "body": draft}]
         evidence = create_evidence(
             uow,
             owner_id,
@@ -551,7 +665,9 @@ def _seed_mock_transcript_ready_for_final_evaluation(
     return run_id
 
 
-def _run_mock_final_evaluation(uow_factory: UnitOfWorkFactory, owner_id: str, run_id: str) -> None:
+def _run_mock_final_evaluation(
+    uow_factory: UnitOfWorkFactory, owner_id: str, run_id: str
+) -> None:
     """`run_mock_final_evaluation_job` is the dispatcher's job-handler body
     for `evaluate_mock_final`; calling it directly runs the identical
     `perform_assessment` + `complete_mock_evaluation` persistence the
@@ -568,14 +684,18 @@ def _seed_active_job(session_factory: sessionmaker, owner_id: str) -> str:
     with session_factory() as session:
         repo = JobRepository(session, SystemClock())
         job = repo.enqueue(
-            JobRequest("rebuild_index", owner_id, {}, dedupe_key="representative-active-job"),
+            JobRequest(
+                "rebuild_index", owner_id, {}, dedupe_key="representative-active-job"
+            ),
             JobLane.BACKGROUND,
         )
         session.commit()
         return job.id
 
 
-def _seed_job_requiring_startup_recovery(session_factory: sessionmaker, owner_id: str) -> str:
+def _seed_job_requiring_startup_recovery(
+    session_factory: sessionmaker, owner_id: str
+) -> str:
     """A job stuck `running` with a stale attempt process identity --
     exactly `test_durable_jobs.py::test_startup_reconciles_active_states_and_sweeps_temp_path`'s
     setup, minus its later `dispatcher.reconcile_startup()` call: leaving
@@ -585,16 +705,22 @@ def _seed_job_requiring_startup_recovery(session_factory: sessionmaker, owner_id
     """
     with session_factory() as session:
         repo = JobRepository(session, SystemClock())
-        job = repo.enqueue(JobRequest("rebuild_index", owner_id, {}), JobLane.BACKGROUND)
+        job = repo.enqueue(
+            JobRequest("rebuild_index", owner_id, {}), JobLane.BACKGROUND
+        )
         job.state = "running"
         job.attempt = 1
         job.started_at = now_text(SystemClock())
-        repo.add_attempt(job, process_identity="999999:stale-worker", pid=999999, pgid=999999)
+        repo.add_attempt(
+            job, process_identity="999999:stale-worker", pid=999999, pgid=999999
+        )
         session.commit()
         return job.id
 
 
-def _seed_stale_search_projection(uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str) -> None:
+def _seed_stale_search_projection(
+    uow_factory: UnitOfWorkFactory, owner_id: str, goal_id: str
+) -> None:
     with uow_factory() as uow:
         uow.search.rebuild(owner_id, "representative-fixture-rebuild")
         uow.commit()
@@ -632,7 +758,9 @@ def _chain_revisions() -> list[str]:
 
 
 @pytest.mark.parametrize("revision", _chain_revisions())
-def test_every_revision_upgrades_forward_to_head_with_matching_schema(revision: str, tmp_path: Path) -> None:
+def test_every_revision_upgrades_forward_to_head_with_matching_schema(
+    revision: str, tmp_path: Path
+) -> None:
     url = f"sqlite+pysqlite:///{tmp_path / 'chain.db'}"
     config = alembic_guard.build_alembic_config()
     config.set_main_option("sqlalchemy.url", url)
@@ -696,12 +824,16 @@ _GOVERNED_TABLES: tuple[str, ...] = (
 )
 
 
-def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factory: sessionmaker) -> dict[str, object]:
+def _build_representative_fixture(
+    engine: Engine, uow_factory: UnitOfWorkFactory, session_factory: sessionmaker
+) -> dict[str, object]:
     owner_id = _provision_owner(uow_factory, "Representative upgrade fixture owner")
     ids: dict[str, object] = {"owner_id": owner_id}
 
     # 1. Two goals with cross-goal transferred evidence.
-    _seed_owner_id, source_goal_id, target_goal_id, evidence_id = _seed_evidence_transfer(uow_factory)
+    _seed_owner_id, source_goal_id, target_goal_id, evidence_id = (
+        _seed_evidence_transfer(uow_factory)
+    )
     assert _seed_owner_id == owner_id
     with uow_factory() as uow:
         transfer_ref = transfer_evidence(
@@ -775,7 +907,9 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
     # 3 (goal) + 4 (local state) + 5 (import): one goal pinned to v1, with
     # local overlay/skip state and an import, created *before* v2 exists --
     # "pinned mid-transition" once v2 publishes below and the goal stays put.
-    merge_goal = _create_fixture_goal(uow_factory, owner_id, v1.id, "Representative canonical-merge fixture")
+    merge_goal = _create_fixture_goal(
+        uow_factory, owner_id, v1.id, "Representative canonical-merge fixture"
+    )
     with uow_factory() as uow:
         import_record = create_import(
             uow,
@@ -789,10 +923,20 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
     # (overlay conflict); `fixture-topic-gamma` is dropped by v2 (local
     # state on an upstream-deleted topic).
     _apply_depth_override(
-        uow_factory, owner_id, merge_goal.id, "fixture-topic-alpha", "Internals", "representative-overlay-depth"
+        uow_factory,
+        owner_id,
+        merge_goal.id,
+        "fixture-topic-alpha",
+        "Internals",
+        "representative-overlay-depth",
     )
     _apply_skip_decision(
-        uow_factory, owner_id, merge_goal.id, "fixture-topic-gamma", True, "representative-overlay-skip"
+        uow_factory,
+        owner_id,
+        merge_goal.id,
+        "fixture-topic-gamma",
+        True,
+        "representative-overlay-skip",
     )
     v2 = _publish_fixture(uow_factory, owner_id, "v2_approved")
     assert merge_goal.graph_version_id == v1.id  # still pinned: "mid-transition"
@@ -804,16 +948,25 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
     }
 
     # 6. A generated artifact with a provenance snapshot.
-    artifact_goal = _create_fixture_goal(uow_factory, owner_id, v1.id, "Representative generated-content fixture")
+    artifact_goal = _create_fixture_goal(
+        uow_factory, owner_id, v1.id, "Representative generated-content fixture"
+    )
     artifact = _seed_generated_artifact(
-        uow_factory, owner_id, artifact_goal.id, "fixture-topic-alpha", suffix="representative"
+        engine,
+        uow_factory,
+        owner_id,
+        artifact_goal.id,
+        "fixture-topic-alpha",
+        suffix="representative",
     )
     ids["artifact_id"] = artifact.id
 
     # 7 + 8. An active job, and a job requiring startup recovery reconciliation.
     ids["jobs"] = {
         "active_job_id": _seed_active_job(session_factory, owner_id),
-        "recovery_job_id": _seed_job_requiring_startup_recovery(session_factory, owner_id),
+        "recovery_job_id": _seed_job_requiring_startup_recovery(
+            session_factory, owner_id
+        ),
     }
 
     # 9. A Mock transcript ready for its final evaluation (bundle, run,
@@ -821,9 +974,15 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
     # part of this fixture set that writes `assessments`/
     # `assessment_dimension_results` -- runs after the upgrade to `head`;
     # see `GOVERNED_DATA_LOSS_BASELINE`'s docstring for why.
-    mock_goal = _create_fixture_goal(uow_factory, owner_id, v1.id, "Representative Mock fixture goal")
+    mock_goal = _create_fixture_goal(
+        uow_factory, owner_id, v1.id, "Representative Mock fixture goal"
+    )
     ids["mock_run_id"] = _seed_mock_transcript_ready_for_final_evaluation(
-        uow_factory, owner_id, mock_goal.id, "fixture-topic-alpha", suffix="representative"
+        uow_factory,
+        owner_id,
+        mock_goal.id,
+        "fixture-topic-alpha",
+        suffix="representative",
     )
 
     # 10. A deliberately stale FTS5 projection -- built last, over
@@ -833,12 +992,14 @@ def _build_representative_fixture(uow_factory: UnitOfWorkFactory, session_factor
     return ids
 
 
-def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tmp_path: Path) -> None:
+def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(
+    tmp_path: Path,
+) -> None:
     url = f"sqlite+pysqlite:///{tmp_path / 'representative.db'}"
     config = _config_at(url, GOVERNED_DATA_LOSS_BASELINE)
     engine, uow_factory, session_factory = _engine_and_uow_factory(url)
     try:
-        ids = _build_representative_fixture(uow_factory, session_factory)
+        ids = _build_representative_fixture(engine, uow_factory, session_factory)
 
         before = {table: _dump_table(engine, table) for table in _GOVERNED_TABLES}
         # Nothing pre-existing to lose: module docstring item 9's final
@@ -848,7 +1009,9 @@ def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tm
         assert _dump_table(engine, "assessment_dimension_results") == []
         artifact_before = _row(engine, "generated_artifacts", ids["artifact_id"])
         with engine.connect() as connection:
-            jobs_dedupe_before = dict(connection.execute(text("SELECT id, dedupe_key FROM jobs")).all())
+            jobs_dedupe_before = dict(
+                connection.execute(text("SELECT id, dedupe_key FROM jobs")).all()
+            )
         search_status_before = _search_status(uow_factory, ids["owner_id"])
         assert search_status_before is SearchIndexStatus.STALE
     finally:
@@ -861,7 +1024,9 @@ def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tm
     try:
         after = {table: _dump_table(engine, table) for table in _GOVERNED_TABLES}
         for table in _GOVERNED_TABLES:
-            assert after[table] == before[table], f"{table!r} changed across the upgrade"
+            assert after[table] == before[table], (
+                f"{table!r} changed across the upgrade"
+            )
 
         # Module docstring item 9's final evaluation: the migration under
         # test (`fb1c910aedc7`) leaves `assessments`/
@@ -897,9 +1062,14 @@ def test_representative_fixture_upgrades_to_head_with_zero_governed_data_loss(tm
         assert artifact_after["body_hash"] == artifact_before["body_hash"] is not None
 
         with engine.connect() as connection:
-            jobs_dedupe_after = dict(connection.execute(text("SELECT id, dedupe_key FROM jobs")).all())
+            jobs_dedupe_after = dict(
+                connection.execute(text("SELECT id, dedupe_key FROM jobs")).all()
+            )
         assert jobs_dedupe_after == jobs_dedupe_before
-        assert jobs_dedupe_after[ids["jobs"]["active_job_id"]] == "representative-active-job"
+        assert (
+            jobs_dedupe_after[ids["jobs"]["active_job_id"]]
+            == "representative-active-job"
+        )
 
         # Approved `canonical_graph_versions` rows byte-identical, named
         # explicitly (already covered by the whole-table dump above too).
@@ -925,7 +1095,9 @@ _RUNNER_CONFIRMATION_COLUMNS = (
 )
 
 
-def _insert_runner_confirmation(connection, *, id_: str, owner_id: str, language: str, timestamp: str) -> None:
+def _insert_runner_confirmation(
+    connection, *, id_: str, owner_id: str, language: str, timestamp: str
+) -> None:
     connection.execute(
         text(
             f"INSERT INTO runner_confirmations ({_RUNNER_CONFIRMATION_COLUMNS}) VALUES "
@@ -936,7 +1108,9 @@ def _insert_runner_confirmation(connection, *, id_: str, owner_id: str, language
     )
 
 
-def _insert_relational_placeholder_subgraph(connection, owner_id: str, timestamp: str) -> dict[str, str]:
+def _insert_relational_placeholder_subgraph(
+    connection, owner_id: str, timestamp: str
+) -> dict[str, str]:
     """Everything IDK-406/408's disposal must remove, in one owner-scoped
     subgraph: a `language='relational'` confirmation and runner record,
     their exclusively owned inputs/bodies/output chunks, and a
@@ -958,14 +1132,24 @@ def _insert_relational_placeholder_subgraph(connection, owner_id: str, timestamp
     }
     request_ref = f"RunnerRun:{ids['record_id']}"
 
-    _insert_runner_confirmation(connection, id_=ids["confirmation_id"], owner_id=owner_id, language="relational", timestamp=timestamp)
+    _insert_runner_confirmation(
+        connection,
+        id_=ids["confirmation_id"],
+        owner_id=owner_id,
+        language="relational",
+        timestamp=timestamp,
+    )
     connection.execute(
         text(
             "INSERT INTO runner_confirmation_inputs "
             "(id,owner_id,confirmation_id,logical_path,declared_type,content_hash) "
             "VALUES (:id,:owner_id,:confirmation_id,'schema.sql','text/sql','confirmation-input-hash')"
         ),
-        {"id": ids["confirmation_input_id"], "owner_id": owner_id, "confirmation_id": ids["confirmation_id"]},
+        {
+            "id": ids["confirmation_input_id"],
+            "owner_id": owner_id,
+            "confirmation_id": ids["confirmation_id"],
+        },
     )
     connection.execute(
         text(
@@ -1022,7 +1206,12 @@ def _insert_relational_placeholder_subgraph(connection, owner_id: str, timestamp
             "(id,owner_id,runner_id,phase,stream,sequence,ordinal,content_hash,truncated,created_at) "
             "VALUES (:id,:owner_id,:runner_id,'compile','stdout',1,1,'chunk-hash-fixture',0,:ts)"
         ),
-        {"id": ids["chunk_id"], "owner_id": owner_id, "runner_id": ids["record_id"], "ts": timestamp},
+        {
+            "id": ids["chunk_id"],
+            "owner_id": owner_id,
+            "runner_id": ids["record_id"],
+            "ts": timestamp,
+        },
     )
     connection.execute(
         text(
@@ -1057,7 +1246,9 @@ def _insert_relational_placeholder_subgraph(connection, owner_id: str, timestamp
         },
     )
     connection.execute(
-        text("INSERT INTO job_bodies (job_id,owner_id,payload_json,diagnostic) VALUES (:id,:owner_id,'{}',NULL)"),
+        text(
+            "INSERT INTO job_bodies (job_id,owner_id,payload_json,diagnostic) VALUES (:id,:owner_id,'{}',NULL)"
+        ),
         {"id": ids["job_id"], "owner_id": owner_id},
     )
     connection.execute(
@@ -1122,7 +1313,9 @@ def _insert_relational_placeholder_subgraph(connection, owner_id: str, timestamp
     return ids
 
 
-def _insert_java_control_subgraph(connection, owner_id: str, timestamp: str) -> dict[str, str]:
+def _insert_java_control_subgraph(
+    connection, owner_id: str, timestamp: str
+) -> dict[str, str]:
     """An unrelated `language='java'` confirmation/record/job pair that
     must survive completely untouched -- the disposal's `WHERE
     language = 'relational'` predicate must not sweep up the language it
@@ -1133,7 +1326,13 @@ def _insert_java_control_subgraph(connection, owner_id: str, timestamp: str) -> 
         "record_id": "control-runner-record-java-1",
         "job_id": "control-job-java-1",
     }
-    _insert_runner_confirmation(connection, id_=ids["confirmation_id"], owner_id=owner_id, language="java", timestamp=timestamp)
+    _insert_runner_confirmation(
+        connection,
+        id_=ids["confirmation_id"],
+        owner_id=owner_id,
+        language="java",
+        timestamp=timestamp,
+    )
     connection.execute(
         text(
             "INSERT INTO runner_records "
@@ -1157,7 +1356,7 @@ def _insert_java_control_subgraph(connection, owner_id: str, timestamp: str) -> 
     connection.execute(
         text(
             "INSERT INTO runner_record_bodies (runner_id,owner_id,argv_json,pid,pgid,temp_path,outcome_json) "
-            "VALUES (:id,:owner_id,'[\"javac\",\"Main.java\"]',NULL,NULL,NULL,NULL)"
+            'VALUES (:id,:owner_id,\'["javac","Main.java"]\',NULL,NULL,NULL,NULL)'
         ),
         {"id": ids["record_id"], "owner_id": owner_id},
     )
@@ -1218,14 +1417,18 @@ def _insert_control_parse_import_job(connection, owner_id: str, timestamp: str) 
     return job_id
 
 
-def test_relational_placeholder_disposal_is_bounded_and_controls_survive(tmp_path: Path) -> None:
+def test_relational_placeholder_disposal_is_bounded_and_controls_survive(
+    tmp_path: Path,
+) -> None:
     url = f"sqlite+pysqlite:///{tmp_path / 'placeholder-disposal.db'}"
     config = _config_at(url, HEAD_MINUS_ONE)
     engine, uow_factory, _session_factory = _engine_and_uow_factory(url)
     try:
         owner_id = _provision_owner(uow_factory, "Placeholder disposal fixture owner")
         v1 = _publish_fixture(uow_factory, owner_id, "v1_approved")
-        control_goal = _create_fixture_goal(uow_factory, owner_id, v1.id, "Placeholder-disposal control goal")
+        control_goal = _create_fixture_goal(
+            uow_factory, owner_id, v1.id, "Placeholder-disposal control goal"
+        )
         with uow_factory() as uow:
             control_evidence = create_evidence(
                 uow,
@@ -1241,20 +1444,33 @@ def test_relational_placeholder_disposal_is_bounded_and_controls_survive(tmp_pat
             )
             uow.commit()
         control_artifact = _seed_generated_artifact(
-            uow_factory, owner_id, control_goal.id, "fixture-topic-alpha", suffix="disposal-control"
+            engine,
+            uow_factory,
+            owner_id,
+            control_goal.id,
+            "fixture-topic-alpha",
+            suffix="disposal-control",
         )
 
         timestamp = now_text(SystemClock())
         with engine.begin() as connection:
-            placeholder = _insert_relational_placeholder_subgraph(connection, owner_id, timestamp)
-            control_java = _insert_java_control_subgraph(connection, owner_id, timestamp)
-            control_parse_import_job_id = _insert_control_parse_import_job(connection, owner_id, timestamp)
+            placeholder = _insert_relational_placeholder_subgraph(
+                connection, owner_id, timestamp
+            )
+            control_java = _insert_java_control_subgraph(
+                connection, owner_id, timestamp
+            )
+            control_parse_import_job_id = _insert_control_parse_import_job(
+                connection, owner_id, timestamp
+            )
 
         control_snapshot_before = {
             "goal": _row(engine, "goal_workspaces", control_goal.id),
             "evidence": _row(engine, "evidence", control_evidence.id),
             "artifact": _row(engine, "generated_artifacts", control_artifact.id),
-            "java_confirmation": _row(engine, "runner_confirmations", control_java["confirmation_id"]),
+            "java_confirmation": _row(
+                engine, "runner_confirmations", control_java["confirmation_id"]
+            ),
             "java_record": _row(engine, "runner_records", control_java["record_id"]),
             "java_job": _row(engine, "jobs", control_java["job_id"]),
             "parse_import_job": _row(engine, "jobs", control_parse_import_job_id),
@@ -1269,44 +1485,106 @@ def test_relational_placeholder_disposal_is_bounded_and_controls_survive(tmp_pat
     engine = create_engine_for(url)
     try:
         # Every placeholder-owned row is gone.
-        assert _count(engine, "runner_confirmations", "id", placeholder["confirmation_id"]) == 0
-        assert _count(engine, "runner_confirmation_inputs", "id", placeholder["confirmation_input_id"]) == 0
         assert (
-            _count(engine, "runner_confirmation_input_bodies", "input_id", placeholder["confirmation_input_id"])
+            _count(engine, "runner_confirmations", "id", placeholder["confirmation_id"])
+            == 0
+        )
+        assert (
+            _count(
+                engine,
+                "runner_confirmation_inputs",
+                "id",
+                placeholder["confirmation_input_id"],
+            )
+            == 0
+        )
+        assert (
+            _count(
+                engine,
+                "runner_confirmation_input_bodies",
+                "input_id",
+                placeholder["confirmation_input_id"],
+            )
             == 0
         )
         assert _count(engine, "runner_records", "id", placeholder["record_id"]) == 0
-        assert _count(engine, "runner_record_bodies", "runner_id", placeholder["record_id"]) == 0
+        assert (
+            _count(
+                engine, "runner_record_bodies", "runner_id", placeholder["record_id"]
+            )
+            == 0
+        )
         assert _count(engine, "runner_inputs", "id", placeholder["input_id"]) == 0
-        assert _count(engine, "runner_input_bodies", "input_id", placeholder["input_id"]) == 0
-        assert _count(engine, "runner_output_chunks", "id", placeholder["chunk_id"]) == 0
-        assert _count(engine, "runner_output_chunk_bodies", "chunk_id", placeholder["chunk_id"]) == 0
+        assert (
+            _count(engine, "runner_input_bodies", "input_id", placeholder["input_id"])
+            == 0
+        )
+        assert (
+            _count(engine, "runner_output_chunks", "id", placeholder["chunk_id"]) == 0
+        )
+        assert (
+            _count(
+                engine,
+                "runner_output_chunk_bodies",
+                "chunk_id",
+                placeholder["chunk_id"],
+            )
+            == 0
+        )
         assert _count(engine, "jobs", "id", placeholder["job_id"]) == 0
         assert _count(engine, "job_bodies", "job_id", placeholder["job_id"]) == 0
         assert _count(engine, "job_attempts", "id", placeholder["attempt_id"]) == 0
-        assert _count(engine, "job_attempt_bodies", "attempt_id", placeholder["attempt_id"]) == 0
+        assert (
+            _count(
+                engine, "job_attempt_bodies", "attempt_id", placeholder["attempt_id"]
+            )
+            == 0
+        )
         assert _count(engine, "job_events", "job_id", placeholder["job_id"]) == 0
         assert _count(engine, "job_results", "id", placeholder["result_id"]) == 0
-        assert _count(engine, "job_result_bodies", "result_id", placeholder["result_id"]) == 0
+        assert (
+            _count(engine, "job_result_bodies", "result_id", placeholder["result_id"])
+            == 0
+        )
 
         # Every control row survives, byte-for-byte.
-        assert _row(engine, "goal_workspaces", control_goal.id) == control_snapshot_before["goal"]
-        assert _row(engine, "evidence", control_evidence.id) == control_snapshot_before["evidence"]
-        assert _row(engine, "generated_artifacts", control_artifact.id) == control_snapshot_before["artifact"]
+        assert (
+            _row(engine, "goal_workspaces", control_goal.id)
+            == control_snapshot_before["goal"]
+        )
+        assert (
+            _row(engine, "evidence", control_evidence.id)
+            == control_snapshot_before["evidence"]
+        )
+        assert (
+            _row(engine, "generated_artifacts", control_artifact.id)
+            == control_snapshot_before["artifact"]
+        )
         assert (
             _row(engine, "runner_confirmations", control_java["confirmation_id"])
             == control_snapshot_before["java_confirmation"]
         )
-        assert _row(engine, "runner_records", control_java["record_id"]) == control_snapshot_before["java_record"]
-        assert _row(engine, "jobs", control_java["job_id"]) == control_snapshot_before["java_job"]
         assert (
-            _row(engine, "jobs", control_parse_import_job_id) == control_snapshot_before["parse_import_job"]
+            _row(engine, "runner_records", control_java["record_id"])
+            == control_snapshot_before["java_record"]
+        )
+        assert (
+            _row(engine, "jobs", control_java["job_id"])
+            == control_snapshot_before["java_job"]
+        )
+        assert (
+            _row(engine, "jobs", control_parse_import_job_id)
+            == control_snapshot_before["parse_import_job"]
         )
 
         # No surviving `jobs` row's logical reference points at a removed id.
         with engine.connect() as connection:
             surviving_jobs = (
-                connection.execute(text("SELECT id, run_id, request_ref, result_ref, confirmation_ref FROM jobs"))
+                connection.execute(
+                    text(
+                        "SELECT id, run_id, request_ref, result_ref, confirmation_ref FROM jobs"
+                    )
+                )
                 .mappings()
                 .all()
             )
@@ -1321,15 +1599,24 @@ def test_relational_placeholder_disposal_is_bounded_and_controls_survive(tmp_pat
         # removed id (only the control java record remains).
         with engine.connect() as connection:
             surviving_records = (
-                connection.execute(text("SELECT id, confirmation_id, job_id FROM runner_records")).mappings().all()
+                connection.execute(
+                    text("SELECT id, confirmation_id, job_id FROM runner_records")
+                )
+                .mappings()
+                .all()
             )
-        assert [record["id"] for record in surviving_records] == [control_java["record_id"]]
+        assert [record["id"] for record in surviving_records] == [
+            control_java["record_id"]
+        ]
         for record in surviving_records:
             assert record["confirmation_id"] not in removed_ids
             assert record["job_id"] not in removed_ids
 
         # The narrowed CHECK rejects a fresh `language='relational'` insert.
-        with pytest.raises(IntegrityError, match="language_valid"), engine.begin() as connection:
+        with (
+            pytest.raises(IntegrityError, match="language_valid"),
+            engine.begin() as connection,
+        ):
             _insert_runner_confirmation(
                 connection,
                 id_="post-upgrade-relational-attempt",
@@ -1346,7 +1633,9 @@ def test_relational_placeholder_disposal_is_bounded_and_controls_survive(tmp_pat
 # ---------------------------------------------------------------------------
 
 
-def test_language_python_row_stops_the_migration_with_a_diagnostic(tmp_path: Path) -> None:
+def test_language_python_row_stops_the_migration_with_a_diagnostic(
+    tmp_path: Path,
+) -> None:
     url = f"sqlite+pysqlite:///{tmp_path / 'python-guard.db'}"
     config = _config_at(url, HEAD_MINUS_ONE)
     engine, uow_factory, _session_factory = _engine_and_uow_factory(url)
@@ -1379,7 +1668,9 @@ def test_language_python_row_stops_the_migration_with_a_diagnostic(tmp_path: Pat
     engine = create_engine_for(url)
     try:
         with engine.connect() as connection:
-            stamped = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            stamped = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
         assert stamped == HEAD_MINUS_ONE
         with engine.begin() as connection:
             _insert_runner_confirmation(

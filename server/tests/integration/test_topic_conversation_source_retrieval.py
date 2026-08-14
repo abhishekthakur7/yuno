@@ -196,7 +196,15 @@ def test_source_retrieval_requires_explicit_post_and_preserves_prior_state_on_fa
     assert failed.status_code == 202
     wait_for_job(client, failed, "failed")
     after = client.get(f"/api/v1/sources/{available_id}/snapshots").json()
-    assert after == saved
+    # The append-only snapshot log now also records the failed attempt (newest
+    # first), but the prior succeeded snapshot is preserved untouched.
+    assert len(after) == 2
+    assert after[1] == saved[0]
+    assert after[0]["source_id"] == available_id
+    assert after[0]["status"] == "failed"
+    assert after[0]["content_ref"] == f"source-retrieval:failed:{after[0]['id']}"
+    # A single failed attempt does not flip availability; IDK-003 §8 requires
+    # 3 consecutive failures spanning >=72h before the source goes unavailable.
     assert (
         client.get(f"/api/v1/sources/{available_id}").json()["availability_status"]
         == "available"
