@@ -194,7 +194,7 @@ def _goal(
                 graph_id,
                 owner.id,
                 "designated_editorial_approver",
-                "IDK-207 fixture",
+                '"IDK-207 fixture"',
                 timestamp,
             )
         )

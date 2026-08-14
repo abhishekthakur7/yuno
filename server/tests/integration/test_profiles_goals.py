@@ -66,7 +66,7 @@ def _seed_approved_graph(uow_factory: UnitOfWorkFactory, owner_id: str) -> str:
                 graph_version_id=graph_id,
                 approver_owner_id=owner_id,
                 approver_role="designated_editorial_approver",
-                basis_ref="test",
+                basis_ref='"test"',
                 approved_at=timestamp,
             )
         )

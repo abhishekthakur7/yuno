@@ -59,7 +59,7 @@ from yuno.modules.canonical.domain import (
     TopicRelation,
 )
 from yuno.modules.canonical.publisher import publish_canonical_graph
-from yuno.modules.canonical.validation import compute_manifest_hash
+from yuno.modules.canonical.validation import compute_manifest_hash, validate_basis_ref
 from yuno.shared.domain.errors import YunoError
 from yuno.shared.infrastructure.database import (
     create_engine_for,
@@ -111,13 +111,39 @@ def _content_revision_from_json(payload: dict[str, Any]) -> ContentRevision:
     )
 
 
-def load_manifest(path: Path) -> tuple[CanonicalGraphManifest, dict[str, str], str, str]:
+def load_manifest(
+    path: Path,
+) -> tuple[CanonicalGraphManifest, dict[str, str], str, str]:
     """Parse a manifest JSON file into a `CanonicalGraphManifest` plus
     everything `publish_canonical_graph` needs beyond it.
 
     Returns `(manifest, topic_identity_slugs, approver_role, basis_ref)`.
-    Raises `KeyError`/`json.JSONDecodeError`/`TypeError` for a malformed
-    file; `main` turns any of those into exit code 2, not a stack trace.
+    `basis_ref` is returned as the same JSON-text string read from the
+    manifest's `approval` block -- `EditorialApproval.basis_ref` and the
+    `editorial_approvals` column are both `str`/`TEXT`, so no wrapper type
+    is introduced -- but by the time this function returns, that string is
+    guaranteed to have passed `validate_basis_ref` (IDK-002 §4): valid
+    JSON, a JSON object, every required field present and correctly typed,
+    `basis_ref_version`/`policy_identifier` matching their literals, and
+    `reviewed_manifest_hash` matching this manifest's own recomputed
+    `manifest_hash` above. This function is offline -- it has no database
+    connection and cannot know the target database's real publish state
+    (IDK-002 §8 item 3's own text says as much) -- so it calls
+    `validate_basis_ref` with `published_version_labels=None`, which skips
+    only the two §4 checks that genuinely need that state (`review_kind`
+    vs. whether a version is already published, and
+    `diff_against_version_label` vs. the actual latest published label);
+    every other §4 rule, including the shape rules for those same two
+    fields, still runs for real. The genuine published-state cross-check
+    is left to `publish_canonical_graph`'s own `validate_basis_ref` call
+    (§8 item 2), which runs inside the UoW with the real
+    `list_published_versions()` result and rejects a real mismatch via its
+    exit-1 `YunoError` path.
+
+    Raises `KeyError`/`json.JSONDecodeError`/`TypeError`/`ValueError` for
+    a malformed file, including a `basis_ref` that fails `validate_basis_ref`
+    or isn't even a JSON string; `main` turns any of those into exit code
+    2, not a stack trace.
     """
     raw = json.loads(path.read_text())
 
@@ -147,7 +173,29 @@ def load_manifest(path: Path) -> tuple[CanonicalGraphManifest, dict[str, str], s
     topic_identity_slugs = {t["stable_id"]: t["stable_slug"] for t in raw["topics"]}
 
     approval = raw["approval"]
-    return manifest, topic_identity_slugs, approval["approver_role"], approval["basis_ref"]
+    basis_ref = approval["basis_ref"]
+    if not isinstance(basis_ref, str):
+        raise TypeError(
+            "approval.basis_ref must be a JSON-text string carrying the section 4 "
+            f"(IDK-002) object, got {type(basis_ref).__name__}."
+        )
+
+    basis_ref_result = validate_basis_ref(
+        basis_ref,
+        manifest_hash=manifest.manifest_hash,
+        published_version_labels=None,
+    )
+    if not basis_ref_result.is_valid:
+        violations_text = "; ".join(
+            f"[{violation.code.value}] {violation.message}"
+            for violation in basis_ref_result.violations
+        )
+        raise ValueError(
+            f"approval.basis_ref failed section 4 (IDK-002) validation with "
+            f"{len(basis_ref_result.violations)} violation(s): {violations_text}"
+        )
+
+    return manifest, topic_identity_slugs, approval["approver_role"], basis_ref
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -178,7 +226,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        manifest, topic_identity_slugs, approver_role, basis_ref = load_manifest(args.manifest)
+        manifest, topic_identity_slugs, approver_role, basis_ref = load_manifest(
+            args.manifest
+        )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         print(f"Manifest file {args.manifest} is malformed: {exc!r}", file=sys.stderr)
         return 2
@@ -219,7 +269,9 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         engine.dispose()
 
-    print(f"Published canonical graph version {version.id} ({version.version_label!r}).")
+    print(
+        f"Published canonical graph version {version.id} ({version.version_label!r})."
+    )
     return 0
 
 

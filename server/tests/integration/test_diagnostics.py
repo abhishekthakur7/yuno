@@ -84,7 +84,7 @@ def _seed_graph(uow_factory: UnitOfWorkFactory) -> tuple[str, str]:
                 graph_version_id=graph_id,
                 approver_owner_id=owner.id,
                 approver_role="designated_editorial_approver",
-                basis_ref="diagnostic-test",
+                basis_ref='"diagnostic-test"',
                 approved_at=timestamp,
             )
         )
@@ -476,7 +476,7 @@ def test_confirm_goal_rolls_back_every_side_effect_then_succeeds_once(
                 graph_version_id=newer_graph_id,
                 approver_owner_id=owner_id,
                 approver_role="designated_editorial_approver",
-                basis_ref="newer-graph-after-diagnostic-start",
+                basis_ref='"newer-graph-after-diagnostic-start"',
                 approved_at=timestamp,
             )
         )

@@ -89,6 +89,6 @@
   ],
   "approval": {
     "approver_role": "designated_editorial_approver",
-    "basis_ref": "fixture-approval-basis-v1"
+    "basis_ref": "{\"basis_ref_version\": \"editorial-approval-basis-v1\", \"policy_identifier\": \"editorial-approval-criteria-v1\", \"reviewed_manifest_hash\": \"c76bc65649f271b0477bf126478e3bdd2b68f8a9993213a3295f7f3a2d8dda24\", \"checklist_completed_at\": \"2026-01-01T00:00:00Z\", \"review_kind\": \"initial\", \"diff_against_version_label\": null, \"curriculum_boundary_review\": {\"result\": \"pass\", \"topics_reviewed\": 4, \"topics_total\": 4}, \"dsa_scenario_review\": {\"result\": \"pass\", \"dsa_topics_reviewed\": 1, \"dsa_topics_total\": 1}, \"dag_identity_review\": {\"result\": \"pass\", \"reused_stable_ids_confirmed\": 0, \"reused_stable_ids_total\": 0}, \"source_citation_review\": {\"structural_result\": \"pass\", \"live_check_result\": \"pass\", \"structural_claims_reviewed\": 1, \"structural_claims_total\": 1, \"live_check_sample_size\": 1, \"live_check_population_size\": 1}, \"layer_reversal_review\": {\"result\": \"pass\", \"topics_reviewed\": 4, \"topics_total\": 4}, \"half_seed_immutability_check\": {\"result\": \"pass\"}, \"diff_review\": null, \"approver_is_sole_content_author\": true, \"notes\": \"SYNTHETIC FIXTURE basis_ref -- NOT a real editorial review (IDK-002 SS6/SS10/SS105); reviewed_manifest_hash only matches this fixture's own manifest and can never pass against real curriculum material.\"}"
   }
 }

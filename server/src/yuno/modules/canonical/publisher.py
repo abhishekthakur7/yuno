@@ -13,8 +13,13 @@ cross-cutting edge `ensure_local_owner` takes on `audit`.
 Order of operations: `require_single_head(engine)` before any session is
 opened; `validate_manifest(manifest)`, which reports every violation, not
 just the first; inside the UoW, the `Role.DESIGNATED_EDITORIAL_APPROVER`
-grant check before any write; pre-write `version_label`/`manifest_hash`
-conflict checks (spec §4.3's UNIQUE constraints raised as `ConflictError`
+grant check before any write; then `validate_basis_ref(basis_ref, ...)`
+(IDK-002 §4), also before any write -- it needs
+`uow.canonical.list_published_versions()` for its `review_kind`/
+`diff_against_version_label` cross-check, which is why it cannot run
+alongside `validate_manifest` outside the UoW; pre-write
+`version_label`/`manifest_hash` conflict checks (spec §4.3's UNIQUE
+constraints raised as `ConflictError`
 instead of a raw `IntegrityError`); one insert per topic identity/topic/
 relation/content revision; the `CanonicalGraphVersion` row inserted
 directly as `PUBLISHED` (see `_build_version`); the `EditorialApproval`
@@ -50,7 +55,7 @@ from yuno.modules.canonical.domain import (
     TopicIdentity,
 )
 from yuno.modules.canonical.ports import CanonicalUnitOfWork
-from yuno.modules.canonical.validation import validate_manifest
+from yuno.modules.canonical.validation import validate_basis_ref, validate_manifest
 from yuno.modules.identity.domain import Role, RolePolicy
 from yuno.modules.identity.ports import OwnerRepository
 from yuno.shared.domain.clock import Clock, SystemClock, now_text
@@ -134,6 +139,28 @@ def publish_canonical_graph(
         grants = uow.owners.grants(actor_owner_id)
         RolePolicy.require(grants, Role.DESIGNATED_EDITORIAL_APPROVER)
 
+        previous = uow.canonical.list_published_versions()
+        basis_ref_result = validate_basis_ref(
+            basis_ref,
+            manifest_hash=manifest.manifest_hash,
+            published_version_labels=[version.version_label for version in previous],
+        )
+        if not basis_ref_result.is_valid:
+            raise DomainValidationError(
+                f"Editorial approval basis_ref for canonical graph manifest "
+                f"{manifest.version_label!r} failed validation with "
+                f"{len(basis_ref_result.violations)} violation(s).",
+                field_errors=[
+                    {
+                        "code": violation.code.value,
+                        "message": violation.message,
+                        "topic_stable_id": violation.topic_stable_id,
+                        "relation_id": violation.relation_id,
+                    }
+                    for violation in basis_ref_result.violations
+                ],
+            )
+
         if uow.canonical.version_label_exists(manifest.version_label):
             raise ConflictError(
                 f"Canonical graph version_label {manifest.version_label!r} has already been "
@@ -149,7 +176,6 @@ def publish_canonical_graph(
         version = _build_version(
             manifest, actor_owner_id=actor_owner_id, published_at=published_at
         )
-        previous = uow.canonical.list_published_versions()
         if previous:
             version = replace(version, supersedes_version_id=previous[0].id)
         uow.canonical.create_version(version)

@@ -55,7 +55,7 @@ def _graph(uow, owner_id: str, label: str, *, identity_exists: bool) -> str:
     )
     uow.canonical.record_approval(
         EditorialApproval(
-            new_id(), graph_id, owner_id, "designated_editorial_approver", "test", now
+            new_id(), graph_id, owner_id, "designated_editorial_approver", '"test"', now
         )
     )
     return graph_id

@@ -45,7 +45,7 @@ def _approved_graph(uow, owner_id: str) -> str:
             graph_version_id=graph_id,
             approver_owner_id=owner_id,
             approver_role="designated_editorial_approver",
-            basis_ref="diagnostic-storage-test",
+            basis_ref='"diagnostic-storage-test"',
             approved_at=timestamp,
         )
     )

@@ -429,6 +429,7 @@ class EditorialApprovalRow(Base):
             "approver_role IN ('designated_editorial_approver')",
             name="approver_role_valid",
         ),
+        CheckConstraint("json_valid(basis_ref)", name="basis_ref_valid"),
     )
 
     id: Mapped[str] = id_column()

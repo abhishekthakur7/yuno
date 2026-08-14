@@ -124,7 +124,7 @@ def _seed_version(
                     graph_version_id=version_id,
                     approver_owner_id=owner_id,
                     approver_role="designated_editorial_approver",
-                    basis_ref="fixture-basis-ref",
+                    basis_ref='"fixture-basis-ref"',
                     approved_at=created_at,
                 )
             )

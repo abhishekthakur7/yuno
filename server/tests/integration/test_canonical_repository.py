@@ -109,7 +109,7 @@ def _seed_version(
                 graph_version_id=version_id,
                 approver_owner_id=owner_id,
                 approver_role="designated_editorial_approver",
-                basis_ref="fixture-basis",
+                basis_ref='"fixture-basis"',
                 approved_at=now_text(SystemClock()),
             )
         )

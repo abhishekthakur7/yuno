@@ -68,7 +68,7 @@ def _goal(client: TestClient, uow_factory: UnitOfWorkFactory) -> str:
                 graph,
                 owner.id,
                 "designated_editorial_approver",
-                "test",
+                '"test"',
                 timestamp,
             )
         )

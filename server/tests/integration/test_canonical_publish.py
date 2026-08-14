@@ -14,6 +14,7 @@ rejected (step 7), with the already-published version still immutable.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -63,6 +64,71 @@ def _row_counts(engine: Engine) -> dict[str, int]:
 def _assert_canonical_tables_empty(engine: Engine) -> None:
     counts = _row_counts(engine)
     assert all(count == 0 for count in counts.values()), counts
+
+
+def _basis_ref_payload(
+    *,
+    manifest_hash: str,
+    review_kind: str = "initial",
+    diff_against_version_label: str | None = None,
+) -> str:
+    """A minimal, fully valid IDK-002 §4 `basis_ref` JSON string for tests
+    below that need `validate_basis_ref` to pass cleanly so they can
+    exercise something else entirely (a mid-transaction DB failure, a
+    version_label/manifest_hash conflict) without that unrelated
+    mechanism being masked by a basis_ref rejection. Not a checklist
+    fixture in its own right -- `v1_approved.json`/`v2_approved.json`
+    (`tests/fixtures/canonical/data/`) are that; this covers the shape
+    with all-zero review counts, which `validate_basis_ref` accepts
+    (reviewed == total, no cross-check against the manifest's real
+    topic/relation counts).
+    """
+    diff_review = (
+        {"result": "pass", "items_reviewed": 0, "items_total": 0}
+        if review_kind == "diff"
+        else None
+    )
+    payload = {
+        "basis_ref_version": "editorial-approval-basis-v1",
+        "policy_identifier": "editorial-approval-criteria-v1",
+        "reviewed_manifest_hash": manifest_hash,
+        "checklist_completed_at": "2026-01-01T00:00:00Z",
+        "review_kind": review_kind,
+        "diff_against_version_label": diff_against_version_label,
+        "curriculum_boundary_review": {
+            "result": "pass",
+            "topics_reviewed": 0,
+            "topics_total": 0,
+        },
+        "dsa_scenario_review": {
+            "result": "pass",
+            "dsa_topics_reviewed": 0,
+            "dsa_topics_total": 0,
+        },
+        "dag_identity_review": {
+            "result": "pass",
+            "reused_stable_ids_confirmed": 0,
+            "reused_stable_ids_total": 0,
+        },
+        "source_citation_review": {
+            "structural_result": "pass",
+            "live_check_result": "pass",
+            "structural_claims_reviewed": 0,
+            "structural_claims_total": 0,
+            "live_check_sample_size": 0,
+            "live_check_population_size": 0,
+        },
+        "layer_reversal_review": {
+            "result": "pass",
+            "topics_reviewed": 0,
+            "topics_total": 0,
+        },
+        "half_seed_immutability_check": {"result": "pass"},
+        "diff_review": diff_review,
+        "approver_is_sole_content_author": True,
+        "notes": "SYNTHETIC FIXTURE basis_ref -- mechanism test only, not a real editorial review.",
+    }
+    return json.dumps(payload)
 
 
 @pytest.fixture
@@ -235,6 +301,143 @@ def test_learner_only_grant_rejected_before_any_write(
 
 
 # ---------------------------------------------------------------------------
+# basis_ref validation (IDK-002 §4/§8): each of the four named failure modes
+# is rejected before any write. `validate_basis_ref` itself is unit-tested
+# exhaustively in `tests/unit/test_canonical_basis_ref_validation.py`; these
+# four prove the *wiring* -- that `publish_canonical_graph` actually calls
+# it, in the right place, for one representative case of each failure mode.
+# ---------------------------------------------------------------------------
+
+
+def test_basis_ref_invalid_json_rejected_before_any_write(
+    engine: Engine, uow_factory: UnitOfWorkFactory, approver_owner_id: str
+) -> None:
+    fixture = load_fixture("v1_approved")
+
+    with pytest.raises(DomainValidationError) as exc_info:
+        publish_canonical_graph(
+            engine=engine,
+            uow_factory=uow_factory,
+            manifest=fixture.manifest,
+            actor_owner_id=approver_owner_id,
+            basis_ref="not valid json {",
+            topic_identity_slugs=fixture.topic_identity_slugs,
+        )
+
+    assert exc_info.value.field_errors
+    assert any(
+        field_error["code"] == "basis_ref_not_valid_json"
+        for field_error in exc_info.value.field_errors
+    )
+    _assert_canonical_tables_empty(engine)
+
+
+def test_basis_ref_missing_required_field_rejected_before_any_write(
+    engine: Engine, uow_factory: UnitOfWorkFactory, approver_owner_id: str
+) -> None:
+    fixture = load_fixture("v1_approved")
+    assert fixture.approval is not None
+    payload = json.loads(fixture.approval.basis_ref)
+    del payload["approver_is_sole_content_author"]
+
+    with pytest.raises(DomainValidationError) as exc_info:
+        publish_canonical_graph(
+            engine=engine,
+            uow_factory=uow_factory,
+            manifest=fixture.manifest,
+            actor_owner_id=approver_owner_id,
+            basis_ref=json.dumps(payload),
+            topic_identity_slugs=fixture.topic_identity_slugs,
+        )
+
+    assert exc_info.value.field_errors
+    assert any(
+        field_error["code"] == "basis_ref_missing_field"
+        for field_error in exc_info.value.field_errors
+    )
+    _assert_canonical_tables_empty(engine)
+
+
+def test_basis_ref_reviewed_manifest_hash_mismatch_rejected_before_any_write(
+    engine: Engine, uow_factory: UnitOfWorkFactory, approver_owner_id: str
+) -> None:
+    fixture = load_fixture("v1_approved")
+    assert fixture.approval is not None
+    payload = json.loads(fixture.approval.basis_ref)
+    # A well-formed but wrong hash -- not the fixture's own recomputed
+    # manifest hash, so the cross-check against `manifest.manifest_hash`
+    # (validated, not file-trusted -- see publisher.py) must fire.
+    payload["reviewed_manifest_hash"] = "0" * 64
+
+    with pytest.raises(DomainValidationError) as exc_info:
+        publish_canonical_graph(
+            engine=engine,
+            uow_factory=uow_factory,
+            manifest=fixture.manifest,
+            actor_owner_id=approver_owner_id,
+            basis_ref=json.dumps(payload),
+            topic_identity_slugs=fixture.topic_identity_slugs,
+        )
+
+    assert exc_info.value.field_errors
+    assert any(
+        field_error["code"] == "basis_ref_manifest_hash_mismatch"
+        for field_error in exc_info.value.field_errors
+    )
+    _assert_canonical_tables_empty(engine)
+
+
+def test_basis_ref_review_kind_published_state_mismatch_rejected_before_any_write(
+    engine: Engine, uow_factory: UnitOfWorkFactory, approver_owner_id: str
+) -> None:
+    """`review_kind` depends on DB state at publish time (IDK-002 §4): once
+    a version is already published, a second publish's basis_ref must say
+    `"diff"`, not `"initial"`. Publishes a good v1 first (so there is a
+    prior published version), then attempts v2 with its `review_kind`
+    forced back to `"initial"` -- rejected, and the second attempt leaves
+    no partial rows behind (v1's own rows, from the first successful
+    publish, are the only ones present before and after).
+    """
+    v1 = load_fixture("v1_approved")
+    v2 = load_fixture("v2_approved")
+    assert v1.approval is not None
+    assert v2.approval is not None
+
+    publish_canonical_graph(
+        engine=engine,
+        uow_factory=uow_factory,
+        manifest=v1.manifest,
+        actor_owner_id=approver_owner_id,
+        basis_ref=v1.approval.basis_ref,
+        topic_identity_slugs=v1.topic_identity_slugs,
+    )
+    counts_after_v1 = _row_counts(engine)
+
+    payload = json.loads(v2.approval.basis_ref)
+    payload["review_kind"] = "initial"
+    payload["diff_against_version_label"] = None
+    payload["diff_review"] = None
+
+    with pytest.raises(DomainValidationError) as exc_info:
+        publish_canonical_graph(
+            engine=engine,
+            uow_factory=uow_factory,
+            manifest=v2.manifest,
+            actor_owner_id=approver_owner_id,
+            basis_ref=json.dumps(payload),
+            topic_identity_slugs=v2.topic_identity_slugs,
+        )
+
+    assert exc_info.value.field_errors
+    assert any(
+        field_error["code"] == "basis_ref_review_kind_published_state_mismatch"
+        for field_error in exc_info.value.field_errors
+    )
+    # Nothing from the rejected v2 attempt was added on top of v1's rows.
+    assert _row_counts(engine) == counts_after_v1
+
+
+# ---------------------------------------------------------------------------
 # A real mid-transaction constraint violation rolls back everything already
 # flushed earlier in the same transaction, not just the failing insert.
 # ---------------------------------------------------------------------------
@@ -299,7 +502,7 @@ def test_mid_transaction_constraint_violation_rolls_back_everything(
             uow_factory=uow_factory,
             manifest=manifest,
             actor_owner_id=approver_owner_id,
-            basis_ref="fixture-basis-mid-txn-failure",
+            basis_ref=_basis_ref_payload(manifest_hash=manifest.manifest_hash),
             topic_identity_slugs={manifest.topics[0].stable_id: manifest.topics[0].stable_id},
         )
 
@@ -338,7 +541,17 @@ def test_republish_under_same_version_label_rejected(
             uow_factory=uow_factory,
             manifest=fixture.manifest,
             actor_owner_id=approver_owner_id,
-            basis_ref=fixture.approval.basis_ref,
+            # A prior version -- this same fixture -- now exists, so a
+            # basis_ref honestly describing publish state must say "diff"
+            # against the label just published, not reuse the "initial"
+            # basis_ref from the first call above (that would now fail
+            # basis_ref validation itself, masking the conflict rejection
+            # this test actually targets).
+            basis_ref=_basis_ref_payload(
+                manifest_hash=fixture.manifest.manifest_hash,
+                review_kind="diff",
+                diff_against_version_label=fixture.manifest.version_label,
+            ),
             topic_identity_slugs=fixture.topic_identity_slugs,
         )
 

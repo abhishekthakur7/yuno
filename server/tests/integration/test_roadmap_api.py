@@ -75,7 +75,7 @@ def _setup(uow_factory: UnitOfWorkFactory) -> tuple[str, str]:
                 graph_id,
                 owner.id,
                 "designated_editorial_approver",
-                "test",
+                '"test"',
                 now,
             )
         )

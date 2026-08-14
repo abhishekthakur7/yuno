@@ -77,7 +77,7 @@ def _seed(uow_factory: UnitOfWorkFactory):
                 graph_id,
                 owner.id,
                 "designated_editorial_approver",
-                "test",
+                '"test"',
                 timestamp,
             )
         )

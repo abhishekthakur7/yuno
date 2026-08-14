@@ -244,7 +244,7 @@ def test_editorial_approval_for_published_version_rejects_update_and_delete(
                     (id, graph_version_id, approver_owner_id, approver_role, basis_ref, approved_at)
                 VALUES
                     (:id, :graph_version_id, :approver_owner_id, 'designated_editorial_approver',
-                     'fixture-basis', :approved_at)
+                     '"fixture-basis"', :approved_at)
                 """
             ),
             {
@@ -268,4 +268,4 @@ def test_editorial_approval_for_published_version_rejects_update_and_delete(
         basis_ref = connection.execute(
             text("SELECT basis_ref FROM editorial_approvals WHERE id = :id"), {"id": approval_id}
         ).scalar_one()
-    assert basis_ref == "fixture-basis"
+    assert basis_ref == '"fixture-basis"'

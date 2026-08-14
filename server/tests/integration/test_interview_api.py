@@ -70,7 +70,7 @@ def _seed_graph(uow_factory: UnitOfWorkFactory, *, suffix: str) -> tuple[str, st
                 graph_id,
                 owner.id,
                 "designated_editorial_approver",
-                "IDK-301 fixture",
+                '"IDK-301 fixture"',
                 timestamp,
             )
         )
