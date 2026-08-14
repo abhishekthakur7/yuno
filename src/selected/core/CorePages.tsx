@@ -20,6 +20,7 @@ import { useRoadmap } from '../../shared/use-roadmap'
 import {
   TOPIC_LAYERS,
   type ArtifactProvenanceSummary,
+  type SourceSnapshot,
   type TopicCheckpoint,
   type TopicLayerContent,
   type TopicLayerName,
@@ -565,7 +566,10 @@ function CheckpointContract({ checkpoint }: { checkpoint: TopicCheckpoint }) {
   </aside>
 }
 
-function ArtifactProvenanceDetails({ provenance, isPending, isError, onRetry }: { provenance: ArtifactProvenanceSummary | undefined; isPending: boolean; isError: boolean; onRetry: () => void }) {
+// Fallback wording pre-approved verbatim in docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md:97.
+const SNAPSHOT_NOT_YET_RETRIEVED = 'not yet retrieved — citation references the live source only'
+
+function ArtifactProvenanceDetails({ provenance, isPending, isError, onRetry, snapshotsById }: { provenance: ArtifactProvenanceSummary | undefined; isPending: boolean; isError: boolean; onRetry: () => void; snapshotsById: Map<string, SourceSnapshot> }) {
   const sources = provenance ? [...new Map(provenance.claims.flatMap(claim => claim.citations).map(citation => [citation.source.id, citation.source])).values()] : []
   const unavailableSources = sources.filter(source => source.availability_status !== 'available')
   return <details className="sb-provenance"><summary>About this content</summary>
@@ -575,7 +579,18 @@ function ArtifactProvenanceDetails({ provenance, isPending, isError, onRetry }: 
           {unavailableSources.length > 0 && <aside className="sb-source-warning" role="alert"><AlertTriangle size={18} /><div><strong>Source availability warning</strong><p>{unavailableSources.map(source => `${source.title} is ${source.availability_status}`).join(' · ')}. Last known provenance is retained.</p></div></aside>}
           <dl className="sb-provenance-meta"><div><dt>Generated</dt><dd>{provenance.baked_snapshot.generated_at}</dd></div><div><dt>Provider / model</dt><dd>{provenance.baked_snapshot.provider} / {provenance.baked_snapshot.model}</dd></div><div><dt>Prompt template</dt><dd>{provenance.baked_snapshot.prompt_template_version}</dd></div><div><dt>Contract</dt><dd>{provenance.baked_snapshot.contract_version} · {provenance.baked_snapshot.schema_version}</dd></div></dl>
           {provenance.claims.length === 0 ? <p>No claim-level citations are attached. Routine content remains self-contained.</p>
-            : <ol className="sb-claim-list">{provenance.claims.map(claim => <li key={claim.id}><span className="sb-entry-kind">{claim.claim_type}</span><p>{claim.claim_text}</p>{claim.citations.length === 0 ? <small>Routine claim · no citation required</small> : <ul>{claim.citations.map(citation => <li key={citation.id}><strong>{citation.source.title}</strong>{citation.locator && <span> · {citation.locator}</span>}<small>{citation.source.publisher ?? 'Publisher unavailable'} · {citation.source.availability_status}</small></li>)}</ul>}</li>)}</ol>}
+            : <ol className="sb-claim-list">{provenance.claims.map(claim => <li key={claim.id}><span className="sb-entry-kind">{claim.claim_type}</span><p>{claim.claim_text}</p>{claim.citations.length === 0 ? <small>Routine claim · no citation required</small> : <ul>{claim.citations.map(citation => {
+              const snapshot = citation.source_snapshot_id ? snapshotsById.get(citation.source_snapshot_id) : undefined
+              return <li key={citation.id}><strong>{citation.source.title}</strong>{citation.locator && <span> · {citation.locator}</span>}<small>{citation.source.publisher ?? 'Publisher unavailable'} · {citation.source.availability_status}</small>
+                <dl className="sb-provenance-meta">
+                  {citation.source.canonical_url && <div><dt>Canonical URL</dt><dd><a href={citation.source.canonical_url} target="_blank" rel="noreferrer">{citation.source.canonical_url}</a></dd></div>}
+                  {citation.source_snapshot_id === null
+                    ? <div><dt>Retrieval timestamp</dt><dd>{SNAPSHOT_NOT_YET_RETRIEVED}</dd></div>
+                    : snapshot && <div><dt>Retrieval timestamp</dt><dd>{snapshot.retrieved_at}</dd></div>}
+                  {snapshot?.version_label && <div><dt>Version label</dt><dd>{snapshot.version_label}</dd></div>}
+                </dl>
+              </li>
+            })}</ul>}</li>)}</ol>}
         </div> : <p>No generated provenance is attached to this authored layer.</p>}
   </details>
 }
@@ -595,6 +610,7 @@ export function TopicLayerPanel({
   provenancePending = false,
   provenanceError = false,
   onRetryProvenance = () => undefined,
+  provenanceSnapshots = new Map<string, SourceSnapshot>(),
   anchorId,
 }: {
   layerName: TopicLayerName
@@ -611,6 +627,7 @@ export function TopicLayerPanel({
   provenancePending?: boolean
   provenanceError?: boolean
   onRetryProvenance?: () => void
+  provenanceSnapshots?: Map<string, SourceSnapshot>
   anchorId: string | undefined
 }) {
   if (isPending) {
@@ -635,7 +652,7 @@ export function TopicLayerPanel({
         <h2>{layer.layer}</h2>
         <div className="sb-layer-copy">{layer.markdown}</div>
         {layer.checkpoint && <CheckpointContract checkpoint={layer.checkpoint} />}
-        {layer.artifact_id && <ArtifactProvenanceDetails provenance={provenance} isPending={provenancePending} isError={provenanceError} onRetry={onRetryProvenance} />}
+        {layer.artifact_id && <ArtifactProvenanceDetails provenance={provenance} isPending={provenancePending} isError={provenanceError} onRetry={onRetryProvenance} snapshotsById={provenanceSnapshots} />}
       </div>
     </section>
   }
@@ -679,7 +696,7 @@ function Topic({ navigate }: PageProps) {
     <PageIntro eyebrow={`Topic Studio · checkpoint ${currentIndex + 1} of ${activeIds.length}`} title={title} action={<div className="sb-topic-actions"><Button onClick={() => document.getElementById('sb-lesson-artifact')?.scrollIntoView({ block: 'start' })}>{currentLessonId === CURRENT_LESSON_ID ? 'Open implementation lab' : 'Open checkpoint'} <ArrowDown size={16} /></Button><Button tone="quiet" onClick={() => document.getElementById('sb-lesson-tools')?.scrollIntoView({ block: 'start' })}>Lesson tools <NotebookPen size={16} /></Button></div>}><span>{projectedTopic?.depth_override ?? projectedTopic?.recommended_depth ?? 'Essential'} · target capability: {projectedTopic?.target_capability ?? 'unverified'}</span></PageIntro>
     <JobConnectionStatus ids={(topicContent.data?.layers ?? []).map(layer => layer.generation?.job_id)} />
     <TopicLayerTabs selected={selectedLayer} onSelect={setSelectedLayer} />
-    <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} onGenerate={() => topicContent.generate.mutate(selectedLayer)} onRegenerate={(artifactId) => topicContent.regenerate.mutate(artifactId)} actionPending={topicContent.generate.isPending || topicContent.regenerate.isPending} actionError={topicContent.generate.error ?? topicContent.regenerate.error} provenance={provenance.data} provenancePending={provenance.isPending} provenanceError={provenance.isError} onRetryProvenance={() => void provenance.refetch()} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
+    <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} onGenerate={() => topicContent.generate.mutate(selectedLayer)} onRegenerate={(artifactId) => topicContent.regenerate.mutate(artifactId)} actionPending={topicContent.generate.isPending || topicContent.regenerate.isPending} actionError={topicContent.generate.error ?? topicContent.regenerate.error} provenance={provenance.data} provenancePending={provenance.isPending} provenanceError={provenance.isError} onRetryProvenance={() => void provenance.refetch()} provenanceSnapshots={provenance.snapshotsById} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
     <HandsOnLab goalId={goal?.id ?? null} topicId={currentLessonId} />
   </article><TopicTools goalId={goal?.id ?? null} topicId={currentLessonId} conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
 }
@@ -1047,7 +1064,7 @@ export function Reports({ navigate, selection }: PageProps) {
     <details className="sb-report-detail" open><summary>Provenance <ChevronDown /></summary><div><aside><h2>Provenance</h2><dl><dt>Assessment</dt><dd>{assessment.id}</dd><dt>Method</dt><dd>{assessment.evaluation_method}</dd><dt>Citations</dt><dd>{assessment.citations.join(', ') || 'None'}</dd><dt>Provenance refs</dt><dd>{assessment.provenance_refs.join(', ') || 'None'}</dd><dt>Limitations</dt><dd>{assessment.limitation_labels.join(', ') || 'None'}</dd></dl></aside></div></details>
     <section className="sb-report-gate"><span>Correction and dispute</span><h2>{latestDispute ? 'Assessment dispute recorded' : 'Something about this assessment is wrong?'}</h2><p>The original assessment remains immutable.</p>{latestDispute && !latestDispute.reevaluation ? <Button tone="secondary" disabled={learning.reevaluate.isPending} onClick={() => learning.reevaluate.mutate({ assessmentId: assessment.id, disputeId: latestDispute.id })}>Request re-evaluation</Button> : <Button tone="secondary" disabled={Boolean(latestDispute) || learning.dispute.isPending} onClick={() => learning.dispute.mutate({ assessmentId: assessment.id, reason: 'The learner requested correction and re-evaluation.' })}>{latestDispute ? latestDispute.reevaluation ? `Re-evaluation ${latestDispute.reevaluation.status}` : 'Dispute recorded' : 'Record dispute'}</Button>}{(learning.dispute.isError || learning.reevaluate.isError) && <p role="alert">The request was not saved. The assessment remains unchanged.</p>}</section></>}
     {unavailableSources.length > 0 && <aside className="sb-neutral" role="alert"><AlertTriangle /><div><strong>Tombstoned source warning: cited source withdrawn or unavailable</strong><p>{unavailableSources.map(source => source.title).join(', ')} remains named in provenance history; it has not silently disappeared.</p></div></aside>}
-    <details className="sb-report-detail"><summary>Submitted lab evidence ({evidence.length}) <ChevronDown /></summary><div className="sb-evidence-history">{learning.evidence.isError ? <ReportRegionFailure label="Evidence" retry={() => void learning.evidence.refetch()} /> : learning.evidence.isPending ? <p>Loading submitted lab evidence…</p> : learning.entries.length ? learning.entries.map(entry => <article key={entry.evidence.id}><strong>{entry.evidence.summary}</strong><p>{entry.evidence.evidence_type} · {entry.evidence.capability} · {entry.evidence.origin}</p>{entry.detail.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} detail`} retry={() => void entry.detail.refetch()} /> : entry.detail.isPending ? <p>Loading evidence detail…</p> : entry.detail.data ? <dl><dt>Content version</dt><dd>{entry.detail.data.content_version ?? 'Tombstoned'}</dd><dt>Transfer lineage</dt><dd>{entry.detail.data.transfers.length ? entry.detail.data.transfers.map(item => `${item.classification} → ${item.target_goal_id}`).join(', ') : 'None'}</dd></dl> : null}{entry.assessment.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} assessment`} retry={() => void entry.assessment.refetch()} /> : entry.assessment.isPending ? <p>Loading assessment…</p> : entry.assessment.data ? <section><h3>{entry.assessment.data.feedback}</h3><p>Assessment state: {entry.assessment.data.state}</p>{entry.assessment.data.ambiguities.length > 0 && <p>Ambiguities: {entry.assessment.data.ambiguities.join('; ')}. Unresolved ambiguity carries no readiness penalty.</p>}</section> : <p>No assessment attached.</p>}<ReportAssessmentHistory entry={entry} />{entry.sources.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} cited sources`} retry={() => void entry.sources.refetch()} /> : entry.sources.isPending ? <p>Loading cited sources…</p> : entry.sources.data.length > 0 ? <p>Sources: {entry.sources.data.map(source => `${source.title} (${source.availability_status})`).join(', ')}</p> : null}</article>) : <p>No submitted lab evidence.</p>}</div></details>
+    <details className="sb-report-detail"><summary>Submitted lab evidence ({evidence.length}) <ChevronDown /></summary><div className="sb-evidence-history">{learning.evidence.isError ? <ReportRegionFailure label="Evidence" retry={() => void learning.evidence.refetch()} /> : learning.evidence.isPending ? <p>Loading submitted lab evidence…</p> : learning.entries.length ? learning.entries.map(entry => <article key={entry.evidence.id}><strong>{entry.evidence.summary}</strong><p>{entry.evidence.evidence_type} · {entry.evidence.capability} · {entry.evidence.origin}</p>{entry.detail.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} detail`} retry={() => void entry.detail.refetch()} /> : entry.detail.isPending ? <p>Loading evidence detail…</p> : entry.detail.data ? <dl><dt>Content version</dt><dd>{entry.detail.data.content_version ?? 'Tombstoned'}</dd><dt>Transfer lineage</dt><dd>{entry.detail.data.transfers.length ? entry.detail.data.transfers.map(item => `${item.classification} → ${item.target_goal_id}`).join(', ') : 'None'}</dd></dl> : null}{entry.assessment.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} assessment`} retry={() => void entry.assessment.refetch()} /> : entry.assessment.isPending ? <p>Loading assessment…</p> : entry.assessment.data ? <section><h3>{entry.assessment.data.feedback}</h3><p>Assessment state: {entry.assessment.data.state}</p>{entry.assessment.data.ambiguities.length > 0 && <p>Ambiguities: {entry.assessment.data.ambiguities.join('; ')}. Unresolved ambiguity carries no readiness penalty.</p>}</section> : <p>No assessment attached.</p>}<ReportAssessmentHistory entry={entry} />{entry.sources.isError ? <ReportRegionFailure label={`Evidence ${entry.evidence.id} cited sources`} retry={() => void entry.sources.refetch()} /> : entry.sources.isPending ? <p>Loading cited sources…</p> : entry.sources.data.length > 0 ? <div><span>Sources:</span><ul>{entry.sources.data.map(source => <li key={source.id}>{source.title} ({source.availability_status}){source.canonical_url && <> · <a href={source.canonical_url} target="_blank" rel="noreferrer">{source.canonical_url}</a></>}</li>)}</ul></div> : null}</article>) : <p>No submitted lab evidence.</p>}</div></details>
     <ReportProgressDisclosure progress={learning.progress} display={ownerSettings.settings.data?.progress_display ?? null} settings={ownerSettings.settings} />
   </main>
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { artifactProvenanceQueryOptions, generateTopicLayer, regenerateArtifact, sendTutorTurn, topicConversationQueryOptions, topicLayersQueryOptions, type TopicLayerName } from './api/learning-content'
+import { artifactProvenanceQueryOptions, generateTopicLayer, regenerateArtifact, sendTutorTurn, sourceSnapshotsQueryOptions, topicConversationQueryOptions, topicLayersQueryOptions, type SourceSnapshot, type TopicLayerName } from './api/learning-content'
 import { jobQueryOptions } from './api/jobs'
 import { useJobEvents } from './job-events'
 
@@ -29,7 +29,20 @@ export function useTopicContent(goalId: string | null, topicId: string | null) {
 }
 
 export function useArtifactProvenance(artifactId: string | null) {
-  return useQuery(artifactProvenanceQueryOptions(artifactId))
+  const provenance = useQuery(artifactProvenanceQueryOptions(artifactId))
+  // Citations only carry a `source_snapshot_id`; the referenced snapshot's retrieval
+  // timestamp and version label live behind GET /sources/{source_id}/snapshots (IDK-003 §7).
+  const sourceIds = [...new Set(
+    (provenance.data?.claims ?? [])
+      .flatMap(claim => claim.citations)
+      .filter(citation => citation.source_snapshot_id !== null)
+      .map(citation => citation.source.id),
+  )]
+  const snapshotQueries = useQueries({ queries: sourceIds.map(sourceSnapshotsQueryOptions) })
+  const snapshotsById = new Map<string, SourceSnapshot>(
+    snapshotQueries.flatMap(query => query.data ?? []).map(snapshot => [snapshot.id, snapshot] as const),
+  )
+  return { ...provenance, snapshotsById }
 }
 
 export function useTopicConversation(goalId: string | null, topicId: string | null) {

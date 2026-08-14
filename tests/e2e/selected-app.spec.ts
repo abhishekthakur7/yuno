@@ -258,6 +258,26 @@ test('Topic Studio keeps a stale body through explicit regeneration and exposes 
   await expect(page.getByText('This version-dependent claim needs direct support.')).toBeVisible()
   await expect(page.getByText('Routine claim · no citation required')).toBeVisible()
   await expect(page.getByRole('alert')).toContainText('Withdrawn fixture advisory is withdrawn')
+
+  // citation-e2e-1 (source-e2e-active): non-null canonical_url renders as a real anchor, and its
+  // source_snapshot_id resolves through GET /sources/{id}/snapshots to a retrieval timestamp + version label.
+  const resolvedCitation = page.getByText('Primary fixture specification', { exact: true }).locator('xpath=ancestor::li[1]')
+  await expect(resolvedCitation.getByRole('link', { name: 'https://fixture.example/specs/primary' })).toHaveAttribute('href', 'https://fixture.example/specs/primary')
+  await expect(resolvedCitation.getByText('2026-08-11T00:00:00Z')).toBeVisible()
+  await expect(resolvedCitation.getByText('v2026.08')).toBeVisible()
+
+  // citation-e2e-2 (source-e2e-withdrawn): canonical_url: null omits the anchor, and
+  // source_snapshot_id: null renders the IDK-003:97 verbatim fallback instead of a timestamp.
+  const unresolvedCitation = page.getByText('Withdrawn fixture advisory', { exact: true }).locator('xpath=ancestor::li[1]')
+  await expect(unresolvedCitation.getByRole('link')).toHaveCount(0)
+  await expect(unresolvedCitation.getByText('not yet retrieved — citation references the live source only')).toBeVisible()
+
+  // The raw license_status value is never rendered (IDK-003 §7 requires a named license basis, which
+  // does not exist in any API response today), only availability_status/canonical_url/snapshot fields.
+  const provenancePanel = page.locator('.sb-provenance')
+  await expect(provenancePanel).not.toContainText('approved-open-license')
+  await expect(provenancePanel).not.toContainText('approved-link-only')
+
   await page.getByRole('button', { name: 'Regenerate', exact: true }).click()
   await expect(page.getByText('Original stale generated body.')).toBeVisible()
   await expect(page.getByText('Generating updated content')).toBeVisible()

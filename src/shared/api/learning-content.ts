@@ -9,6 +9,7 @@ export type TopicLayerContent = components['schemas']['TopicLayerResponse']
 export type TopicCheckpoint = components['schemas']['TopicCheckpointResponse']
 export type ArtifactProvenanceSummary = components['schemas']['ArtifactProvenanceResponse']
 export type TopicConversationTurn = components['schemas']['TopicConversationTurnResponse']
+export type SourceSnapshot = components['schemas']['SourceSnapshotResponse']
 
 export const TOPIC_LAYERS: readonly TopicLayerName[] = [
   'Essential',
@@ -68,6 +69,18 @@ export function artifactProvenanceQueryOptions(artifactId: string | null) {
     queryFn: async () => {
       const { data, error, response } = await client.GET('/api/v1/artifacts/{artifact_id}/provenance', { params: { path: { artifact_id: artifactId! } } })
       if (error || !data) throw new ApiError(error?.message ?? 'Artifact provenance could not be loaded.', response.status)
+      return data
+    },
+  })
+}
+
+export function sourceSnapshotsQueryOptions(sourceId: string | null) {
+  return queryOptions({
+    queryKey: ['sources', sourceId, 'snapshots'],
+    enabled: Boolean(sourceId),
+    queryFn: async () => {
+      const { data, error, response } = await client.GET('/api/v1/sources/{source_id}/snapshots', { params: { path: { source_id: sourceId! } } })
+      if (error || !data) throw new ApiError(error?.message ?? 'Source snapshots could not be loaded.', response.status)
       return data
     },
   })

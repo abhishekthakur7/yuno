@@ -74,6 +74,33 @@ describe('learning Reports presentation', () => {
     expect(screen.getByRole('button', { name: /Retry evidence evidence-1 assessment/i })).toBeInTheDocument()
   })
 
+  it('renders a cited source canonical URL as a real link, omits a null canonical_url, and never shows the raw license_status', () => {
+    const evidence = { id: 'evidence-1', summary: 'Atomic duplicate handling', evidence_type: 'lab', capability: 'implement', origin: 'learner' }
+    mocks.workspace = {
+      ...mocks.workspace,
+      evidence: query([evidence]),
+      entries: [{
+        evidence, detail: query(undefined), assessment: query(undefined), assessmentHistory: query([]),
+        sources: {
+          ...query([
+            { id: 'source-1', title: 'PostgreSQL documentation', availability_status: 'available', canonical_url: 'https://example.test/postgres', license_status: 'permissive-attribution' },
+            { id: 'source-2', title: 'Internal note', availability_status: 'available', canonical_url: null, license_status: 'link-only' },
+          ]),
+          unavailable: [],
+        },
+      }],
+    }
+    const { container } = render(<Reports navigate={vi.fn()} />)
+    // Field 3 — canonical URL is an actual link (IDK-003 §7:96).
+    const link = screen.getByRole('link', { name: 'https://example.test/postgres' })
+    expect(link).toHaveAttribute('href', 'https://example.test/postgres')
+    // source-2 has a null canonical_url: no broken anchor is rendered for it.
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    // Ruling B — the raw license_status enum is never rendered, anywhere.
+    expect(container.textContent).not.toContain('permissive-attribution')
+    expect(container.textContent).not.toContain('link-only')
+  })
+
   it('discloses assessment revisions with rubric and dispute history for each evidence entry', () => {
     const evidence = { id: 'evidence-1', summary: 'Atomic duplicate handling', evidence_type: 'lab', capability: 'implement', origin: 'learner' }
     const prior = { id: 'assessment-0', created_at: '2026-08-11T09:00:00Z', state: 'feedback-ready', feedback: 'Prior assessment found a retry gap.', predecessor_assessment_id: null, dimensions: [{ dimension_id: 'correctness', outcome: 'factual-correction', rationale: 'The retry boundary was incomplete.' }], disputes: [{ id: 'dispute-1', status: 'resolved', reason: 'The artifact included a transaction guard.', reevaluation: { status: 'succeeded' } }] }

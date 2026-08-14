@@ -149,13 +149,19 @@ export function generatedLayerResponse(overrides: Record<string, unknown> = {}) 
   }
 }
 
+// Real production vocabulary per docs/decisions/IDK-003-source-licensing-and-snapshot-policy.md:160-161
+// (the synthetic placeholder 'synthetic' is not a legal `license_status` value).
+export const SOURCE_SNAPSHOT_SUPPORTING = { id: 'source-snapshot-e2e-1', source_id: 'source-e2e-active', retrieved_at: '2026-08-11T00:00:00Z', version_label: 'v2026.08', content_hash: 'snapshot-content-hash-e2e-1', content_ref: 'snapshot-content-ref-e2e-1', status: 'active' }
+
 export function artifactProvenanceFixture() {
-  const source = (id: string, title: string, availability_status: string) => ({ id, origin: 'synthetic-fixture', source_type: 'documentation', title, publisher: 'Fixture publisher', canonical_url: null, license_status: 'synthetic', availability_status, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' })
+  const source = (id: string, title: string, availability_status: string, canonical_url: string | null, license_status: string) => ({ id, origin: 'synthetic-fixture', source_type: 'documentation', title, publisher: 'Fixture publisher', canonical_url, license_status, availability_status, created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z' })
   return {
     artifact_id: 'artifact-e2e-1', current_snapshot_hash: 'snapshot-hash-e2e', stale: true, stale_reasons: ['personalization-snapshot-mismatch'], refs: [],
     baked_snapshot: { id: 'snapshot-e2e-1', evidence_state_hash: 'evidence-hash-e2e', profile_hash: 'profile-hash-e2e', provider: 'fixture-provider', model: 'fixture-model', generated_at: '2026-08-12T00:00:00Z', schema_version: 'generate-result-v1', contract_version: 'fixture-v0', prompt_template_version: 'fixture-v0', snapshot_hash: 'snapshot-hash-e2e' },
     claims: [
-      { id: 'claim-e2e-sensitive', claim_text: 'This version-dependent claim needs direct support.', claim_type: 'time-or-version-dependent', sensitive: true, citations: [{ id: 'citation-e2e-1', source: source('source-e2e-active', 'Primary fixture specification', 'available'), source_snapshot_id: 'source-snapshot-e2e-1', locator: 'Section 4', support_kind: 'direct', note: null }, { id: 'citation-e2e-2', source: source('source-e2e-withdrawn', 'Withdrawn fixture advisory', 'withdrawn'), source_snapshot_id: 'source-snapshot-e2e-2', locator: 'Archived section', support_kind: 'historical', note: null }] },
+      // citation-e2e-1: resolvable snapshot (SOURCE_SNAPSHOT_SUPPORTING) + non-null canonical_url -> exercises the anchor and the resolved retrieval timestamp/version rows.
+      // citation-e2e-2: source_snapshot_id: null + canonical_url: null -> exercises the verbatim fallback string and the anchor-omission path.
+      { id: 'claim-e2e-sensitive', claim_text: 'This version-dependent claim needs direct support.', claim_type: 'time-or-version-dependent', sensitive: true, citations: [{ id: 'citation-e2e-1', source: source('source-e2e-active', 'Primary fixture specification', 'available', 'https://fixture.example/specs/primary', 'approved-open-license'), source_snapshot_id: SOURCE_SNAPSHOT_SUPPORTING.id, locator: 'Section 4', support_kind: 'direct', note: null }, { id: 'citation-e2e-2', source: source('source-e2e-withdrawn', 'Withdrawn fixture advisory', 'withdrawn', null, 'approved-link-only'), source_snapshot_id: null, locator: 'Archived section', support_kind: 'historical', note: null }] },
       { id: 'claim-e2e-routine', claim_text: 'Routine self-contained explanation.', claim_type: 'routine', sensitive: false, citations: [] },
     ],
   }
@@ -316,7 +322,7 @@ export async function installApiMocks(page: Page) {
     {
       id: 'source-e2e-withdrawn', origin: 'synthetic-fixture', source_type: 'documentation',
       title: 'Withdrawn evidence fixture advisory', publisher: 'Fixture publisher', canonical_url: null,
-      license_status: 'synthetic', availability_status: 'withdrawn',
+      license_status: 'approved-link-only', availability_status: 'withdrawn',
       created_at: '2026-08-12T00:00:00Z', updated_at: '2026-08-12T00:00:00Z',
     },
   ]
@@ -1082,6 +1088,14 @@ export async function installApiMocks(page: Page) {
     const sourceId = new URL(route.request().url()).pathname.split('/').at(-1)
     const source = evidenceSources.find(item => item.id === sourceId)
     await route.fulfill(source ? { json: source } : { status: 404, json: { message: 'Source not found' } })
+  })
+  // Registered after the '**/api/v1/sources/*' route above so it wins on the longer path
+  // (Playwright: "the most recently registered route takes precedence"). Only
+  // 'source-e2e-active' (artifactProvenanceFixture's citation-e2e-1) has a resolvable
+  // source_snapshot_id, so it is the only id with a matching snapshot below.
+  await page.route('**/api/v1/sources/*/snapshots', async route => {
+    const sourceId = new URL(route.request().url()).pathname.split('/').at(-2)
+    await route.fulfill({ json: sourceId === SOURCE_SNAPSHOT_SUPPORTING.source_id ? [SOURCE_SNAPSHOT_SUPPORTING] : [] })
   })
   await page.route('**/api/v1/goals/*/progress', async route => {
     const goalId = new URL(route.request().url()).pathname.split('/').at(-2)!
