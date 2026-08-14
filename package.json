@@ -20,7 +20,9 @@
     "test:e2e": "playwright test",
     "openapi:export": "uv run --directory server python scripts/export_openapi.py",
     "openapi:generate": "openapi-typescript server/openapi.json -o src/shared/api/schema.d.ts",
-    "openapi:check": "uv run --directory server python scripts/export_openapi.py --check && node scripts/check-openapi-drift.mjs"
+    "openapi:check": "uv run --directory server python scripts/export_openapi.py --check && node scripts/check-openapi-drift.mjs",
+    "review:check": "node scripts/check-review-records.mjs",
+    "perf": "node scripts/perf/run.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "1.1.15",

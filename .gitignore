@@ -5,6 +5,10 @@ playwright-report/
 test-results/
 *.local
 
+# IDK-504 measurement run artefacts. The report the run produces is committed
+# under docs/performance/; the raw samples behind it are per-machine and are not.
+perf-results/
+
 # Python/uv artefacts (server/openapi.json is generated but committed --
 # it must stay tracked so the drift check has something to compare against)
 server/.venv/
