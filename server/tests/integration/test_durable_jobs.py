@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import threading
 import time
+from contextlib import contextmanager
 
 import pytest
 from sqlalchemy import func, select, text
@@ -38,6 +41,7 @@ from yuno.shared.application.jobs import (
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import ConflictError, PendingJobCapError
 from yuno.shared.domain.hashing import hash_payload
+from yuno.shared.infrastructure.structured_logging import LOGGER_NAME
 
 
 def _owner(uow_factory) -> str:
@@ -45,6 +49,25 @@ def _owner(uow_factory) -> str:
         owner = ensure_local_owner(uow, "Job test owner")
         uow.commit()
         return owner.id
+
+
+def _json_log_events(caplog) -> list[dict[str, object]]:
+    return [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == LOGGER_NAME
+    ]
+
+
+@contextmanager
+def _capture_structured_logs(caplog):
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            yield
+    finally:
+        logger.removeHandler(caplog.handler)
 
 
 def _cleanup_recorder(root):
@@ -651,3 +674,115 @@ def test_pid_identity_mismatch_refuses_signal_and_owned_reconcile(
     assert killed == []
     with pytest.raises(ConflictError, match="still owns"):
         dispatcher.reconcile(owner, row.id)
+
+
+def test_stop_surfaces_a_lane_that_does_not_terminate_within_timeout(
+    session_factory, uow_factory, caplog
+) -> None:
+    """A lane worker still executing a job at shutdown must not be silently
+    abandoned: `stop()` should report which lane failed to join, log a
+    structured event naming it, and keep holding the ownership flock
+    (rather than releasing it as if the database were quiescent).
+    """
+    owner = _owner(uow_factory)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def wedge(_execution: JobExecution) -> JobCompletion:
+        entered.set()
+        # Generous safety-net timeout only; the test always sets `release`
+        # itself in its `finally` block before this would ever be hit.
+        assert release.wait(30), "test bug: release was never signalled"
+        return JobCompletion(
+            JobResult("bulk_index", "1", "index:stuck", hash_payload("index:stuck")),
+            lambda _session: None,
+        )
+
+    dispatcher = DurableJobDispatcher(
+        session_factory,
+        pending_cap=10,
+        background_age_promotion_seconds=60,
+        janitor_retention_seconds=60,
+        # Deterministic, not a race: `release` is never set before `stop()`
+        # runs below, so the lane thread is guaranteed to still be blocked
+        # when the join timeout elapses no matter how small it is. A tiny
+        # value here only keeps the test fast.
+        lane_stop_timeout_seconds=0.2,
+    )
+    dispatcher.register("bulk_index", wedge)
+    dispatcher.start()
+    ref = dispatcher.enqueue(JobRequest("bulk_index", owner, {}))
+    assert entered.wait(5)
+
+    try:
+        with _capture_structured_logs(caplog):
+            stalled = dispatcher.stop()
+
+        # 1. Observable return value: the lane that did not terminate is
+        #    named, not swallowed.
+        assert stalled == frozenset({JobLane.BACKGROUND})
+
+        # 2. Observable state a caller/test can inspect after the fact,
+        #    following the module's existing `lane_diagnostics` mechanism.
+        assert dispatcher.lane_diagnostics[JobLane.BACKGROUND]
+
+        # 3. A structured event was emitted following the established
+        #    `job.<lifecycle>` pattern, naming the lane, with no payload,
+        #    learner content, or filesystem path attached. Depending on
+        #    whether an earlier test has already pointed the
+        #    `yuno.observability` logger at a non-propagating handler (see
+        #    `test_structured_logging.py`'s own `_capture_logs`), the root
+        #    logger's implicit pytest capture can also see the record, so
+        #    -- like that file's assertions -- this checks every captured
+        #    copy rather than assuming there is exactly one.
+        stop_events = [
+            event
+            for event in _json_log_events(caplog)
+            if event["event"] == "job.dispatcher-stop-timeout"
+        ]
+        assert stop_events
+        for event in stop_events:
+            assert event["diagnostic_classification"] == "lane-stop-timeout-background"
+            assert set(event) == {
+                "timestamp",
+                "level",
+                "event",
+                "lifecycle",
+                "diagnostic_classification",
+            }
+
+        # 4. The ownership flock is still held: a second dispatcher on the
+        #    same database must be refused, exactly as if the first worker
+        #    were still alive and running -- because it is.
+        blocked = DurableJobDispatcher(
+            session_factory,
+            pending_cap=10,
+            background_age_promotion_seconds=60,
+            janitor_retention_seconds=60,
+        )
+        with pytest.raises(RuntimeError, match="Another durable worker process"):
+            blocked.start()
+    finally:
+        release.set()
+
+    # Once the wedged handler actually finishes, a follow-up `stop()` call
+    # must resolve cleanly: the lane is no longer stalled and the flock is
+    # released. Wait for the durable, observable outcome (the job reaching
+    # its terminal state) rather than a fixed sleep, then give the final
+    # join a generous timeout as a safety margin -- by this point the lane
+    # thread has nothing left to do but loop back and exit.
+    _wait(dispatcher, owner, ref.job_id, JobStatus.SUCCEEDED)
+    dispatcher._lane_stop_timeout_seconds = 5.0  # noqa: SLF001
+    resolved = dispatcher.stop()
+    assert resolved == frozenset()
+
+    reowned = DurableJobDispatcher(
+        session_factory,
+        pending_cap=10,
+        background_age_promotion_seconds=60,
+        janitor_retention_seconds=60,
+    )
+    try:
+        reowned.start()
+    finally:
+        reowned.stop()

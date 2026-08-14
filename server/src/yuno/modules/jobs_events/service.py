@@ -87,6 +87,7 @@ class DurableJobDispatcher:
         ) = None,
         execute_external_cleanup: Callable[[str], None] | None = None,
         clock: Clock | None = None,
+        lane_stop_timeout_seconds: float = 5.0,
     ) -> None:
         self._sessions = session_factory
         self._pending_cap = _provider(pending_cap)
@@ -95,11 +96,12 @@ class DurableJobDispatcher:
         self._record_cleanup = record_workspace_cleanup
         self._execute_external_cleanup = execute_external_cleanup
         self._clock = clock or SystemClock()
+        self._lane_stop_timeout_seconds = lane_stop_timeout_seconds
         self._handlers: dict[str, JobHandler] = {}
         self._wake = threading.Condition()
         self._transition_lock = threading.RLock()
         self._stop = False
-        self._threads: list[threading.Thread] = []
+        self._threads: dict[JobLane, threading.Thread] = {}
         self._worker_id = f"worker-{os.getpid()}"
         self._janitor_diagnostic: str | None = None
         self._lane_diagnostics: dict[JobLane, str] = {}
@@ -137,19 +139,47 @@ class DurableJobDispatcher:
                 daemon=True,
             )
             thread.start()
-            self._threads.append(thread)
+            self._threads[lane] = thread
 
-    def stop(self) -> None:
+    def stop(self) -> frozenset[JobLane]:
+        """Signal every lane to stop and join its worker thread.
+
+        Returns the lanes whose worker thread was still alive after the
+        bounded join -- i.e. a job may still be executing against a
+        database this process is about to tear down. An empty result means
+        every lane stopped cleanly.
+
+        A lane that fails to stop is not silently dropped: it stays
+        tracked in `self._threads` (so a stray `start()` call cannot spin
+        up a second thread racing the orphaned one on the same lane) and
+        the ownership flock is deliberately *not* released, since this
+        process can no longer vouch that the database is quiescent.
+        Releasing the flock is a non-blocking syscall, so withholding it
+        cannot deadlock shutdown; the bounded join above is what keeps
+        `stop()` itself from hanging forever on a wedged job.
+        """
         with self._wake:
             self._stop = True
             self._wake.notify_all()
-        for thread in self._threads:
-            thread.join(timeout=5)
-        self._threads.clear()
+        stalled: set[JobLane] = set()
+        for lane, thread in list(self._threads.items()):
+            thread.join(timeout=self._lane_stop_timeout_seconds)
+            if thread.is_alive():
+                stalled.add(lane)
+                self._lane_diagnostics[lane] = (
+                    "lane worker did not stop within the shutdown timeout; "
+                    "a job may still be running"
+                )
+                self._log_stop_timeout(lane)
+            else:
+                del self._threads[lane]
+        if stalled:
+            return frozenset(stalled)
         if self._ownership_file is not None:
             fcntl.flock(self._ownership_file.fileno(), fcntl.LOCK_UN)
             self._ownership_file.close()
             self._ownership_file = None
+        return frozenset()
 
     def _acquire_ownership(self) -> None:
         database = self._sessions.kw["bind"].url.database
@@ -651,6 +681,15 @@ class DurableJobDispatcher:
             run_id=row.run_id,
             lifecycle=lifecycle,
             diagnostic_classification=diagnostic_classification,
+        )
+
+    @staticmethod
+    def _log_stop_timeout(lane: JobLane) -> None:
+        lifecycle = "dispatcher-stop-timeout"
+        log_event(
+            f"job.{lifecycle}",
+            lifecycle=lifecycle,
+            diagnostic_classification=f"lane-stop-timeout-{lane.value}",
         )
 
     def _reconcile_attempt(self, repo: JobRepository, job_id: str) -> str | None:
