@@ -1,9 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ArtifactProvenanceSummary, SourceSnapshot, TopicLayerContent } from '../shared/api/learning-content'
-import { TopicLayerPanel } from './core/CorePages'
+import { TopicLayerPanel, TopicTools } from './core/CorePages'
 
 const layer = (patch: Partial<TopicLayerContent> = {}): TopicLayerContent => ({
   layer: 'Essential', state: 'ready', revision_id: null, markdown: 'Original generated body.', markdown_hash: 'body-hash', checkpoint: null,
@@ -114,5 +115,49 @@ describe('generated topic content presentation', () => {
     // Ruling B — the raw license_status enum is never rendered, anywhere.
     expect(container.textContent).not.toContain('synthetic')
     expect(container.textContent).not.toContain('link-only')
+  })
+
+  it('renders IDK-003 §7 attribution alongside the Sources layer markdown on the resources tab (IDK-503 B5, third surface)', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(<QueryClientProvider client={queryClient}>
+      <TopicTools
+        goalId={null}
+        topicId="topic-1"
+        conversationScope={null}
+        sourcesMarkdown="Approved fixture sources for this topic."
+        sourcesArtifactId="artifact-1"
+        sourcesProvenance={provenance}
+        sourcesProvenancePending={false}
+        sourcesProvenanceError={false}
+        sourcesProvenanceSnapshots={provenanceSnapshots}
+        onRetrySourcesProvenance={vi.fn()}
+      />
+    </QueryClientProvider>)
+
+    await userEvent.click(screen.getByRole('tab', { name: /Resources/i }))
+    expect(screen.getByText('Approved fixture sources for this topic.')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('About this content'))
+
+    // Field 3 — canonical URL as a real link.
+    expect(screen.getByRole('link', { name: 'https://example.test/spec' })).toHaveAttribute('href', 'https://example.test/spec')
+    // Field 4 — retrieval timestamp of the referenced snapshot.
+    expect(screen.getByText('2026-08-10T00:00:00Z')).toBeInTheDocument()
+    // Field 6 — version label.
+    expect(screen.getByText('PostgreSQL 16')).toBeInTheDocument()
+    // Field 4 fallback — the verbatim IDK-003:97 string for a citation with no snapshot.
+    expect(screen.getByText('not yet retrieved — citation references the live source only')).toBeInTheDocument()
+    // Ruling B — the raw license_status enum is never rendered on this surface either.
+    expect(screen.queryByText(/synthetic|link-only/)).not.toBeInTheDocument()
+  })
+
+  it('omits the resources-tab attribution panel when the Sources layer has no artifact yet', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(<QueryClientProvider client={queryClient}>
+      <TopicTools goalId={null} topicId="topic-1" conversationScope={null} sourcesMarkdown={null} />
+    </QueryClientProvider>)
+
+    await userEvent.click(screen.getByRole('tab', { name: /Resources/i }))
+    expect(screen.getByText('No approved sources yet')).toBeInTheDocument()
+    expect(screen.queryByText('About this content')).not.toBeInTheDocument()
   })
 })
