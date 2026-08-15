@@ -8,8 +8,19 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const GATE_DIR = 'docs/approvals/IDK-503'
-const RECORD = 'docs/approvals/IDK-503-content-and-safety-review.md'
+// IDK-503 is re-run rather than amended, so each round is a separate directory
+// and record that stands beside the earlier ones. Every round is scanned: an
+// older round staying valid is part of what makes a re-run comparable to it.
+const ROUNDS = [
+  {
+    gateDir: 'docs/approvals/IDK-503',
+    record: 'docs/approvals/IDK-503-content-and-safety-review.md',
+  },
+  {
+    gateDir: 'docs/approvals/IDK-503-rerun-2026-08-15',
+    record: 'docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md',
+  },
+]
 
 // The seven gates IDK-503's scope names. A missing file here means a gate was skipped.
 const GATES = [
@@ -49,31 +60,33 @@ const ARTIFACT_REFERENCE = /(?:[\w./-]+\.(?:py|ts|tsx|mjs|json|md|db)(?::\d+)?|s
 const failures = []
 const check = (file, condition, message) => { if (!condition) failures.push(`${file}: ${message}`) }
 
-const present = new Set(readdirSync(GATE_DIR).filter(name => name.endsWith('.md')))
-for (const gate of GATES) {
-  if (!present.has(gate)) {
-    failures.push(`${GATE_DIR}/${gate}: missing -- this gate has no recorded review`)
-    continue
+for (const { gateDir, record: recordPath } of ROUNDS) {
+  const present = new Set(readdirSync(gateDir).filter(name => name.endsWith('.md')))
+  for (const gate of GATES) {
+    if (!present.has(gate)) {
+      failures.push(`${gateDir}/${gate}: missing -- this gate has no recorded review`)
+      continue
+    }
+    const path = join(gateDir, gate)
+    const text = readFileSync(path, 'utf8')
+    for (const field of REQUIRED_FIELDS) check(path, field.pattern.test(text), `no ${field.label} field`)
+    check(path, ARTIFACT_REFERENCE.test(text), 'cites no specific artifact (path, query or named test)')
+    check(path, /^## Blocking findings$/m.test(text), 'no blocking-findings section')
+    check(path, !/^- Disposition: approved$/m.test(text), 'records an approval; only the named approver may approve a gate')
   }
-  const path = join(GATE_DIR, gate)
-  const text = readFileSync(path, 'utf8')
-  for (const field of REQUIRED_FIELDS) check(path, field.pattern.test(text), `no ${field.label} field`)
-  check(path, ARTIFACT_REFERENCE.test(text), 'cites no specific artifact (path, query or named test)')
-  check(path, /^## Blocking findings$/m.test(text), 'no blocking-findings section')
-  check(path, !/^- Disposition: approved$/m.test(text), 'records an approval; only the named approver may approve a gate')
-}
-for (const extra of present) {
-  if (!GATES.includes(extra)) failures.push(`${GATE_DIR}/${extra}: unexpected file -- not one of the seven named gates`)
-}
+  for (const extra of present) {
+    if (!GATES.includes(extra)) failures.push(`${gateDir}/${extra}: unexpected file -- not one of the seven named gates`)
+  }
 
-const record = readFileSync(RECORD, 'utf8')
-for (const gate of GATES) {
-  const id = gate.replace(/^gate-(\d)-.*$/, '$1')
-  check(RECORD, new RegExp(`^\\| ${id} \\|`, 'm').test(record), `no disposition row for gate ${id}`)
-  check(RECORD, record.includes(gate), `does not reference ${gate}`)
-}
-for (const row of APPENDIX_C_ROWS) {
-  check(RECORD, record.includes(row), `Appendix C row "${row}" has no recorded disposition`)
+  const record = readFileSync(recordPath, 'utf8')
+  for (const gate of GATES) {
+    const id = gate.replace(/^gate-(\d)-.*$/, '$1')
+    check(recordPath, new RegExp(`^\\| ${id} \\|`, 'm').test(record), `no disposition row for gate ${id}`)
+    check(recordPath, record.includes(gate), `does not reference ${gate}`)
+  }
+  for (const row of APPENDIX_C_ROWS) {
+    check(recordPath, record.includes(row), `Appendix C row "${row}" has no recorded disposition`)
+  }
 }
 
 if (failures.length) {
@@ -81,4 +94,7 @@ if (failures.length) {
   for (const failure of failures) console.error(`  ${failure}`)
   process.exit(1)
 }
-console.log(`Review-record scan passed: ${GATES.length} gates, ${APPENDIX_C_ROWS.length} Appendix C rows, all required fields present.`)
+console.log(
+  `Review-record scan passed: ${ROUNDS.length} rounds, ` +
+    `${GATES.length} gates each, ${APPENDIX_C_ROWS.length} Appendix C rows, all required fields present.`
+)
