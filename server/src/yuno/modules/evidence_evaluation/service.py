@@ -936,7 +936,7 @@ def load_rubric_manifest(
     IDK-003 §14's change control; shipping an ungated write path instead
     would defeat the entire point of the version gate below. This
     function therefore reuses `Role.DESIGNATED_EDITORIAL_APPROVER` -- the
-    identical grant `withdraw_source` (`provenance/service.py:190-191`)
+    identical grant `withdraw_source` (`provenance/service.py:270-271`)
     and `publish_canonical_graph` (`canonical/publisher.py:139-140`)
     already reuse for their own "editorial" actions -- and that reuse
     **consolidates under existing finding B21**
@@ -947,7 +947,7 @@ def load_rubric_manifest(
     separate finding. The grant check goes inside this function, not
     only in the offline CLI, so no future caller can bypass it --
     exactly `withdraw_source`'s own rationale
-    (`provenance/service.py:174-186`).
+    (`provenance/service.py:253-266`).
 
     The version gate is this function's substance. IDK-204 calls the
     three manifests "immutable" and requires them "version-gated", but

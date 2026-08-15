@@ -18,7 +18,7 @@ Consequently **local Java execution stays disabled**. `runner_enabled` remains `
 
 IDK-406's ticket previously described the execution machinery as "untouched". That was wrong in both directions, and the correction matters more than the wording.
 
-What exists is a substantially complete execution service — `server/src/yuno/modules/runner/service.py` (786 lines: capability reporting, input validation, confirmation creation, environment stripping, bounded output capture, workspace-usage classification, `execute_runner_job`), a real `LocalRunnerProcessPort` (`runner/adapters.py:86`) wired at `api/app.py:784`, and 24 integration tests.
+What exists is a substantially complete execution service — `server/src/yuno/modules/runner/service.py` (786 lines: capability reporting, input validation, confirmation creation, environment stripping, bounded output capture, workspace-usage classification, `execute_runner_job`), a real `LocalRunnerProcessPort` (`runner/adapters.py:86`) wired at `api/app.py:966`, and 24 integration tests.
 
 What that adapter uses for isolation is POSIX `resource.setrlimit` through `preexec_fn` (`runner/adapters.py:92-108`): `RLIMIT_CPU`, `RLIMIT_AS`, `RLIMIT_NPROC`, `RLIMIT_FSIZE`. IDK-007 §5 addresses these primitives by name and rejects them: "`RLIMIT_NPROC`, `RLIMIT_AS`, `RLIMIT_CPU`, and direct-child `wait4` are not accepted: per-process CPU limits race and do not represent the aggregate run." They are permitted only as defense-in-depth beside cgroup accounting, never as a substitute for it.
 

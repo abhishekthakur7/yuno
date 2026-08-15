@@ -348,7 +348,7 @@ def test_retired_relational_language_rejected_before_route_or_uow(client) -> Non
     # Both listeners attach to the app-wide engine, which the background
     # `DurableJobDispatcher` lanes share -- one thread per `JobLane`, named
     # `jobs-<lane>` (`jobs_events/service.py:138-144`), started at
-    # `api/app.py:863` and polling every `_POLL_SECONDS`. Their unrelated
+    # `api/app.py:1045` and polling every `_POLL_SECONDS`. Their unrelated
     # queue SQL would otherwise be attributed to the request under test,
     # which made `statements == []` fail intermittently rather than
     # measuring this route. Excluding those threads by name keeps the
