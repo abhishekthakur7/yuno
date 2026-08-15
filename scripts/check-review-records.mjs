@@ -27,6 +27,12 @@ const ROUNDS = [
     gateDir: 'docs/approvals/IDK-503-rerun-2026-08-15-b',
     record: 'docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15-b.md',
   },
+  // Fourth round, the third to share 2026-08-15, hence `-c`. Inspected the
+  // tree at `0f3219f`, after four registry/lifecycle entry points landed.
+  {
+    gateDir: 'docs/approvals/IDK-503-rerun-2026-08-15-c',
+    record: 'docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15-c.md',
+  },
 ]
 
 // The seven gates IDK-503's scope names. A missing file here means a gate was skipped.
