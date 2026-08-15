@@ -18,7 +18,11 @@ from yuno.modules.provenance.domain import (
     SourceRetrievalRequest,
     SourceRetrievalResult,
 )
-from yuno.modules.provenance.models import SourceSnapshotBodyRow
+from yuno.modules.provenance.models import (
+    CitationRow,
+    SourceSnapshotBodyRow,
+    SourceSnapshotRow,
+)
 from yuno.modules.provenance.ports import ProvenanceUnitOfWork
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.errors import DomainValidationError
@@ -378,6 +382,152 @@ def purge_license_revoked_snapshot_bodies(
         delete(SourceSnapshotBodyRow).where(
             SourceSnapshotBodyRow.owner_id == owner_id,
             SourceSnapshotBodyRow.source_id == source_id,
+        )
+    )
+    return result.rowcount or 0
+
+
+_RETAINED_SNAPSHOTS_PER_SOURCE = 20
+
+
+def prune_excess_snapshot_bodies(
+    uow: ProvenanceUnitOfWork, *, owner_id: str, source_id: str, now: str
+) -> int:
+    """Prune excess persisted snapshot bodies for one source (IDK-003 §12
+    item 9's janitor half; §6's "Retained snapshots per source" row: "20,
+    oldest-first pruning among snapshots with no live
+    `citations.source_snapshot_id` reference; a cited snapshot is never
+    pruned").
+
+    Selection rule, exactly what the tests in
+    `test_provenance_snapshot_janitor.py` exercise: order the source's
+    *body-bearing* snapshots -- those still carrying a
+    `source_snapshot_bodies` row, i.e. not already purged by
+    `purge_license_revoked_snapshot_bodies` above -- newest-first by
+    `retrieved_at`, ties broken by `id` descending (the identical tiebreak
+    `SqlAlchemySourceRepository.list_source_snapshots` uses,
+    `repository.py:140`). The newest `_RETAINED_SNAPSHOTS_PER_SOURCE`
+    (20 -- IDK-003 §6's approved, non-configurable threshold; this is
+    plain engineering on an already-approved number, not a decision to
+    make here) are always retained. Among everything older than that
+    cutoff, every snapshot with no row in `citations` referencing it via
+    `citations.source_snapshot_id` is pruned; a cited snapshot is *never*
+    pruned even though it falls outside the newest 20 -- so 20 is a floor
+    on what is kept, not a hard cap on the total row count. "Oldest-first"
+    only orders the processing/cleanup-intent sequence: because every
+    uncited snapshot past the cutoff is pruned unconditionally (this is
+    not a bounded top-up trim to a target count), the final set pruned
+    does not depend on iteration order.
+
+    §6 names the row "Retained snapshots per source", but what this
+    function actually prunes is each pruned snapshot's persisted body
+    (its `source_snapshot_bodies` pointer row) plus, out of transaction,
+    its content-addressed file -- never the `source_snapshots` metadata
+    row itself. That gap between the section title and the implementation
+    is forced, not chosen, and is named here rather than papered over:
+    `source_snapshots` carries `trg_source_snapshots_no_update`/
+    `_no_delete`/`_no_insert_replace` -- created by migration
+    `6ee79a009c2a_generated_content_cache_and_provenance.py:525-539` and
+    later dropped and recreated with an updated abort message by
+    `e10d1a0c0100_policy_1_0_body_separation_and_retention.py:2170-2182`
+    once body storage moved out of that table (both migrations keep the
+    same three trigger names; the second is what is actually active at
+    head). Verified empirically against a freshly migrated scratch
+    database: `DELETE FROM source_snapshots WHERE id=...` raises
+    `sqlite3.IntegrityError: source_snapshots header is immutable`, and
+    the row is confirmed still present afterwards. `source_snapshot_bodies`
+    carries no such trigger (confirmed: no migration creates one naming
+    that table; the same DELETE against it there succeeds), so its
+    pointer row is what is actually deleted here -- the identical trade
+    §6's "License-revocation purge" row and
+    `purge_license_revoked_snapshot_bodies` above already make ("the
+    metadata row ... is retained").
+
+    This is deliberately *not* an editorial action, so it needs, and has,
+    no `designated_editorial_approver` grant check: it is automated local
+    maintenance triggered by elapsed wall-clock time and accumulated
+    snapshot count, not a human decision about a specific source (contrast
+    IDK-003 §8's `withdrawn` transition, which *is* editorial and is
+    gated by that grant in `provenance/service.py`).
+
+    Follows `purge_license_revoked_snapshot_bodies`'s exact idiom for the
+    write itself, for the same reasons documented on that function: reach
+    `uow.session` directly (no narrower `ProvenanceUnitOfWork` Protocol
+    seam exists for this write), insert one raw-SQL `file_cleanup_intents`
+    row per deleted pointer to keep the write off `data_lifecycle`'s ORM
+    models (this repo's "Module independence" import-linter contract), and
+    let `execute_pending_cleanup` (`data_lifecycle/service.py:116-142`)
+    perform the actual out-of-transaction unlink through the
+    `source-snapshot:` scheme `_resolve_cleanup_path` already wires up
+    against `ApprovedCleanupRoots.source` (`data_lifecycle/service.py:
+    211-215`).
+
+    Idempotent: a pruned snapshot has no `source_snapshot_bodies` row
+    left, so it drops out of the "body-bearing" set entirely and cannot
+    be selected again -- a second call with unchanged citations therefore
+    prunes nothing further.
+
+    Owner- and source-scoped: every read and write here is filtered by
+    the `(owner_id, source_id)` pair the caller supplies; no other
+    source's or owner's rows are touched.
+    """
+    session = uow.session
+    ordered = session.execute(
+        select(SourceSnapshotRow.id, SourceSnapshotBodyRow.content_ref)
+        .join(
+            SourceSnapshotBodyRow,
+            SourceSnapshotBodyRow.snapshot_id == SourceSnapshotRow.id,
+        )
+        .where(
+            SourceSnapshotRow.owner_id == owner_id,
+            SourceSnapshotRow.source_id == source_id,
+        )
+        .order_by(SourceSnapshotRow.retrieved_at.desc(), SourceSnapshotRow.id.desc())
+    ).all()
+    excess_oldest_first = list(reversed(ordered[_RETAINED_SNAPSHOTS_PER_SOURCE:]))
+
+    to_prune: list[tuple[str, str]] = []
+    for snapshot_id, content_ref in excess_oldest_first:
+        cited = session.execute(
+            select(CitationRow.id)
+            .where(
+                CitationRow.owner_id == owner_id,
+                CitationRow.source_snapshot_id == snapshot_id,
+            )
+            .limit(1)
+        ).first()
+        if cited is not None:
+            continue
+        to_prune.append((snapshot_id, content_ref))
+
+    if not to_prune:
+        return 0
+
+    for snapshot_id, content_ref in to_prune:
+        session.execute(
+            text(
+                "INSERT INTO file_cleanup_intents "
+                "(id, owner_id, goal_id, kind, path_ref, path_hash, status, "
+                "failure_classification, attempts, created_at, updated_at, "
+                "completed_at) "
+                "VALUES (:id, :owner_id, NULL, 'source-snapshot', :path_ref, "
+                ":path_hash, 'pending', NULL, 0, :now, :now, NULL)"
+            ),
+            {
+                "id": new_id(),
+                "owner_id": owner_id,
+                "path_ref": content_ref,
+                "path_hash": hash_payload(content_ref),
+                "now": now,
+            },
+        )
+    result = session.execute(
+        delete(SourceSnapshotBodyRow).where(
+            SourceSnapshotBodyRow.owner_id == owner_id,
+            SourceSnapshotBodyRow.source_id == source_id,
+            SourceSnapshotBodyRow.snapshot_id.in_(
+                [snapshot_id for snapshot_id, _ in to_prune]
+            ),
         )
     )
     return result.rowcount or 0

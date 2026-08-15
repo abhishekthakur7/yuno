@@ -70,6 +70,7 @@ from yuno.modules.notebook_review.service import FixtureReviewScheduler
 from yuno.modules.profiles_goals.service import ensure_profile
 from yuno.modules.provenance.adapters import (
     HttpSourceRetrievalAdapter,
+    prune_excess_snapshot_bodies,
     remove_unreferenced_snapshots,
 )
 from yuno.modules.provenance.service import run_source_retrieval_job
@@ -255,6 +256,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 quarantine=resolved_settings.provider_quarantine_root,
             )
 
+            def apply_snapshot_janitor() -> None:
+                """The 20-per-source retained-snapshot janitor (IDK-003 §12
+                item 9's janitor half; §6). Shares `apply_retention`'s hourly
+                lane (`periodically_apply_retention` below) but is
+                deliberately isolated from it: a janitor failure is
+                classified and logged under its own name below and never
+                touches `retention_failure_classification`, so it cannot be
+                mistaken for -- or mask -- a retention-cycle failure. This is
+                automated local maintenance triggered by elapsed time and
+                accumulated snapshot count, not an editorial act, so it
+                needs no `designated_editorial_approver` grant check (see
+                `prune_excess_snapshot_bodies`'s docstring for why).
+                """
+                try:
+                    with uow_factory() as uow:
+                        for source in uow.provenance.list_sources(owner.id):
+                            prune_excess_snapshot_bodies(
+                                uow,
+                                owner_id=owner.id,
+                                source_id=source.id,
+                                now=now_text(SystemClock()),
+                            )
+                        uow.commit()
+                except Exception:  # noqa: BLE001 -- safe classification is visible
+                    app.state.snapshot_janitor_failure_classification = (
+                        "snapshot-janitor-failed"
+                    )
+                    log_event(
+                        "snapshot_janitor.cycle.failed",
+                        owner_id=owner.id,
+                        lifecycle="failed",
+                        diagnostic_classification="snapshot-janitor-failed",
+                    )
+                    return
+                app.state.snapshot_janitor_failure_classification = None
+                log_event(
+                    "snapshot_janitor.cycle.completed",
+                    owner_id=owner.id,
+                    lifecycle="complete",
+                )
+
             def apply_retention() -> None:
                 expire_structured_log_files()
                 try:
@@ -275,20 +317,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         lifecycle="failed",
                         diagnostic_classification="retention-cycle-failed",
                     )
-                    return
-                app.state.retention_failure_classification = (
-                    "external-cleanup-failed" if cleaned.failed else None
-                )
-                app.state.last_retention_result = retained
-                app.state.last_cleanup_result = cleaned
-                log_event(
-                    "retention.cycle.completed",
-                    owner_id=owner.id,
-                    lifecycle="complete" if not cleaned.failed else "failed",
-                    diagnostic_classification=(
+                else:
+                    app.state.retention_failure_classification = (
                         "external-cleanup-failed" if cleaned.failed else None
-                    ),
-                )
+                    )
+                    app.state.last_retention_result = retained
+                    app.state.last_cleanup_result = cleaned
+                    log_event(
+                        "retention.cycle.completed",
+                        owner_id=owner.id,
+                        lifecycle="complete" if not cleaned.failed else "failed",
+                        diagnostic_classification=(
+                            "external-cleanup-failed" if cleaned.failed else None
+                        ),
+                    )
+                apply_snapshot_janitor()
 
             def apply_external_cleanup(owner_id: str) -> None:
                 execute_pending_cleanup(
