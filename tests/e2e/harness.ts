@@ -208,6 +208,9 @@ export async function learningApiSnapshot(page: Page, evidenceId: string, assess
 export async function fillGoalBasics(page: Page, name = 'Resilient order fulfillment') {
   await page.getByRole('textbox', { name: 'Goal name' }).fill(name)
   await page.getByRole('textbox', { name: 'Subject' }).fill('Java / Spring Boot · AWS')
+  // IDK-004 §4: no level is preselected, so onboarding tests must make an explicit choice
+  // before submission is enabled.
+  await page.getByRole('combobox', { name: /Target level/i }).selectOption('Senior')
 }
 
 export async function skipOptionalSetup(page: Page) {

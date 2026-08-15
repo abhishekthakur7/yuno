@@ -199,7 +199,9 @@ export function Onboarding({ navigate }: PageProps) {
   const canonicalVersions = useQuery(canonicalVersionsQueryOptions())
   const diagnostic = useDiagnostic()
   const [path, setPath] = useState<'Learn' | 'Interview Prep'>('Learn')
-  const [targetLevel, setTargetLevel] = useState<GoalCreate['target_level']>('Senior')
+  // IDK-004 §4: first-use setup has no preselected level; the learner must make and confirm
+  // an explicit selection before continuing. An empty string is "unselected," never a default level.
+  const [targetLevel, setTargetLevel] = useState<GoalCreate['target_level'] | ''>('')
   const [goalName, setGoalName] = useState('')
   const [subjectOrRole, setSubjectOrRole] = useState('')
   const [targetCapability, setTargetCapability] = useState<GoalCreate['target_capability']>('implement')
@@ -240,7 +242,7 @@ export function Onboarding({ navigate }: PageProps) {
     await diagnostic.preview.mutateAsync(previewSession.id)
   }
   const beginDiagnostic = async () => {
-    if (!graphVersion) return
+    if (!graphVersion || !targetLevel) return
     const input: DiagnosticSetup = {
       path: path === 'Learn' ? 'learn' : 'interview_prep',
       target_level: targetLevel,
@@ -385,16 +387,16 @@ export function Onboarding({ navigate }: PageProps) {
       <div className="sb-form-grid">
         <fieldset><legend>Primary path</legend><div className="sb-segments">{(['Learn', 'Interview Prep'] as const).map(value => <button type="button" key={value} className={path === value ? 'is-selected' : ''} aria-pressed={path === value} onClick={() => setPath(value)}>{value === 'Learn' ? <BookOpen size={18} /> : <MessageSquareText size={18} />}{value}</button>)}</div></fieldset>
         <fieldset className="sb-wide"><legend>{ROLE_LEVEL_HEADING}</legend><small>{ROLE_LEVEL_AUDIENCE_NOTE}</small>
-          <label>Target level<select id="sb-onboarding-target-level" aria-describedby="sb-onboarding-target-level-helper sb-onboarding-target-level-description" value={targetLevel} onChange={e => setTargetLevel(e.target.value as typeof targetLevel)}><option value="Mid-level">{ROLE_LEVEL_COPY['Mid-level'].label}</option><option value="Senior">{ROLE_LEVEL_COPY.Senior.label}</option><option value="Staff">{ROLE_LEVEL_COPY.Staff.label}</option></select></label>
+          <label>Target level<select id="sb-onboarding-target-level" aria-describedby="sb-onboarding-target-level-helper sb-onboarding-target-level-description" value={targetLevel} onChange={e => setTargetLevel(e.target.value as typeof targetLevel)}><option value="" /><option value="Mid-level">{ROLE_LEVEL_COPY['Mid-level'].label}</option><option value="Senior">{ROLE_LEVEL_COPY.Senior.label}</option><option value="Staff">{ROLE_LEVEL_COPY.Staff.label}</option></select></label>
           <small id="sb-onboarding-target-level-helper">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</small>
-          <small id="sb-onboarding-target-level-description">{ROLE_LEVEL_COPY[targetLevel].description}</small>
+          {targetLevel && <small id="sb-onboarding-target-level-description">{ROLE_LEVEL_COPY[targetLevel].description}</small>}
         </fieldset>
         <label>{path === 'Learn' ? 'Subject' : 'Role'}<input value={subjectOrRole} onChange={(event) => setSubjectOrRole(event.target.value)} /></label>
         <label>Target capability<select aria-describedby="sb-onboarding-target-capability-helper" value={targetCapability} onChange={(event) => setTargetCapability(event.target.value as GoalCreate['target_capability'])}><option value="know">Know</option><option value="understand">Understand</option><option value="choose">Choose</option><option value="implement">Implement</option><option value="diagnose">Diagnose</option><option value="defend">Defend</option></select><small id="sb-onboarding-target-capability-helper">{TARGET_CAPABILITY_HELPER}</small></label>
         <label className="sb-wide">Goal name<input value={goalName} onChange={e => setGoalName(e.target.value)} /></label>
         <fieldset className="sb-wide"><legend>Starting evidence · optional</legend><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'take'} onChange={() => setDiagnosticChoice('take')} /><span><strong>Take a short diagnostic</strong><small>Questions adapt to your saved responses and confidence. This does not mark completion.</small></span></label><label className="sb-radio"><input type="radio" name="sb-diagnostic" checked={diagnosticChoice === 'skip'} onChange={() => setDiagnosticChoice('skip')} /><span><strong>Skip diagnostic</strong><small>Go directly to a conservative roadmap preview without a later forced retake.</small></span></label></fieldset>
         <label className="sb-wide">Optional {path === 'Learn' ? 'notes' : 'questions'} · untrusted seed<textarea value={seed} onChange={e => setSeed(e.target.value)} placeholder={path === 'Learn' ? 'Paste plain text or Markdown notes for later review.' : 'Paste questions you want to review later.'} /><small>Captured verbatim on the local server and visibly marked untrusted until you review it later in Imports. It is never treated as truth or evidence.</small><Button type="button" tone="quiet" onClick={() => setSeed('')}>Skip {path === 'Learn' ? 'notes' : 'questions'}</Button></label>
-      </div>{diagnosticError && <div className="sb-action-error" role="alert"><span>Setup was not saved. You can retry without re-entering answers.</span></div>}<footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => void beginDiagnostic()} disabled={working || !graphVersion || !goalName.trim() || !subjectOrRole.trim()}>{working ? 'Saving setup…' : diagnosticChoice === 'take' ? 'Start diagnostic' : 'Skip to roadmap preview'} <ArrowRight size={16} /></Button></footer>
+      </div>{diagnosticError && <div className="sb-action-error" role="alert"><span>Setup was not saved. You can retry without re-entering answers.</span></div>}<footer className="sb-card-footer"><Button tone="quiet" onClick={() => navigate('home')}><ArrowLeft size={16} /> Cancel</Button><Button onClick={() => void beginDiagnostic()} disabled={working || !graphVersion || !goalName.trim() || !subjectOrRole.trim() || !targetLevel}>{working ? 'Saving setup…' : diagnosticChoice === 'take' ? 'Start diagnostic' : 'Skip to roadmap preview'} <ArrowRight size={16} /></Button></footer>
     </section> : <section className="sb-card">
       <PageIntro eyebrow="Goal setup · 2 of 2" title="Create a goal from this roadmap" action={<Button tone="quiet" onClick={() => navigate('home')}><Pause size={16} /> Save and exit</Button>}>
         {persistedPreviewPath} · {persistedPreviewLevel} · inferred states are not completion.
@@ -818,6 +820,8 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
   const selected = bundles.find(bundle => bundle.id === selectedBundleId) ?? bundles.find(bundle => bundle.goal_id === goalId) ?? bundles[0] ?? null
   const [name, setName] = useState('')
   const [level, setLevel] = useState<InterviewLevel>('Senior')
+  // IDK-004 §4 also governs this "recommended" bundle's creation: no level is preselected here either.
+  const [createLevel, setCreateLevel] = useState<InterviewLevel | ''>('')
 
   useEffect(() => {
     if (!selected) return
@@ -826,18 +830,21 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
     if (selectedBundleId !== selected.id) onSelect(selected.id)
   }, [onSelect, selected, selectedBundleId])
 
-  const createBundle = () => interview.create.mutate({
-    ...(goalId ? { goal_id: goalId } : {}),
-    name: 'Senior backend interview',
-    generic_role: 'Backend Engineer',
-    target_level: 'Senior',
-    origin: 'recommended',
-    items: [
-      { subject: 'technical', question: 'Explain a production trade-off and its failure boundary.', position: 0, is_optional: false, included: true },
-      { subject: 'behavioral', question: 'Tell me about a difficult trade-off.', position: 1, is_optional: true, included: true },
-      { subject: 'leadership', question: 'How did you align a team?', position: 2, is_optional: true, included: true },
-    ],
-  }, { onSuccess: bundle => onSelect(bundle.id) })
+  const createBundle = () => {
+    if (!createLevel) return
+    interview.create.mutate({
+      ...(goalId ? { goal_id: goalId } : {}),
+      name: `${createLevel} backend interview`,
+      generic_role: 'Backend Engineer',
+      target_level: createLevel,
+      origin: 'recommended',
+      items: [
+        { subject: 'technical', question: 'Explain a production trade-off and its failure boundary.', position: 0, is_optional: false, included: true },
+        { subject: 'behavioral', question: 'Tell me about a difficult trade-off.', position: 1, is_optional: true, included: true },
+        { subject: 'leadership', question: 'How did you align a team?', position: 2, is_optional: true, included: true },
+      ],
+    }, { onSuccess: bundle => onSelect(bundle.id) })
+  }
 
   const save = () => {
     if (!selected || !name.trim()) return
@@ -853,7 +860,10 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
     <header><div><span className="sb-kicker">Editable preparation</span><h2 id="sb-bundle-title">Interview bundles</h2><p>Role and level stay generic. Optional subjects never change the technical scope.</p></div>{bundles.length > 0 && <span>{bundles.length} {bundles.length === 1 ? 'bundle' : 'bundles'}</span>}</header>
     {interview.bundles.isPending && !interview.bundles.data ? <div className="sb-interview-status" aria-live="polite"><RefreshCcw /><strong>Loading interview bundles</strong><span>Your preparation choices remain independently reachable.</span></div>
       : interview.bundles.isError && !interview.bundles.data ? <div className="sb-interview-status" role="alert"><AlertTriangle /><strong>Interview bundles are unavailable</strong><span>No replacement bundle was synthesized.</span><Button tone="secondary" onClick={() => void interview.bundles.refetch()}>Retry bundles</Button></div>
-        : bundles.length === 0 ? <div className="sb-interview-status"><HelpCircle /><strong>No interview bundle yet</strong><span>Create an editable recommended bundle. A Learn goal is not required.</span><Button disabled={interview.create.isPending} onClick={createBundle}>{interview.create.isPending ? 'Creating…' : 'Create recommended bundle'}</Button></div>
+        : bundles.length === 0 ? <div className="sb-interview-status"><HelpCircle /><strong>No interview bundle yet</strong><span>Create an editable recommended bundle. A Learn goal is not required.</span>
+          <label>Role and level<select aria-label="Role and level" aria-describedby="sb-bundle-create-level-helper sb-bundle-create-level-description" value={createLevel} onChange={event => setCreateLevel(event.target.value as InterviewLevel | '')}><option value="" />{INTERVIEW_ROLE_LEVELS.map(option => <option key={option.level} value={option.level}>{option.label}</option>)}</select><small id="sb-bundle-create-level-helper">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</small>{createLevel && <small id="sb-bundle-create-level-description">{ROLE_LEVEL_COPY[createLevel].description}</small>}</label>
+          <Button disabled={interview.create.isPending || !createLevel} onClick={createBundle}>{interview.create.isPending ? 'Creating…' : 'Create recommended bundle'}</Button>
+        </div>
           : selected && <div className="sb-bundle-editor">
             <nav aria-label="Interview bundles">{bundles.map(bundle => <button key={bundle.id} className={bundle.id === selected.id ? 'is-selected' : ''} aria-pressed={bundle.id === selected.id} onClick={() => onSelect(bundle.id)}><strong>{bundle.name}</strong><small>{INTERVIEW_ROLE_LEVELS.find(option => option.level === bundle.target_level)?.label ?? `${bundle.target_level} backend engineer`}</small></button>)}</nav>
             <form onSubmit={event => { event.preventDefault(); save() }}>

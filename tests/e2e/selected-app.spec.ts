@@ -558,6 +558,9 @@ test('essential selected-app flows are operable from the keyboard', async ({ pag
   await page.getByRole('textbox', { name: 'Role' }).fill('Backend engineer')
   const target = page.getByRole('combobox', { name: /Target level/i })
   await target.focus()
+  // No level is preselected (IDK-004 §4): the first "s" press lands on Senior (the first
+  // matching option from the unselected empty placeholder), so a second press cycles to Staff.
+  await target.press('s')
   await target.press('s')
   await expect(target).toHaveValue('Staff')
   const preview = page.getByRole('button', { name: /Skip to roadmap preview/i })

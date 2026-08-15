@@ -259,14 +259,18 @@ describe('profile-backed goal pages', () => {
 
     const level = screen.getByRole('combobox', { name: /Target level/i })
     expect(Array.from((level as HTMLSelectElement).options, (option) => option.text)).toEqual([
+      '',
       ROLE_LEVEL_COPY['Mid-level'].label,
       ROLE_LEVEL_COPY.Senior.label,
       ROLE_LEVEL_COPY.Staff.label,
     ])
-    // Default selection is Senior; its exact approved description must be shown and programmatically
-    // associated with the level control via its accessible description (aria-describedby).
-    const seniorDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Senior.description}`
-    expect(screen.getByRole('combobox', { name: /Target level/i, description: seniorDescription })).toBe(level)
+    // IDK-004 §4: first-use setup has no preselected level. The control starts unselected (an
+    // empty option with no invented placeholder label), and no level description is shown until
+    // the learner makes an explicit choice.
+    expect((level as HTMLSelectElement).value).toBe('')
+    expect(screen.queryByText(ROLE_LEVEL_COPY.Senior.description)).not.toBeInTheDocument()
+    expect(screen.queryByText(ROLE_LEVEL_COPY.Staff.description)).not.toBeInTheDocument()
+    expect(screen.queryByText(ROLE_LEVEL_COPY['Mid-level'].description)).not.toBeInTheDocument()
 
     await userEvent.selectOptions(level, ROLE_LEVEL_COPY.Staff.label)
     const staffDescription = `${ROLE_LEVEL_TITLE_VARIATION_HELPER} ${ROLE_LEVEL_COPY.Staff.description}`
@@ -277,6 +281,27 @@ describe('profile-backed goal pages', () => {
     const capability = screen.getByRole('combobox', { name: /Target capability/i })
     expect(screen.getByText(TARGET_CAPABILITY_HELPER)).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: /Target capability/i, description: TARGET_CAPABILITY_HELPER })).toBe(capability)
+  })
+
+  it('cannot submit onboarding without an explicit target level choice (IDK-004 §4 fail-closed)', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestFrom(input, init).url
+      if (url.endsWith('/canonical/versions')) return json([{ id: 'graph-1', created_at: '', manifest_version: '1', published_at: '', supersedes_version_id: null, version_label: 'v1' }])
+      if (url.endsWith('/profile')) return json(profile)
+      if (url.endsWith('/diagnostics/active')) return json({ message: 'Not found' }, 404)
+      return json([])
+    }))
+    renderPage(<Onboarding navigate={vi.fn()} />)
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Subject' }), 'Distributed systems')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Goal name' }), 'Reliable consumers')
+
+    const submit = screen.getByRole('button', { name: /Skip to roadmap preview/i })
+    // Goal name and subject alone are not enough: the level control is still unselected, so
+    // submission must stay disabled rather than silently defaulting to a level.
+    expect(submit).toBeDisabled()
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Target level/i }), ROLE_LEVEL_COPY.Staff.label)
+    expect(submit).toBeEnabled()
   })
 
   it('skips every optional setup step and opens the persisted roadmap preview', async () => {
@@ -300,6 +325,7 @@ describe('profile-backed goal pages', () => {
     renderPage(<Onboarding navigate={vi.fn()} />)
     await userEvent.type(await screen.findByRole('textbox', { name: 'Subject' }), 'Distributed systems')
     await userEvent.type(screen.getByRole('textbox', { name: 'Goal name' }), 'Reliable consumers')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Target level/i }), ROLE_LEVEL_COPY.Senior.label)
     await userEvent.click(screen.getByRole('button', { name: /Skip to roadmap preview/i }))
     expect(await screen.findByRole('heading', { name: 'Create a goal from this roadmap' })).toBeInTheDocument()
     expect(actions).toEqual(['skip_notes', 'skip_diagnostic', 'open_roadmap_preview'])
@@ -343,6 +369,7 @@ describe('profile-backed goal pages', () => {
     renderPage(<Onboarding navigate={vi.fn()} />)
     await userEvent.type(await screen.findByRole('textbox', { name: 'Subject' }), 'Distributed systems')
     await userEvent.type(screen.getByRole('textbox', { name: 'Goal name' }), 'Reliable consumers')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Target level/i }), ROLE_LEVEL_COPY.Senior.label)
     await userEvent.click(screen.getByRole('radio', { name: /Take a short diagnostic/i }))
     await userEvent.type(screen.getByRole('textbox', { name: /Optional notes/i }), exactSeed)
     await userEvent.click(screen.getByRole('button', { name: /Start diagnostic/i }))

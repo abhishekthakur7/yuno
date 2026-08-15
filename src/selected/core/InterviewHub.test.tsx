@@ -206,7 +206,7 @@ describe('API-backed Interview Prep hub', () => {
     expect(document.querySelector('main')).toHaveAttribute('data-interview-state', 'unavailable')
   })
 
-  it('creates a generic editable bundle with no goal or company field from the empty state', async () => {
+  it('requires an explicit level choice before creating the recommended bundle from the empty state (IDK-004 §4)', async () => {
     let createBody: Record<string, unknown> | null = null
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestFrom(input, init)
@@ -221,7 +221,13 @@ describe('API-backed Interview Prep hub', () => {
     }))
     renderHub()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Create recommended bundle' }))
+    const createButton = await screen.findByRole('button', { name: 'Create recommended bundle' })
+    // No level is preselected: creation stays disabled until the learner makes an explicit choice.
+    expect(createButton).toBeDisabled()
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Role and level' }), ROLE_LEVEL_COPY.Senior.label)
+    expect(createButton).toBeEnabled()
+    await userEvent.click(createButton)
     await waitFor(() => expect(createBody).not.toBeNull())
     expect(createBody).not.toHaveProperty('goal_id')
     expect(JSON.stringify(createBody).toLowerCase()).not.toContain('company')
