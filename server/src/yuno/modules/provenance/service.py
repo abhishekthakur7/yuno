@@ -39,6 +39,10 @@ _UNAVAILABLE_FAILURE_WINDOW = timedelta(hours=72)
 # `source_snapshots.status` (provenance/models.py) admits 'failed' alongside
 # the three SourceAvailability values; it has no matching domain enum member.
 _FAILED_SNAPSHOT_STATUS = "failed"
+# IDK-003 §9: the cadence leg of staleness detection re-checks every
+# `available` source at least this often, measured from its newest
+# successful (non-`failed`) snapshot; approved and non-configurable.
+_STALENESS_RECHECK_CADENCE = timedelta(days=180)
 
 
 def list_source_snapshots(
@@ -47,6 +51,80 @@ def list_source_snapshots(
     if uow.provenance.get_source(owner_id, source_id) is None:
         raise NotFoundError("The source was not found.")
     return tuple(uow.provenance.list_source_snapshots(owner_id, source_id))
+
+
+def sources_due_for_recheck(
+    uow: ProvenanceUnitOfWork, owner_id: str, *, now: datetime
+) -> tuple[Source, ...]:
+    """Select `available` sources due for a §9 staleness re-check.
+
+    Pure selection: reads only, no writes, and takes an already-open `uow`
+    rather than a `uow_factory` -- the caller (the `app.py` sweep today;
+    any future caller) owns the transaction and decides what to do with
+    the result.
+
+    IDK-003 §9's cadence clause reads: "Detection runs on a 180-day
+    re-check cadence for every `available` source". This function is an
+    engineering reading of that sentence, not decision text:
+
+    - Only `AVAILABLE` sources are selected. `withdrawn` is
+      terminal-for-new-use (§8) and is never re-retrieved. `unavailable`
+      sources are deliberately excluded too: §9 says "every `available`
+      source", and excluding `unavailable` is also what keeps a cadence
+      sweep from retrying a source §8's own 3-attempt/72-hour rule already
+      gave up on -- a source that fails its way to `unavailable` leaves
+      the `available` set and this function simply stops selecting it, no
+      unbounded retry storm.
+    - "How stale" is measured from the newest snapshot whose `status` is
+      not `_FAILED_SNAPSHOT_STATUS` -- the last genuinely successful
+      retrieval, per `list_source_snapshots`'s newest-first order
+      (`repository.py:135-145`). A source with no successful snapshot at
+      all (never retrieved, or every attempt so far has failed) has no
+      baseline to measure staleness from and is therefore always due.
+    - Due when `now - retrieved_at >= 180 days` (`_STALENESS_RECHECK_CADENCE`),
+      parsed with `datetime.fromisoformat` exactly as `_spans_failure_window`
+      below already does for the same UTC TEXT format.
+
+    §9 also names two other detection triggers this function does not
+    implement. "Immediately on crossing the §8 `unavailable` threshold"
+    already ships inside `_record_failed_retrieval` below: the crossing
+    itself is read here as the detection event -- a source that just
+    became `unavailable` is, by definition, now known-unreachable -- not
+    as a command to schedule a further re-retrieval against a source three
+    consecutive failures spanning 72+ hours just showed is unreachable.
+    "Any explicit content-owner-initiated re-retrieval" already ships as
+    `POST /sources/{source_id}/retrieve` (`routes/provenance.py:105-153`).
+    Neither trigger needed new code here; only §9's cadence leg does.
+    """
+    due: list[Source] = []
+    for source in uow.provenance.list_sources(owner_id):
+        if source.availability_status is not SourceAvailability.AVAILABLE:
+            continue
+        baseline = _latest_successful_snapshot(
+            uow.provenance.list_source_snapshots(owner_id, source.id)
+        )
+        if (
+            baseline is not None
+            and (now - datetime.fromisoformat(baseline.retrieved_at))
+            < _STALENESS_RECHECK_CADENCE
+        ):
+            continue
+        due.append(source)
+    return tuple(due)
+
+
+def _latest_successful_snapshot(
+    snapshots: Sequence[SourceSnapshot],
+) -> SourceSnapshot | None:
+    """The newest non-`failed` snapshot, or `None` if every attempt so far
+    has failed (or none has been made) -- `snapshots` is already
+    newest-first (`list_source_snapshots`), so the first non-`failed`
+    entry is the last genuinely successful retrieval.
+    """
+    for snapshot in snapshots:
+        if snapshot.status != _FAILED_SNAPSHOT_STATUS:
+            return snapshot
+    return None
 
 
 def reserve_source_retrieval(

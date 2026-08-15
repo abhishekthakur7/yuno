@@ -73,7 +73,11 @@ from yuno.modules.provenance.adapters import (
     prune_excess_snapshot_bodies,
     remove_unreferenced_snapshots,
 )
-from yuno.modules.provenance.service import run_source_retrieval_job
+from yuno.modules.provenance.service import (
+    reserve_source_retrieval,
+    run_source_retrieval_job,
+    sources_due_for_recheck,
+)
 from yuno.modules.provider.adapters import (
     FileSecureOutputStore,
     LocalProcessPort,
@@ -123,7 +127,9 @@ from yuno.shared.application.jobs import (
     JobResult,
 )
 from yuno.shared.domain.clock import SystemClock, now_text
+from yuno.shared.domain.errors import PendingJobCapError
 from yuno.shared.domain.hashing import hash_payload
+from yuno.shared.domain.ids import new_id
 from yuno.shared.infrastructure.alembic_guard import require_single_head
 from yuno.shared.infrastructure.database import (
     create_engine_for,
@@ -297,6 +303,138 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     lifecycle="complete",
                 )
 
+            def apply_staleness_recheck() -> None:
+                """The 180-day source staleness re-check sweep (IDK-003
+                §12 item 9's cadence half; §9). Shares `apply_retention`'s
+                hourly lane (`periodically_apply_retention` below) and the
+                same per-cycle isolation `apply_snapshot_janitor` above
+                uses: its own `try`/`except`, its own
+                `app.state.staleness_recheck_failure_classification`, its
+                own `log_event` pair, and its failure never touches
+                `retention_failure_classification` or
+                `snapshot_janitor_failure_classification`.
+
+                §9 names two other detection triggers this sweep does not
+                implement (see `sources_due_for_recheck`'s docstring for
+                the full reasoning): "any explicit content-owner-initiated
+                re-retrieval" already ships as
+                `POST /sources/{source_id}/retrieve`
+                (`routes/provenance.py:105-153`), and "immediately on
+                crossing the §8 `unavailable` threshold" is already
+                satisfied by `_record_failed_retrieval` -- the crossing
+                itself is the detection event. Only §9's cadence leg
+                needed new code here.
+
+                The module's own headline (`provenance/service.py:1`) is
+                "no implicit page-load network access": this sweep honours
+                the identical disclosure gate the HTTP retrieve route uses
+                (`require_disclosure`, `routes/provenance.py:130-135`) via
+                the same `get_active_disclosure` call that helper itself
+                makes (`provider/service.py:146-148`) -- except it skips
+                silently rather than raising when no disclosure is on
+                record: there is no HTTP request here to reject with an
+                error, so no disclosure simply means nothing is enqueued
+                this cycle.
+
+                Enqueueing mirrors the HTTP route exactly
+                (`routes/provenance.py:136-152`) with one addition: the
+                idempotency key is derived from the source id plus the
+                newest snapshot *of any status* (which advances on every
+                attempt, success or failure, since a failed attempt is
+                itself appended as a `failed` snapshot row --
+                `_record_failed_retrieval`), while *dueness* is measured
+                from the newest *successful* snapshot
+                (`sources_due_for_recheck`). A repeat hourly sweep over an
+                unchanged source therefore reuses the same key --
+                `dispatcher.reserve`'s own idempotency-key and
+                active-dedupe-key checks (`jobs_events/service.py:232-247`),
+                plus `reserve_source_retrieval`'s own UNIQUE idempotency
+                record (`source_retrieval_commands`) -- collapse every
+                repeat into the one job already reserved, never a
+                duplicate. A failed attempt appends a new snapshot, which
+                changes the key on the next sweep, so the source is
+                retried -- until §8's 3-attempt/72-hour rule flips it to
+                `unavailable`, at which point `sources_due_for_recheck`
+                stops selecting it: no unbounded retry storm.
+
+                `PendingJobCapError` (`dispatcher.reserve`,
+                `jobs_events/service.py:248-253`) aborts this cycle's
+                whole transaction rather than keeping whatever was
+                reserved before the cap was hit: the cap error is caught
+                outside the `with uow_factory()` block, so nothing this
+                tick attempted is committed, and every still-due source
+                is retried fresh next cycle.
+                """
+                try:
+                    with uow_factory() as uow:
+                        disclosure = uow.provider.get_active_disclosure(
+                            owner.id, "source-retrieval", "source-network-v1"
+                        )
+                        if disclosure is None:
+                            app.state.staleness_recheck_failure_classification = None
+                            log_event(
+                                "staleness_recheck.cycle.skipped",
+                                owner_id=owner.id,
+                                lifecycle="skipped",
+                            )
+                            return
+                        due = sources_due_for_recheck(
+                            uow, owner.id, now=SystemClock().now()
+                        )
+                        for source in due:
+                            snapshots = uow.provenance.list_source_snapshots(
+                                owner.id, source.id
+                            )
+                            cursor = snapshots[0].id if snapshots else "never-retrieved"
+                            key = f"staleness-recheck:{source.id}:{cursor}"
+                            command, _ = reserve_source_retrieval(
+                                uow, owner.id, source.id, key, new_id()
+                            )
+                            dispatcher.reserve(
+                                uow.session,
+                                JobRequest(
+                                    "retrieve_source_snapshot",
+                                    owner.id,
+                                    {"source_id": source.id},
+                                    dedupe_key=source.id,
+                                    idempotency_key=key,
+                                    requested_job_id=command.job_id,
+                                    lane=JobLane.BACKGROUND,
+                                    schema_version="source-snapshot-v1",
+                                    request_ref=f"Source:{source.id}",
+                                    disclosure_ref=disclosure.id,
+                                ),
+                            )
+                        uow.commit()
+                except PendingJobCapError:
+                    app.state.staleness_recheck_failure_classification = (
+                        "pending-job-cap-reached"
+                    )
+                    log_event(
+                        "staleness_recheck.cycle.failed",
+                        owner_id=owner.id,
+                        lifecycle="failed",
+                        diagnostic_classification="pending-job-cap-reached",
+                    )
+                    return
+                except Exception:  # noqa: BLE001 -- safe classification is visible
+                    app.state.staleness_recheck_failure_classification = (
+                        "staleness-recheck-failed"
+                    )
+                    log_event(
+                        "staleness_recheck.cycle.failed",
+                        owner_id=owner.id,
+                        lifecycle="failed",
+                        diagnostic_classification="staleness-recheck-failed",
+                    )
+                    return
+                app.state.staleness_recheck_failure_classification = None
+                log_event(
+                    "staleness_recheck.cycle.completed",
+                    owner_id=owner.id,
+                    lifecycle="complete",
+                )
+
             def apply_retention() -> None:
                 expire_structured_log_files()
                 try:
@@ -332,6 +470,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         ),
                     )
                 apply_snapshot_janitor()
+                apply_staleness_recheck()
 
             def apply_external_cleanup(owner_id: str) -> None:
                 execute_pending_cleanup(
