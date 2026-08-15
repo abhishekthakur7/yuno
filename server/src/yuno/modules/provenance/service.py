@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from yuno.modules.identity.domain import Role, RolePolicy
@@ -212,6 +214,124 @@ def withdraw_source(
             )
         uow.commit()
         return updated
+
+
+def register_source(
+    uow_factory,
+    owner_id: str,
+    sources: Sequence[Source],
+    *,
+    clock: Clock | None = None,
+) -> tuple[Source, ...]:
+    """Register a batch of sources in one transaction (IDK-003 §12 item 7).
+
+    This is IDK-503 gate-3 blocking finding 1 (B4)'s *mechanism* half:
+    before this function, `SqlAlchemySourceRepository.add_source`
+    (`provenance/repository.py:44`) had no production caller at all --
+    every `sources` row anywhere was either a test fixture or the offline
+    `scripts/seed_performance_dataset.py:447` perf-dataset seed, itself
+    fixture-shaped (the gate-3 re-run's own evidence for this finding).
+    `register_source` is the "real seed/publish step, analogous to D1's
+    offline canonical publisher" §12 item 7 calls for; the offline
+    `scripts/register_source.py` CLI (mirroring `scripts/publish_canonical.py`
+    and `scripts/withdraw_source.py`) is its only caller today. This
+    function supplies the write path only -- it ships no source data of
+    its own; every row it ever writes comes from whatever manifest a
+    caller supplies.
+
+    Every registered row is born `available`: `availability_status`,
+    `withdrawal_reason` and `superseded_by_source_id` on each element of
+    `sources` are ignored and overwritten with
+    `SourceAvailability.AVAILABLE`/`None`/`None` regardless of what the
+    caller supplies -- the only state
+    `ck_sources_withdrawal_reason_required_iff_withdrawn`
+    (`provenance/models.py:47-50`) admits for a freshly-registered row,
+    since nothing has withdrawn it yet. `owner_id`, `created_at` and
+    `updated_at` are likewise stamped here, not trusted from the caller,
+    mirroring `publish_canonical_graph`'s identical "stamped at publish
+    time" treatment of its own manifest placeholders
+    (`canonical/publisher.py:200-210`, `scripts/publish_canonical.py`'s
+    `_content_revision_from_json`) and this module's own `withdraw_source`
+    rationale above for why `owner_id` is a function parameter rather than
+    a per-row field trusted verbatim. `sources` is otherwise exactly the
+    existing `Source` dataclass (`provenance/domain.py:38-52`) the CLI
+    builds from its manifest -- no new domain type is introduced here
+    (this module does not own `provenance/domain.py`), since `Source`
+    already carries every field a registered row needs and the
+    caller-supplied values for the fields above are overwritten anyway.
+
+    Fails closed on re-registration: if a `sources` row with a given `id`
+    already exists for `owner_id` -- either from an earlier call, or from
+    one added earlier in this same batch -- `ConflictError` is raised.
+    A same-batch duplicate is tracked with a local `seen_ids` set rather
+    than re-querying `get_source` for it: `SqlAlchemySourceRepository.
+    add_source` (`repository.py:44-54`) flushes the new `SourceRow` but
+    not its paired `SourceBodyRow`, and `get_source`'s `_source()` treats a
+    row with no body as absent (`repository.py:283-285`) -- so, with the
+    session's `autoflush=False` (`shared/infrastructure/database.py:68`,
+    the same characteristic `_record_failed_retrieval` below works around
+    for the identical reason), a `get_source` call for an id added earlier
+    in this same uncommitted batch would wrongly report it as free,
+    letting a second `add_source` for that id reach the database and fail
+    there instead, as `sources`' own `trg_sources_no_insert_replace`
+    trigger, with a raw `IntegrityError` rather than this function's
+    `ConflictError`. The whole batch is one `with uow_factory() as uow:`
+    block, so a raise anywhere here, before `uow.commit()`, rolls every
+    insert already flushed in this call back with it, exactly as
+    `publish_canonical_graph` and `withdraw_source` above already do for
+    their own writes. A partial registry can therefore never be committed
+    from one manifest.
+
+    IDK-003 §12 item 7 attributes source registration to a "content-owner
+    role". No such role exists: `owner_role_grants.role` admits only
+    `learner` and `designated_editorial_approver`
+    (`identity/domain.py:28-30`), and IDK-003 §13 records that no distinct
+    content-owner grant exists. Inventing one here would be an unapproved
+    vocabulary change under IDK-003 §14's change control; leaving the
+    write ungated would reopen the same class of gap B7/`withdraw_source`
+    closed for withdrawal. This function therefore requires
+    `Role.DESIGNATED_EDITORIAL_APPROVER` -- the exact grant and idiom
+    `withdraw_source` above already uses for the identical reason -- and
+    the check lives here, inside the one function every caller (today's
+    `scripts/register_source.py`, and any future caller) must go through,
+    not only in the CLI, so no future caller can bypass it. The resulting
+    authority question -- reusing D1/IDK-002's canonical-publication grant
+    to gate an IDK-003 act that neither decision assigns it -- is not a
+    new finding: it consolidates under the round-3 record's existing
+    finding B21
+    (`docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15-b.md:82`),
+    which already names this same reuse for `withdraw_source` and records
+    it as needing a decision-document action, not engineering work.
+    """
+    timestamp = now_text(clock or SystemClock())
+    with uow_factory() as uow:
+        grants = uow.owners.grants(owner_id)
+        RolePolicy.require(grants, Role.DESIGNATED_EDITORIAL_APPROVER)
+        registered: list[Source] = []
+        seen_ids: set[str] = set()
+        for source in sources:
+            if source.id in seen_ids or (
+                uow.provenance.get_source(owner_id, source.id) is not None
+            ):
+                raise ConflictError(
+                    f"A source with id {source.id!r} is already registered."
+                )
+            seen_ids.add(source.id)
+            registered.append(
+                uow.provenance.add_source(
+                    replace(
+                        source,
+                        owner_id=owner_id,
+                        availability_status=SourceAvailability.AVAILABLE,
+                        withdrawal_reason=None,
+                        superseded_by_source_id=None,
+                        created_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                )
+            )
+        uow.commit()
+        return tuple(registered)
 
 
 def _record_failed_retrieval(
