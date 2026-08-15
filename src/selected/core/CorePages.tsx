@@ -703,28 +703,19 @@ function Topic({ navigate }: PageProps) {
     <TopicLayerTabs selected={selectedLayer} onSelect={setSelectedLayer} />
     <TopicLayerPanel layerName={selectedLayer} layer={activeLayer} checkpointNumber={currentIndex + 1} isPending={topicContent.isPending} isError={topicContent.isError} onRetry={() => { void topicContent.refetch() }} onGenerate={() => topicContent.generate.mutate(selectedLayer)} onRegenerate={(artifactId) => topicContent.regenerate.mutate(artifactId)} actionPending={topicContent.generate.isPending || topicContent.regenerate.isPending} actionError={topicContent.generate.error ?? topicContent.regenerate.error} provenance={provenance.data} provenancePending={provenance.isPending} provenanceError={provenance.isError} onRetryProvenance={() => void provenance.refetch()} provenanceSnapshots={provenance.snapshotsById} anchorId={currentLessonId === CURRENT_LESSON_ID ? undefined : 'sb-lesson-artifact'} />
     <HandsOnLab goalId={goal?.id ?? null} topicId={currentLessonId} />
-  </article><TopicTools goalId={goal?.id ?? null} topicId={currentLessonId} conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} sourcesArtifactId={sourcesLayer?.artifact_id ?? null} sourcesProvenance={sourcesProvenance.data} sourcesProvenancePending={sourcesProvenance.isPending} sourcesProvenanceError={sourcesProvenance.isError} sourcesProvenanceSnapshots={sourcesProvenance.snapshotsById} onRetrySourcesProvenance={() => void sourcesProvenance.refetch()} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
+  </article><TopicTools goalId={goal?.id ?? null} topicId={currentLessonId} conversationScope={topicContent.data?.conversation_scope ?? null} sourcesMarkdown={sourcesMarkdown} sourcesProvenance={sourcesLayer?.artifact_id ? sourcesProvenance : null} /><ClassroomProgress navigate={navigate} previous={previousTitle} previousTarget={previousId ? undefined : 'learn-roadmap'} onPrevious={previousId ? () => selectLesson(previousId) : undefined} next={nextTitle} nextTarget={nextId ? undefined : 'practice'} onNext={nextId ? () => selectLesson(nextId) : undefined} /></Classroom>
 }
 
-export function TopicTools({
-  goalId, topicId, conversationScope, sourcesMarkdown,
-  sourcesArtifactId = null,
-  sourcesProvenance,
-  sourcesProvenancePending = false,
-  sourcesProvenanceError = false,
-  sourcesProvenanceSnapshots = new Map<string, SourceSnapshot>(),
-  onRetrySourcesProvenance = () => undefined,
-}: {
+export function TopicTools({ goalId, topicId, conversationScope, sourcesMarkdown, sourcesProvenance }: {
   goalId: string | null
   topicId: string
   conversationScope: string | null
   sourcesMarkdown: string | null
-  sourcesArtifactId?: string | null
-  sourcesProvenance?: ArtifactProvenanceSummary | undefined
-  sourcesProvenancePending?: boolean
-  sourcesProvenanceError?: boolean
-  sourcesProvenanceSnapshots?: Map<string, SourceSnapshot>
-  onRetrySourcesProvenance?: () => void
+  // IDK-003 §7 names generated content as an attribution surface, and the
+  // "Sources" layer this tab renders is a generated artifact like any other
+  // (IDK-503 re-run gate 3, blocking finding 2). `null` means that layer has
+  // no artifact yet, so there are no citations to attribute.
+  sourcesProvenance: ReturnType<typeof useArtifactProvenance> | null
 }) {
   const review = useNotebookReview(goalId)
   const tutor = useTopicConversation(goalId, topicId)
@@ -787,7 +778,7 @@ export function TopicTools({
                 })}</ol>}
     </Tabs.Content>
     <Tabs.Content value="resources">{sourcesMarkdown
-      ? <div className="sb-tool-content"><FileText size={18} /><div><strong>Approved sources</strong><p>{sourcesMarkdown}</p>{sourcesArtifactId && <ArtifactProvenanceDetails provenance={sourcesProvenance} isPending={sourcesProvenancePending} isError={sourcesProvenanceError} onRetry={onRetrySourcesProvenance} snapshotsById={sourcesProvenanceSnapshots} />}</div></div>
+      ? <div className="sb-tool-content"><FileText size={18} /><div><strong>Approved sources</strong><p>{sourcesMarkdown}</p>{sourcesProvenance && <ArtifactProvenanceDetails provenance={sourcesProvenance.data} isPending={sourcesProvenance.isPending} isError={sourcesProvenance.isError} onRetry={() => void sourcesProvenance.refetch()} snapshotsById={sourcesProvenance.snapshotsById} />}</div></div>
       : <div className="sb-empty"><FileText /><strong>No approved sources yet</strong><span>Check the Sources layer after content is published.</span></div>}
     </Tabs.Content>
     <Tabs.Content value="help"><div className="sb-tool-heading" data-conversation-scope={conversationScope ?? undefined}><div><strong>{conversationScope ? 'Conversation attached to this topic' : 'Topic conversation unavailable'}</strong><span>{conversationScope ? 'Messages and tutor replies stay with this topic.' : 'Retry the topic content request to restore it.'}</span></div></div>

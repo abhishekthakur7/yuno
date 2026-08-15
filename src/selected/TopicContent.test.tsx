@@ -31,6 +31,11 @@ const provenanceSnapshots = new Map<string, SourceSnapshot>([
   ['source-snapshot-2', { id: 'source-snapshot-2', source_id: 'source-withdrawn', retrieved_at: '2026-01-01T00:00:00Z', content_ref: 'ref-2', content_hash: 'hash-2', status: 'complete', version_label: null }],
 ])
 
+// `TopicTools` takes the whole `useArtifactProvenance` result for the Sources
+// layer; only these five members are read, so the fixture supplies exactly them.
+const sourcesProvenance = (data: ArtifactProvenanceSummary, snapshotsById: Map<string, SourceSnapshot>) =>
+  ({ data, snapshotsById, isPending: false, isError: false, refetch: vi.fn() }) as unknown as React.ComponentProps<typeof TopicTools>['sourcesProvenance']
+
 function panel(content: TopicLayerContent | undefined, overrides: Partial<React.ComponentProps<typeof TopicLayerPanel>> = {}) {
   const props: React.ComponentProps<typeof TopicLayerPanel> = {
     layerName: 'Essential', layer: content, checkpointNumber: 1, isPending: false, isError: false, onRetry: vi.fn(), onGenerate: vi.fn(), onRegenerate: vi.fn(), actionPending: false, actionError: false, anchorId: undefined, ...overrides,
@@ -125,12 +130,7 @@ describe('generated topic content presentation', () => {
         topicId="topic-1"
         conversationScope={null}
         sourcesMarkdown="Approved fixture sources for this topic."
-        sourcesArtifactId="artifact-1"
-        sourcesProvenance={provenance}
-        sourcesProvenancePending={false}
-        sourcesProvenanceError={false}
-        sourcesProvenanceSnapshots={provenanceSnapshots}
-        onRetrySourcesProvenance={vi.fn()}
+        sourcesProvenance={sourcesProvenance(provenance, provenanceSnapshots)}
       />
     </QueryClientProvider>)
 
@@ -152,12 +152,14 @@ describe('generated topic content presentation', () => {
 
   it('omits the resources-tab attribution panel when the Sources layer has no artifact yet', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    // Markdown is present, so this exercises the artifact-absent gate itself
+    // rather than the empty-tab branch that a null `sourcesMarkdown` would take.
     render(<QueryClientProvider client={queryClient}>
-      <TopicTools goalId={null} topicId="topic-1" conversationScope={null} sourcesMarkdown={null} />
+      <TopicTools goalId={null} topicId="topic-1" conversationScope={null} sourcesMarkdown="Approved fixture sources for this topic." sourcesProvenance={null} />
     </QueryClientProvider>)
 
     await userEvent.click(screen.getByRole('tab', { name: /Resources/i }))
-    expect(screen.getByText('No approved sources yet')).toBeInTheDocument()
+    expect(screen.getByText('Approved fixture sources for this topic.')).toBeInTheDocument()
     expect(screen.queryByText('About this content')).not.toBeInTheDocument()
   })
 })

@@ -35,7 +35,7 @@ describe('topic-attached tutor conversation', () => {
       return json({ message: 'Not found' }, 404)
     }))
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-    render(<QueryClientProvider client={queryClient}><TopicTools goalId="goal-1" topicId="topic-1" conversationScope="goal-1:topic-1" sourcesMarkdown={null} /></QueryClientProvider>)
+    render(<QueryClientProvider client={queryClient}><TopicTools goalId="goal-1" topicId="topic-1" conversationScope="goal-1:topic-1" sourcesMarkdown={null} sourcesProvenance={null} /></QueryClientProvider>)
 
     await userEvent.click(screen.getByRole('tab', { name: /Help/i }))
     expect(await screen.findByText('No messages yet')).toBeInTheDocument()

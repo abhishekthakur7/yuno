@@ -41,7 +41,7 @@ describe('goal notebook and review UI', () => {
       if (request.url.endsWith('/goals/goal-1/reviews')) return json({ goal_id: 'goal-1', enabled: true, scheduling_version: 'fixture-review-v1', items: [] })
       return json({}, 404)
     }))
-    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} />)
+    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} sourcesProvenance={null} />)
 
     expect(await screen.findByText('No notebook entries yet')).toBeInTheDocument()
     await userEvent.type(screen.getByRole('textbox', { name: 'Add a user entry' }), 'The write must be atomic.')
@@ -66,7 +66,7 @@ describe('goal notebook and review UI', () => {
       }
       return json({}, 404)
     }))
-    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} />)
+    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} sourcesProvenance={null} />)
     await userEvent.click(screen.getByRole('tab', { name: 'Review' }))
 
     expect(await screen.findByText(reviewItem.prompt)).toBeInTheDocument()
@@ -95,7 +95,7 @@ describe('goal notebook and review UI', () => {
       }
       return json({}, 404)
     }))
-    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} />)
+    renderWithQuery(<TopicTools goalId="goal-1" topicId="topic-1" conversationScope={null} sourcesMarkdown={null} sourcesProvenance={null} />)
     await userEvent.click(screen.getByRole('tab', { name: 'Review' }))
 
     expect(await screen.findAllByText(reviewItem.prompt)).toHaveLength(2)

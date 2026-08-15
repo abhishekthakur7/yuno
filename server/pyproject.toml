@@ -178,7 +178,12 @@ type = "independence"
 # it too turns out to be cross-cutting). `canonical`'s offline publisher
 # checks the acting owner's approver grant via `identity` and appends an
 # `AuditEvent` via `audit` -- the same "any module -> identity/audit" edge
-# `identity.service -> audit` already takes.
+# `identity.service -> audit` already takes. `provenance.withdraw_source`
+# takes the identical `identity` edge for the identical reason: IDK-003 §8
+# admits `withdrawn` "only by explicit editorial action", and holding
+# `designated_editorial_approver` is what makes an action editorial, so the
+# grant check lives in the service every caller must go through rather than
+# in the offline `scripts/withdraw_source.py` CLI alone.
 modules = [
     "yuno.modules.identity",
     "yuno.modules.audit",
@@ -205,6 +210,7 @@ ignore_imports = [
     "yuno.modules.identity.service -> yuno.modules.audit.**",
     "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
     "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
+    "yuno.modules.provenance.service -> yuno.modules.identity.**",
     "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
     "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
     "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
