@@ -9,8 +9,8 @@
 
 - `grep -c is_critical server/openapi.json src/shared/api/schema.d.ts` → `0` and `0`. A repo-wide grep across `src/` returns nothing. The gate's observation is correct.
 - `AssessmentDimensionResponse` (`server/src/yuno/api/contracts.py:1016-1021`) carries `dimension_id`, `outcome`, `rationale`, `evidence_refs` — the domain record's fields minus `is_critical`.
-- `is_critical` exists in exactly two places in the domain: a derived property on `RubricDimension` (`server/src/yuno/modules/evidence_evaluation/domain.py:622-629`) and a denormalized field on `AssessmentDimensionResult` (`domain.py:705-722`), persisted as `assessment_dimension_results.is_critical` (`server/src/yuno/modules/evidence_evaluation/models.py:401`). `rubric_dimensions` has no such column, deliberately (`models.py:229-232`).
-- It is read by exactly one consumer: `derive_progress`'s IDK-009 §9.2 precedence check (`domain.py:378`).
+- `is_critical` exists in exactly two places in the domain: a derived property on `RubricDimension` (`server/src/yuno/modules/evidence_evaluation/domain.py:622-629`) and a denormalized field on `AssessmentDimensionResult` (`domain.py:705-722`), persisted as `assessment_dimension_results.is_critical` (`server/src/yuno/modules/evidence_evaluation/models.py:406`). `rubric_dimensions` has no such column, deliberately (`models.py:229-232`).
+- Exactly one consumer *decides* anything on it: `derive_progress`'s IDK-009 §9.2 precedence check (`domain.py:378`). The other three read-sites only carry the value between layers — `service.py:384` copies it from the rubric dimension onto the result at assessment time, and `repository.py:318` / `repository.py:795` write and read the column. Nothing else branches on it.
 
 ## Why it is not surfaced
 

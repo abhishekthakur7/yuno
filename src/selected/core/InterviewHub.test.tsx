@@ -206,7 +206,7 @@ describe('API-backed Interview Prep hub', () => {
     expect(document.querySelector('main')).toHaveAttribute('data-interview-state', 'unavailable')
   })
 
-  it('requires an explicit level choice before creating the recommended bundle from the empty state (IDK-004 §4)', async () => {
+  it('requires an explicit level choice and a learner-supplied name before creating the recommended bundle from the empty state (IDK-004 §4)', async () => {
     let createBody: Record<string, unknown> | null = null
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestFrom(input, init)
@@ -226,12 +226,17 @@ describe('API-backed Interview Prep hub', () => {
     expect(createButton).toBeDisabled()
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Role and level' }), ROLE_LEVEL_COPY.Senior.label)
+    // A level alone is not enough: the product supplies no default name, because
+    // any generated one would be unreviewed learner-facing copy.
+    expect(createButton).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText('Bundle name'), 'My backend prep')
     expect(createButton).toBeEnabled()
     await userEvent.click(createButton)
     await waitFor(() => expect(createBody).not.toBeNull())
     expect(createBody).not.toHaveProperty('goal_id')
     expect(JSON.stringify(createBody).toLowerCase()).not.toContain('company')
-    expect(createBody).toMatchObject({ generic_role: 'Backend Engineer', target_level: 'Senior', origin: 'recommended' })
-    expect(await screen.findByDisplayValue('Senior backend interview')).toBeInTheDocument()
+    expect(createBody).toMatchObject({ name: 'My backend prep', generic_role: 'Backend Engineer', target_level: 'Senior', origin: 'recommended' })
+    expect(await screen.findByDisplayValue('My backend prep')).toBeInTheDocument()
   })
 })

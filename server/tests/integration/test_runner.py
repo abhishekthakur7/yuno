@@ -5,6 +5,7 @@ import hashlib
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -344,11 +345,26 @@ def test_retired_relational_language_rejected_before_route_or_uow(client) -> Non
     statements: list[str] = []
     checkouts: list[object] = []
 
+    # Both listeners attach to the app-wide engine, which the background
+    # `DurableJobDispatcher` lanes share -- one thread per `JobLane`, named
+    # `jobs-<lane>` (`jobs_events/service.py:138-144`), started at
+    # `api/app.py:863` and polling every `_POLL_SECONDS`. Their unrelated
+    # queue SQL would otherwise be attributed to the request under test,
+    # which made `statements == []` fail intermittently rather than
+    # measuring this route. Excluding those threads by name keeps the
+    # assertion strict for the request thread while staying honest about
+    # what it can observe: SQL from any *new* background source would still
+    # be captured and correctly fail this test.
+    def _is_request_thread() -> bool:
+        return not threading.current_thread().name.startswith("jobs-")
+
     def _on_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-        statements.append(statement)
+        if _is_request_thread():
+            statements.append(statement)
 
     def _on_checkout(dbapi_conn, connection_record, connection_proxy):
-        checkouts.append(connection_record)
+        if _is_request_thread():
+            checkouts.append(connection_record)
 
     engine = app.state.engine
     event.listen(engine, "before_cursor_execute", _on_cursor_execute)

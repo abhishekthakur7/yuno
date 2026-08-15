@@ -813,6 +813,10 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
   const [level, setLevel] = useState<InterviewLevel>('Senior')
   // IDK-004 §4 also governs this "recommended" bundle's creation: no level is preselected here either.
   const [createLevel, setCreateLevel] = useState<InterviewLevel | ''>('')
+  // The bundle's name is the learner's, not the product's. A generated default
+  // (e.g. a level interpolated into a sentence) would be learner-facing copy no
+  // decision document has reviewed -- see IDK-503 round 3, gate 4.
+  const [createName, setCreateName] = useState('')
 
   useEffect(() => {
     if (!selected) return
@@ -822,10 +826,10 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
   }, [onSelect, selected, selectedBundleId])
 
   const createBundle = () => {
-    if (!createLevel) return
+    if (!createLevel || !createName.trim()) return
     interview.create.mutate({
       ...(goalId ? { goal_id: goalId } : {}),
-      name: `${createLevel} backend interview`,
+      name: createName.trim(),
       generic_role: 'Backend Engineer',
       target_level: createLevel,
       origin: 'recommended',
@@ -852,8 +856,9 @@ function BundleEditor({ interview, goalId, selectedBundleId, onSelect }: {
     {interview.bundles.isPending && !interview.bundles.data ? <div className="sb-interview-status" aria-live="polite"><RefreshCcw /><strong>Loading interview bundles</strong><span>Your preparation choices remain independently reachable.</span></div>
       : interview.bundles.isError && !interview.bundles.data ? <div className="sb-interview-status" role="alert"><AlertTriangle /><strong>Interview bundles are unavailable</strong><span>No replacement bundle was synthesized.</span><Button tone="secondary" onClick={() => void interview.bundles.refetch()}>Retry bundles</Button></div>
         : bundles.length === 0 ? <div className="sb-interview-status"><HelpCircle /><strong>No interview bundle yet</strong><span>Create an editable recommended bundle. A Learn goal is not required.</span>
+          <label>Bundle name<input value={createName} onChange={event => setCreateName(event.target.value)} /></label>
           <label>Role and level<select aria-label="Role and level" aria-describedby="sb-bundle-create-level-helper sb-bundle-create-level-description" value={createLevel} onChange={event => setCreateLevel(event.target.value as InterviewLevel | '')}><option value="" />{INTERVIEW_ROLE_LEVELS.map(option => <option key={option.level} value={option.level}>{option.label}</option>)}</select><small id="sb-bundle-create-level-helper">{ROLE_LEVEL_TITLE_VARIATION_HELPER}</small>{createLevel && <small id="sb-bundle-create-level-description">{ROLE_LEVEL_COPY[createLevel].description}</small>}</label>
-          <Button disabled={interview.create.isPending || !createLevel} onClick={createBundle}>{interview.create.isPending ? 'Creating…' : 'Create recommended bundle'}</Button>
+          <Button disabled={interview.create.isPending || !createLevel || !createName.trim()} onClick={createBundle}>{interview.create.isPending ? 'Creating…' : 'Create recommended bundle'}</Button>
         </div>
           : selected && <div className="sb-bundle-editor">
             <nav aria-label="Interview bundles">{bundles.map(bundle => <button key={bundle.id} className={bundle.id === selected.id ? 'is-selected' : ''} aria-pressed={bundle.id === selected.id} onClick={() => onSelect(bundle.id)}><strong>{bundle.name}</strong><small>{INTERVIEW_ROLE_LEVELS.find(option => option.level === bundle.target_level)?.label ?? `${bundle.target_level} backend engineer`}</small></button>)}</nav>
