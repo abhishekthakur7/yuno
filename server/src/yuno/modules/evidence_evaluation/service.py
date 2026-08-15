@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from collections.abc import Sequence
+from dataclasses import asdict, replace
 
 from yuno.modules.audit.domain import AuditEvent
 from yuno.modules.evidence_evaluation.domain import (
+    CRITICAL_STABLE_DIMENSION_IDS,
     FIXTURE_DERIVATION_VERSION,
     Assessment,
     AssessmentDimensionResult,
@@ -29,6 +31,8 @@ from yuno.modules.evidence_evaluation.domain import (
     ProgressTransfer,
     ReevaluationRequest,
     ReevaluationStatus,
+    Rubric,
+    RubricDimension,
     RubricStatus,
     TransferClassification,
     TransferredEvidenceRef,
@@ -37,6 +41,7 @@ from yuno.modules.evidence_evaluation.domain import (
     progress_input_hash,
 )
 from yuno.modules.evidence_evaluation.ports import EvaluationAdapter, EvidenceUnitOfWork
+from yuno.modules.identity.domain import Role, RolePolicy
 from yuno.shared.domain.clock import Clock, SystemClock, now_text
 from yuno.shared.domain.errors import (
     ConflictError,
@@ -872,3 +877,168 @@ def _audit(
         None,
         timestamp,
     )
+
+
+def load_rubric_manifest(
+    uow_factory,
+    owner_id: str,
+    rubric: Rubric,
+    dimensions: Sequence[RubricDimension],
+    *,
+    clock: Clock | None = None,
+) -> Rubric:
+    """Load one approved rubric manifest (header + its six dimensions) in
+    one transaction (IDK-204 Scope, `IMPLEMENTATION_TICKETS.md:1027`:
+    "Load and version-gate the three immutable IDK-009 v1 rubric
+    manifests"; IDK-503 gate 5's clearing line,
+    `docs/approvals/IDK-503-rerun-2026-08-15-b/gate-5-rubrics-scenarios.md:107`:
+    "IDK-204 ships a migration/seed or boot-time loader inserting the
+    three `status='approved'` rubric headers and their six-dimension sets
+    matching IDK-009 §6 verbatim"). This closes only the mechanism half of
+    that finding (B11): the three approved manifests themselves
+    (`hands-on-rubric-v1`, `practice-rubric-v1`, `mock-rubric-v1`) are
+    IDK-009's own approved content, out of this ticket's scope by its own
+    text ("Rubric/scenario content itself (IDK-009)."
+    `IMPLEMENTATION_TICKETS.md:1037`), and this function authors none of
+    it -- it validates structure and persists whatever manifest a caller
+    supplies.
+
+    `rubric`/`dimensions` carry placeholder `id`/`owner_id`/`created_at`/
+    `rubric_id` fields a caller cannot know in advance -- the same
+    build-with-placeholders-then-`dataclasses.replace` idiom
+    `publish_canonical_graph` uses for `Topic.graph_version_id`
+    (`canonical/publisher.py:183-195`; placeholders built in
+    `scripts/publish_canonical.py:71-111`). Real ids are minted and
+    stamped in here, never accepted from the caller, so two loads of the
+    same manifest file can never collide on id.
+
+    Requires `rubric.status is RubricStatus.APPROVED` (`domain.py:18-21`)
+    -- gate 5's clearing line above is explicitly about `status='approved'`
+    rows, so a `fixture`/`retired` manifest is refused with
+    `DomainValidationError` rather than silently loaded.
+
+    Structural validation against IDK-009 §6/§4, without authoring
+    content (`_validate_rubric_dimension_structure` below): exactly six
+    dimensions (§4: "All six dimensions of the referenced rubric are
+    required for every v1 scenario."); `ordinal` values exactly 1..6 with
+    no duplicates; `stable_dimension_id`s distinct; and both members of
+    `CRITICAL_STABLE_DIMENSION_IDS` (`domain.py:607-609`) present. Never
+    validates a dimension's `name`, `description` or
+    `evaluation_guidance` text -- that is IDK-009's own approved copy,
+    not a shape this loader may judge.
+
+    Authority, and why this consolidates under B21 rather than opening a
+    new finding. There is no distinct content-owner role:
+    `owner_role_grants.role` admits only `learner` and
+    `designated_editorial_approver` (`identity/domain.py:28-30`), and
+    IDK-003 §13 records that no distinct content-owner grant exists.
+    Inventing one here would be an unapproved vocabulary change under
+    IDK-003 §14's change control; shipping an ungated write path instead
+    would defeat the entire point of the version gate below. This
+    function therefore reuses `Role.DESIGNATED_EDITORIAL_APPROVER` -- the
+    identical grant `withdraw_source` (`provenance/service.py:190-191`)
+    and `publish_canonical_graph` (`canonical/publisher.py:139-140`)
+    already reuse for their own "editorial" actions -- and that reuse
+    **consolidates under existing finding B21**
+    (`docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15-b.md:82,94`),
+    the identical cross-decision authority question the round-3 record
+    already raised for `withdraw_source`'s reuse of the same grant,
+    raised again here by the identical reuse rather than as a new,
+    separate finding. The grant check goes inside this function, not
+    only in the offline CLI, so no future caller can bypass it --
+    exactly `withdraw_source`'s own rationale
+    (`provenance/service.py:174-186`).
+
+    The version gate is this function's substance. IDK-204 calls the
+    three manifests "immutable" and requires them "version-gated", but
+    `rubrics`' own `UniqueConstraint("owner_id", "body_hash",
+    "capability", "version")` (`models.py:164-170`) keys on `body_hash`
+    too -- it permits two rows sharing the same `(owner_id, capability,
+    version)` with a *different* body, i.e. a version could otherwise be
+    silently redefined by loading a second manifest under the same
+    version string. This function closes that gap in application code,
+    without a migration or constraint change: if any existing rubric for
+    `owner_id` already has this exact `(capability, version)`, the load
+    is refused with `ConflictError` and nothing is written, regardless of
+    whether the new body would have matched the old one.
+
+    `RubricBodyRow.provenance`/`task_context` are `NOT NULL` with
+    non-blank `CHECK`s (`models.py:196-197`) -- both are validated
+    non-blank here so a malformed manifest fails with a typed
+    `DomainValidationError` before any write is attempted, rather than a
+    raw `IntegrityError` surfacing from SQLite mid-transaction.
+
+    One transaction for the header and all six dimensions
+    (`uow.evidence.add_rubric`, `repository.py:190-232`, itself already
+    a single call under this function's own `with uow_factory() as uow:`
+    block) -- so a half-loaded rubric (a header with fewer than six
+    dimensions, or vice versa) can never be committed.
+    """
+    if rubric.status is not RubricStatus.APPROVED:
+        raise DomainValidationError(
+            "Only an approved rubric manifest (status='approved') may be loaded."
+        )
+    if not rubric.task_context.strip() or not rubric.provenance.strip():
+        raise DomainValidationError(
+            "A rubric manifest's task_context and provenance must not be blank."
+        )
+    _validate_rubric_dimension_structure(dimensions)
+
+    timestamp = now_text(clock or SystemClock())
+    with uow_factory() as uow:
+        grants = uow.owners.grants(owner_id)
+        RolePolicy.require(grants, Role.DESIGNATED_EDITORIAL_APPROVER)
+
+        existing = uow.evidence.list_rubrics(owner_id)
+        if any(
+            item.capability == rubric.capability and item.version == rubric.version
+            for item in existing
+        ):
+            raise ConflictError(
+                f"A rubric already exists for capability {rubric.capability!r} "
+                f"version {rubric.version!r}; a loaded rubric version is "
+                "immutable and cannot be redefined."
+            )
+
+        rubric_id = new_id()
+        stamped_rubric = replace(
+            rubric, id=rubric_id, owner_id=owner_id, created_at=timestamp
+        )
+        stamped_dimensions = tuple(
+            replace(dimension, id=new_id(), rubric_id=rubric_id)
+            for dimension in dimensions
+        )
+        uow.evidence.add_rubric(stamped_rubric, stamped_dimensions)
+        uow.commit()
+        return stamped_rubric
+
+
+def _validate_rubric_dimension_structure(
+    dimensions: Sequence[RubricDimension],
+) -> None:
+    """Structural-only validation against IDK-009 §6/§4 (see
+    `load_rubric_manifest`'s docstring for the full rationale) -- never
+    inspects a dimension's `name`, `description` or
+    `evaluation_guidance`, which are IDK-009's own approved copy and not
+    this loader's to author or judge.
+    """
+    if len(dimensions) != 6:
+        raise DomainValidationError(
+            "A rubric manifest must define exactly six dimensions (IDK-009 "
+            f"section 6); got {len(dimensions)}."
+        )
+    ordinals = sorted(dimension.ordinal for dimension in dimensions)
+    if ordinals != list(range(1, 7)):
+        raise DomainValidationError(
+            "Rubric dimension ordinals must be exactly 1..6 with no duplicates."
+        )
+    stable_ids = [dimension.stable_dimension_id for dimension in dimensions]
+    if len(set(stable_ids)) != len(stable_ids):
+        raise DomainValidationError(
+            "Rubric dimension stable_dimension_ids must be distinct."
+        )
+    if not CRITICAL_STABLE_DIMENSION_IDS.issubset(stable_ids):
+        raise DomainValidationError(
+            "A rubric manifest must include both critical stable dimensions: "
+            + ", ".join(sorted(CRITICAL_STABLE_DIMENSION_IDS))
+        )

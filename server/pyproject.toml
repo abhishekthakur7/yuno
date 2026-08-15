@@ -184,6 +184,13 @@ type = "independence"
 # `designated_editorial_approver` is what makes an action editorial, so the
 # grant check lives in the service every caller must go through rather than
 # in the offline `scripts/withdraw_source.py` CLI alone.
+# `evidence_evaluation.load_rubric_manifest` takes the identical `identity`
+# edge for the identical reason: no distinct content-owner grant exists
+# (IDK-003 §13), so it reuses `designated_editorial_approver` inside the
+# service function every caller (today, the offline
+# `scripts/load_rubric_manifest.py` CLI) must go through -- consolidating
+# under existing finding B21 rather than opening a new one (see that
+# function's docstring).
 modules = [
     "yuno.modules.identity",
     "yuno.modules.audit",
@@ -211,6 +218,7 @@ ignore_imports = [
     "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
     "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
     "yuno.modules.provenance.service -> yuno.modules.identity.**",
+    "yuno.modules.evidence_evaluation.service -> yuno.modules.identity.**",
     "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
     "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
     "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
