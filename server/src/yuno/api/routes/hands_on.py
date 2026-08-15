@@ -90,6 +90,7 @@ def read_hands_on(
             "level": level,
             "constraints": list(constraints),
             "status": work.scenario_status if work else "fixture",
+            "scenario_id": work.scenario_id if work else None,
             "source": work.scenario_source if work else "fixture-pending-idk-009",
         },
         "artifacts": [item.__dict__ for item in artifacts],

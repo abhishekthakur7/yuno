@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from tests.integration.test_evidence_evaluation import FakeEvaluationAdapter
 from tests.integration.test_learning_content_api import _seed
@@ -13,6 +14,7 @@ from yuno.modules.evidence_evaluation.domain import (
     RubricDimension,
     RubricStatus,
 )
+from yuno.modules.hands_on.domain import HandsOnWork
 from yuno.shared.domain.clock import SystemClock, now_text
 from yuno.shared.domain.ids import new_id
 
@@ -298,3 +300,121 @@ def test_static_limitation_and_artifact_immutability_are_database_enforced(engin
         "goal_id",
         "cross_question_response",
     }
+
+
+def test_scenario_status_check_admits_approved_and_scenario_id_is_a_nullable_header_column(
+    client, uow_factory, engine
+):
+    """IDK-503 findings B10/B12: the CHECK on `hands_on_work.scenario_status`
+    is widened from `IN ('fixture')` to `IN ('fixture','approved')`, and a
+    nullable `scenario_id` header column is added. `'approved'` is a naming
+    choice this migration makes -- IDK-009 never names a `scenario_status`
+    field and supplies no literal for it -- not a value the decision
+    specifies.
+    """
+    topic_id, goal_id = _arrange(uow_factory)
+    with uow_factory() as uow:
+        owner = uow.owners.get_local_owner()
+        assert owner is not None
+        owner_id = owner.id
+
+    with engine.connect() as connection:
+        columns = {
+            row[1]: row
+            for row in connection.execute(text("PRAGMA table_info(hands_on_work)"))
+        }
+    assert "scenario_id" in columns
+    assert columns["scenario_id"][3] == 0, "scenario_id must be nullable (notnull=0)"
+
+    with engine.connect() as connection:
+        triggers = set(
+            connection.execute(
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='hands_on_work'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert triggers == {
+        "hands_on_work_immutable_update",
+        "hands_on_work_immutable_delete",
+    }
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO hands_on_work "
+                "(id, owner_id, goal_id, topic_stable_id, scenario_status, scenario_id, created_at, body_hash) "
+                "VALUES (:id, :owner_id, :goal_id, :topic_id, 'approved', "
+                "'test-scenario-id-not-real-content', '2026-08-15T00:00:00Z', 'hash-approved-check')"
+            ),
+            {
+                "id": new_id(),
+                "owner_id": owner_id,
+                "goal_id": goal_id,
+                "topic_id": topic_id,
+            },
+        )
+
+    with engine.connect() as connection:
+        assert connection.execute(text("PRAGMA foreign_key_check")).fetchall() == []
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO hands_on_work "
+                "(id, owner_id, goal_id, topic_stable_id, scenario_status, scenario_id, created_at, body_hash) "
+                "VALUES (:id, :owner_id, :goal_id, :topic_id, 'bogus', NULL, "
+                "'2026-08-15T00:00:01Z', 'hash-bogus-check')"
+            ),
+            {
+                "id": new_id(),
+                "owner_id": owner_id,
+                "goal_id": goal_id,
+                "topic_id": topic_id,
+            },
+        )
+
+
+def test_approved_scenario_status_and_scenario_id_round_trip_through_repository(
+    client,
+    uow_factory,
+):
+    """A work row persisted with `scenario_status='approved'` and a
+    non-null `scenario_id` reads back correctly through
+    `SqlAlchemyHandsOnRepository`. The scenario_id used here is an
+    obviously synthetic identifier, not one of IDK-009's twelve approved
+    scenario ids -- shipping one of those would imply approved content
+    exists, which is out of scope for this schema-shape change.
+    """
+    topic_id, goal_id = _arrange(uow_factory)
+    timestamp = now_text(SystemClock())
+    with uow_factory() as uow:
+        owner = uow.owners.get_local_owner()
+        assert owner is not None
+        work = HandsOnWork(
+            new_id(),
+            owner.id,
+            goal_id,
+            topic_id,
+            "Round-trip test scenario title",
+            "Round-trip test scenario prompt.",
+            "Software Engineer",
+            "Senior",
+            ("State assumptions and trade-offs explicitly.",),
+            "approved",
+            "schema-shape-round-trip-not-a-real-scenario-id",
+            "fixture-pending-idk-009",
+            timestamp,
+        )
+        uow.hands_on.add_work(work)
+        uow.commit()
+
+    with uow_factory() as uow:
+        read_back = uow.hands_on.get_work(owner.id, goal_id, topic_id)
+
+    assert read_back is not None
+    assert read_back.scenario_status == "approved"
+    assert read_back.scenario_id == "schema-shape-round-trip-not-a-real-scenario-id"
+    assert read_back.scenario_title == "Round-trip test scenario title"

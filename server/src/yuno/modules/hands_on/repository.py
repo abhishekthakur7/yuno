@@ -233,6 +233,7 @@ def _work(r, body):
         body.level,
         tuple(json.loads(body.constraints_json)),
         r.scenario_status,
+        r.scenario_id,
         body.scenario_source,
         r.created_at,
     )

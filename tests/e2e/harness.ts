@@ -269,6 +269,7 @@ export async function installApiMocks(page: Page) {
       level: 'Senior',
       constraints: ['Address the approved topic boundary.', 'State assumptions and trade-offs explicitly.'],
       status: 'fixture',
+      scenario_id: null,
       source: 'fixture-pending-idk-009',
     },
     artifacts: [],

@@ -20,6 +20,7 @@ class HandsOnWork:
     level: str
     constraints: tuple[str, ...]
     scenario_status: str
+    scenario_id: str | None
     scenario_source: str
     created_at: str
 

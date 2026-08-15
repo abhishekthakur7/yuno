@@ -3591,12 +3591,26 @@
             "title": "Role",
             "type": "string"
           },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Id"
+          },
           "source": {
             "title": "Source",
             "type": "string"
           },
           "status": {
-            "const": "fixture",
+            "enum": [
+              "fixture",
+              "approved"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -3612,6 +3626,7 @@
           "level",
           "constraints",
           "status",
+          "scenario_id",
           "source"
         ],
         "title": "HandsOnScenarioResponse",

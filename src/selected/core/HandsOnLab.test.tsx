@@ -11,7 +11,7 @@ const workspace: HandsOnWorkspace = {
   work_id: 'work-1',
   goal_id: 'goal-1',
   topic_id: 'topic-1',
-  scenario: { title: 'Make duplicate delivery atomic', prompt: 'Repair the reservation write boundary.', role: 'Platform engineer', level: 'Senior', constraints: ['Multiple consumers can receive the same request.', 'The durable decision must survive restart.'], status: 'fixture', source: 'fixture-pending-idk-009' },
+  scenario: { title: 'Make duplicate delivery atomic', prompt: 'Repair the reservation write boundary.', role: 'Platform engineer', level: 'Senior', constraints: ['Multiple consumers can receive the same request.', 'The durable decision must survive restart.'], status: 'fixture', scenario_id: null, source: 'fixture-pending-idk-009' },
   artifacts: [{ id: 'artifact-1', revision_number: 1, content: 'first', content_hash: 'hash-1', response_to_question_id: null, cross_question_response: null, created_at: '2026-08-13T00:00:00Z', evidence_id: 'evidence-1' }],
   reviews: [{ id: 'review-1', artifact_id: 'artifact-1', assessment_id: 'assessment-1', rubric_id: 'rubric-1', rubric_version: 'fixture-v1', rubric_status: 'fixture', review_mode: 'static', limitation: 'This review can inspect the atomic API boundary but cannot observe concurrent database scheduling.', feedback: 'The durable winner is returned.', created_at: '2026-08-13T00:00:01Z' }],
   cross_questions: [{ id: 'question-1', review_id: 'review-1', artifact_id: 'artifact-1', question: 'What happens if acknowledgement fails after commit?', target_gap: 'post-commit retry', created_at: '2026-08-13T00:00:02Z' }],

@@ -28,7 +28,8 @@ class HandsOnWorkRow(Base):
             "owner_id", "goal_id", "topic_stable_id", name="uq_hands_on_work_topic"
         ),
         CheckConstraint(
-            "scenario_status IN ('fixture')", name="hands_on_scenario_status_valid"
+            "scenario_status IN ('fixture','approved')",
+            name="hands_on_scenario_status_valid",
         ),
     )
     id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -36,6 +37,7 @@ class HandsOnWorkRow(Base):
     goal_id: Mapped[str] = mapped_column(Text, nullable=False)
     topic_stable_id: Mapped[str] = mapped_column(Text, nullable=False)
     scenario_status: Mapped[str] = mapped_column(Text, nullable=False)
+    scenario_id: Mapped[str | None] = mapped_column(Text)
     body_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = utc_timestamp_column()
 

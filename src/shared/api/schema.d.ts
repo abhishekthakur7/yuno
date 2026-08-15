@@ -3021,13 +3021,15 @@ export interface components {
             prompt: string;
             /** Role */
             role: string;
+            /** Scenario Id */
+            scenario_id: string | null;
             /** Source */
             source: string;
             /**
              * Status
-             * @constant
+             * @enum {string}
              */
-            status: "fixture";
+            status: "fixture" | "approved";
             /** Title */
             title: string;
         };

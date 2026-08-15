@@ -434,7 +434,8 @@ class HandsOnScenarioResponse(BaseModel):
     role: str
     level: str
     constraints: list[str]
-    status: Literal["fixture"]
+    status: Literal["fixture", "approved"]
+    scenario_id: str | None
     source: str
 
 
