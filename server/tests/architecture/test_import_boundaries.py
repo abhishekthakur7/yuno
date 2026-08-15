@@ -225,6 +225,13 @@ def test_pyproject_declares_the_required_contracts(user_options):
         "yuno.modules.identity.service -> yuno.modules.audit.**",
         "yuno.modules.canonical.publisher -> yuno.modules.identity.**",
         "yuno.modules.canonical.publisher -> yuno.modules.audit.**",
+        # The three `-> identity` edges are the grant checks that make an
+        # action editorial, each living in the service every caller must go
+        # through rather than in one offline CLI: `publish_canonical_graph`
+        # above, plus source withdrawal/registration and rubric manifest
+        # loading below.
+        "yuno.modules.provenance.service -> yuno.modules.identity.**",
+        "yuno.modules.evidence_evaluation.service -> yuno.modules.identity.**",
         "yuno.modules.profiles_goals.ports -> yuno.modules.audit.**",
         "yuno.modules.profiles_goals.service -> yuno.modules.audit.**",
         "yuno.modules.diagnostics.ports -> yuno.modules.audit.**",
