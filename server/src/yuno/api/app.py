@@ -902,6 +902,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.head_revision = head_revision
             app.state.clock = SystemClock()
             app.state.review_scheduler = FixtureReviewScheduler()
+            # The singleton local owner is provisioned above, before traffic
+            # is accepted; `get_owner_id` reads this cached id instead of
+            # opening a UnitOfWork per request (see its docstring).
+            app.state.owner_id = owner.id
 
             yield
         finally:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends, Header, Request
+from fastapi import Header, Request
 
 from yuno.config import Settings
 from yuno.modules.identity.ports import IdentityUnitOfWork
@@ -14,7 +14,6 @@ from yuno.shared.domain.clock import Clock, SystemClock
 from yuno.shared.domain.errors import (
     MalformedRequestError,
     PreconditionFailedError,
-    UnavailableError,
 )
 
 
@@ -24,12 +23,17 @@ def get_unit_of_work(request: Request) -> Iterator[IdentityUnitOfWork]:
         yield uow
 
 
-def get_owner_id(uow: Annotated[IdentityUnitOfWork, Depends(get_unit_of_work)]) -> str:
-    """Resolve the acting local owner server-side, never from client input."""
-    owner = uow.owners.get_local_owner()
-    if owner is None:
-        raise UnavailableError("The local owner has not been provisioned yet.")
-    return owner.id
+def get_owner_id(request: Request) -> str:
+    """Return the acting local owner's id, never from client input.
+
+    The local owner is a singleton provisioned once during lifespan
+    startup (`app.py`'s `ensure_local_owner` call, before traffic is
+    accepted) and cached on `app.state.owner_id`. Reading it here is a
+    plain attribute read -- no `UnitOfWork`, no SQL -- so it runs before
+    body validation without opening a database connection, the same as
+    `get_settings_dependency`/`get_clock` below.
+    """
+    return request.app.state.owner_id
 
 
 def get_job_dispatcher(request: Request) -> JobDispatcher:

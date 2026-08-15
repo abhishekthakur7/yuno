@@ -9,7 +9,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 
 from tests.conftest import build_isolated_settings
 from yuno.api.app import create_app
@@ -316,6 +316,117 @@ def test_runner_rejects_path_traversal_and_hash_mismatch(
                 },
             )
             assert response.status_code == 422
+
+
+def test_retired_relational_language_rejected_before_route_or_uow(client) -> None:
+    """IDK-008 (`docs/decisions/IDK-008-database-exercise-posture.md:34,65`)
+    requires that a `POST /runner/confirmations` body carrying the retired
+    `"language":"relational"` value returns the standard `422` validation
+    envelope *before the route/UoW* and creates no side effect.
+    `RunnerLanguage` (`modules/runner/domain.py`) has no `relational` member
+    at all, so this is closed-schema Pydantic validation, and FastAPI
+    resolves every dependency -- including `get_owner_id` -- before
+    checking body fields. Proving zero UoWs/SQL/pool-checkouts here proves
+    `get_owner_id` (`api/dependencies.py`) never touches the database on
+    this path, not merely that this one route happens not to.
+    """
+    app = client.app
+    original_uow_factory = app.state.uow_factory
+    uow_calls = 0
+
+    def counting_uow_factory():
+        nonlocal uow_calls
+        uow_calls += 1
+        return original_uow_factory()
+
+    app.state.uow_factory = counting_uow_factory
+
+    statements: list[str] = []
+    checkouts: list[object] = []
+
+    def _on_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def _on_checkout(dbapi_conn, connection_record, connection_proxy):
+        checkouts.append(connection_record)
+
+    engine = app.state.engine
+    event.listen(engine, "before_cursor_execute", _on_cursor_execute)
+    event.listen(engine, "checkout", _on_checkout)
+    try:
+        content = b"public class Main {}"
+        response = client.post(
+            "/api/v1/runner/confirmations",
+            json={
+                "language": "relational",
+                "capability": "compile-and-test",
+                "operation": "compile",
+                "inputs": [
+                    {
+                        "logical_path": "Main.java",
+                        "declared_type": "java-source",
+                        "content_ref": "inline-base64:"
+                        + base64.b64encode(content).decode(),
+                        "content_hash": hashlib.sha256(content).hexdigest(),
+                    }
+                ],
+                "acknowledgement_version": ACKNOWLEDGEMENT_VERSION,
+            },
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _on_cursor_execute)
+        event.remove(engine, "checkout", _on_checkout)
+        app.state.uow_factory = original_uow_factory
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "request_validation_error"
+    assert any(error["field"] == "body.language" for error in body["field_errors"])
+
+    assert uow_calls == 0
+    assert statements == []
+    assert checkouts == []
+
+    with app.state.session_factory() as session:
+        assert (
+            session.execute(text("SELECT count(*) FROM runner_confirmations")).scalar()
+            == 0
+        )
+        assert session.execute(text("SELECT count(*) FROM jobs")).scalar() == 0
+
+
+def test_job_retry_extra_field_422_opens_no_uow(client) -> None:
+    """Documents that the `get_owner_id` fix (`api/dependencies.py`) is
+    systemic, not special-cased to the runner route: `POST
+    /jobs/{id}/retry` also depends on `get_owner_id` without declaring its
+    own `get_unit_of_work`, so its `422` (a `JobRetryRequest` field the
+    closed schema forbids) must open zero UoWs too.
+    """
+    app = client.app
+    original_uow_factory = app.state.uow_factory
+    uow_calls = 0
+
+    def counting_uow_factory():
+        nonlocal uow_calls
+        uow_calls += 1
+        return original_uow_factory()
+
+    app.state.uow_factory = counting_uow_factory
+    try:
+        response = client.post(
+            "/api/v1/jobs/does-not-exist/retry",
+            json={"unexpected_field": True},
+        )
+    finally:
+        app.state.uow_factory = original_uow_factory
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "request_validation_error"
+    assert any(
+        error["field"] == "body.unexpected_field" for error in body["field_errors"]
+    )
+    assert uow_calls == 0
 
 
 def _declared(path: str, content: bytes) -> DeclaredInput:

@@ -39,14 +39,19 @@ class _ProbeBody(BaseModel):
     note: str = "unused"
 
 
-def _build_probe_app(uow_factory: UnitOfWorkFactory) -> FastAPI:
+def _build_probe_app(uow_factory: UnitOfWorkFactory, owner_id: str) -> FastAPI:
     """A throwaway app exercising the shared dependency/error-handling
     seams that `/health` never touches. Reuses the real
     `register_exception_handlers`/`CorrelationIdMiddleware` so what's under
     test is production code, not a reimplementation of it.
+
+    `app.state.owner_id` is set directly here, mirroring how `create_app`'s
+    lifespan caches it after `ensure_local_owner` -- this probe app has no
+    lifespan of its own, so nothing else would populate it.
     """
     app = FastAPI()
     app.state.uow_factory = uow_factory
+    app.state.owner_id = owner_id
     router = APIRouter(prefix="/api/v1")
 
     @router.get("/_probe/owner")
@@ -93,13 +98,14 @@ def probe_client(uow_factory: UnitOfWorkFactory) -> Iterator[TestClient]:
     """The local owner must already exist for `get_owner_id` to resolve --
     the probe app has no lifespan of its own to provision it (unlike
     `create_app`), so this fixture does it explicitly via the same
-    `identity_service.ensure_local_owner` production code uses.
+    `identity_service.ensure_local_owner` production code uses, then seeds
+    `app.state.owner_id` from the id it returns.
     """
     with uow_factory() as uow:
-        ensure_local_owner(uow, "Test Owner")
+        owner = ensure_local_owner(uow, "Test Owner")
         uow.commit()
 
-    with TestClient(_build_probe_app(uow_factory)) as test_client:
+    with TestClient(_build_probe_app(uow_factory, owner.id)) as test_client:
         yield test_client
 
 
@@ -143,11 +149,13 @@ def test_inbound_correlation_id_is_echoed_back(client: TestClient) -> None:
 
 def test_get_owner_id_dependency_takes_no_client_supplied_input() -> None:
     """`get_owner_id` (`api/dependencies.py`) has exactly one parameter,
-    the request's own `UnitOfWork` -- there is no `Header`/`Query`/body
-    parameter for any route built on it to ever read a client-supplied
-    owner id from.
+    the raw ASGI `Request` -- there is no `Header`/`Query`/body parameter
+    for any route built on it to ever read a client-supplied owner id
+    from. It returns `request.app.state.owner_id`, cached at lifespan
+    startup from the provisioned singleton local owner; no database call
+    happens on this path at all.
     """
-    assert list(inspect.signature(get_owner_id).parameters) == ["uow"]
+    assert list(inspect.signature(get_owner_id).parameters) == ["request"]
 
 
 def test_owner_seam_ignores_x_owner_id_header(
