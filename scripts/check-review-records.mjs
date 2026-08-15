@@ -20,6 +20,13 @@ const ROUNDS = [
     gateDir: 'docs/approvals/IDK-503-rerun-2026-08-15',
     record: 'docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md',
   },
+  // Third round, run the same day as the second against a tree that moved
+  // between them, hence the `-b` suffix: a round is identified by the tree it
+  // inspected, not by the calendar day, and two rounds can share a date.
+  {
+    gateDir: 'docs/approvals/IDK-503-rerun-2026-08-15-b',
+    record: 'docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15-b.md',
+  },
 ]
 
 // The seven gates IDK-503's scope names. A missing file here means a gate was skipped.
