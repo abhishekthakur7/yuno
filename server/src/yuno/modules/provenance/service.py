@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from yuno.modules.identity.domain import Role, RolePolicy
 from yuno.modules.provenance.adapters import purge_license_revoked_snapshot_bodies
 from yuno.modules.provenance.domain import (
     Source,
@@ -168,9 +169,26 @@ def withdraw_source(
     is one status/reason/replacement write path rather than a second
     transition; lineage is always old -> new, exactly as the caller
     supplies it.
+
+    IDK-003 §8 reserves `withdrawn` for entry "only by explicit editorial
+    action" — the grant check below (`Role.DESIGNATED_EDITORIAL_APPROVER`)
+    is what makes an action "editorial" rather than any owner-scoped call,
+    so it lives here, inside the one function every caller (the offline
+    `scripts/withdraw_source.py` CLI today, and any future caller) must go
+    through, mirroring `publish_canonical_graph`'s identical
+    `uow.owners.grants(...)` / `RolePolicy.require(...)` check
+    (`canonical/publisher.py:139-140`) rather than trusting each caller to
+    repeat it. There is no separate actor parameter: this is a
+    single-local-owner product (exactly one `Owner` row, per PRD DAT-01),
+    so `owner_id` — already the id every `provenance` read/write in this
+    module is scoped to — is also the acting owner whose grant is checked;
+    a distinct `actor_owner_id` would be a parameter nothing could ever
+    supply a different value for.
     """
     timestamp = now_text(clock or SystemClock())
     with uow_factory() as uow:
+        grants = uow.owners.grants(owner_id)
+        RolePolicy.require(grants, Role.DESIGNATED_EDITORIAL_APPROVER)
         source = uow.provenance.get_source(owner_id, source_id)
         if source is None:
             raise NotFoundError("The source was not found.")

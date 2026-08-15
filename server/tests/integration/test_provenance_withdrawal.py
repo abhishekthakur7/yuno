@@ -30,6 +30,7 @@ from yuno.modules.canonical.domain import (
     Topic,
     TopicIdentity,
 )
+from yuno.modules.identity.domain import Role
 from yuno.modules.profiles_goals.domain import (
     GoalPath,
     GoalStatus,
@@ -50,7 +51,7 @@ from yuno.modules.provenance.domain import (
 )
 from yuno.modules.provenance.service import withdraw_source
 from yuno.shared.application.unit_of_work import UnitOfWorkFactory
-from yuno.shared.domain.errors import ConflictError
+from yuno.shared.domain.errors import ConflictError, RoleNotGrantedError
 from yuno.shared.domain.ids import new_id
 
 _REVOCATION_REASONS = (
@@ -87,8 +88,30 @@ def _content_hash(label: str) -> str:
 
 
 def _owner(uow_factory: UnitOfWorkFactory) -> str:
+    """A local owner holding `designated_editorial_approver` -- `withdraw_source`
+    now checks this grant itself (IDK-503 gate 3 blocking finding 4), so
+    every fixture that exercises a real withdrawal needs an owner that
+    actually holds it, mirroring `test_canonical_publish.py`'s
+    `approver_owner_id` fixture idiom.
+    """
     with uow_factory() as uow:
         owner = uow.owners.create_local_owner("Owner")
+        uow.owners.grant_role(
+            owner.id, Role.DESIGNATED_EDITORIAL_APPROVER, assigned_by_owner_id=owner.id
+        )
+        uow.commit()
+    return owner.id
+
+
+def _learner_only_owner(uow_factory: UnitOfWorkFactory) -> str:
+    """A local owner holding only `Role.LEARNER` -- the negative case for
+    the grant check `withdraw_source` now performs before any write,
+    mirroring `test_canonical_publish.py`'s `learner_only_owner_id`
+    fixture idiom.
+    """
+    with uow_factory() as uow:
+        owner = uow.owners.create_local_owner("Learner Only")
+        uow.owners.grant_role(owner.id, Role.LEARNER, assigned_by_owner_id=owner.id)
         uow.commit()
     return owner.id
 
@@ -552,3 +575,33 @@ def test_withdrawal_with_replacement_points_old_source_at_new_source(
     assert new_source is not None
     assert new_source.availability_status is SourceAvailability.AVAILABLE
     assert new_source.superseded_by_source_id is None
+
+
+def test_withdrawal_is_refused_when_the_actor_lacks_the_approver_grant(
+    uow_factory: UnitOfWorkFactory,
+) -> None:
+    """IDK-503 gate 3 blocking finding 4 / B7 remainder: `withdraw_source`
+    now checks `Role.DESIGNATED_EDITORIAL_APPROVER` itself (mirroring
+    `publish_canonical_graph`'s identical `uow.owners.grants(...)` /
+    `RolePolicy.require(...)` check) before any write, so an owner holding
+    only `Role.LEARNER` is refused with `RoleNotGrantedError` and the
+    source is left completely untouched -- still `available`, no
+    `withdrawal_reason` recorded.
+    """
+    owner_id = _learner_only_owner(uow_factory)
+    source_id = _source(uow_factory, owner_id, suffix="unauthorized")
+
+    with pytest.raises(RoleNotGrantedError):
+        withdraw_source(
+            uow_factory,
+            owner_id,
+            source_id,
+            SourceWithdrawalReason.LICENSE_REVOKED,
+            clock=_FixedClock(_ts(9)),
+        )
+
+    with uow_factory() as uow:
+        current = uow.provenance.get_source(owner_id, source_id)
+    assert current is not None
+    assert current.availability_status is SourceAvailability.AVAILABLE
+    assert current.withdrawal_reason is None
