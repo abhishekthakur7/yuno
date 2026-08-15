@@ -395,9 +395,14 @@ class AssessmentDimensionResultRow(Base):
     assessment_id: Mapped[str] = mapped_column(Text, nullable=False)
     rubric_dimension_id: Mapped[str] = mapped_column(Text, nullable=False)
     outcome: Mapped[str] = mapped_column(Text, nullable=False)
-    # Denormalized from `rubric_dimensions.is_critical` at write time (see
-    # `AssessmentDimensionResult.is_critical`), so IDK-009 section 9.2's
-    # critical-dimension precedence rule can be applied without a join.
+    # Denormalized at write time from `RubricDimension.is_critical` -- the
+    # derived property, not a column: `rubric_dimensions` deliberately has
+    # none (see that table above). Stored here so IDK-009 section 9.2's
+    # critical-dimension precedence rule can be applied without a join, and
+    # so a past assessment keeps the criticality that applied when it was
+    # made. See `AssessmentDimensionResult.is_critical`. This flag is
+    # exposed in no API contract or client type, by decision:
+    # `docs/assessment/IDK-009-critical-dimension-exposure.md`.
     is_critical: Mapped[int] = boolean_column("is_critical", default=False)
     body_hash: Mapped[str] = mapped_column(Text, nullable=False)
 

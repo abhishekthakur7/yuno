@@ -1015,7 +1015,7 @@ These eight tickets deliver self-contained topic layers, learner-approved overla
 ### IDK-204 — Immutable evidence, evaluations, disputes, and re-evaluation
 
 - Phase: 2 — MVP learning and evidence
-- Status: Complete
+- Status: Content incomplete — the schema, the version gate and the evaluation domain ship and are tested, but the three immutable IDK-009 v1 rubric manifests this ticket's Scope requires loading (`hands-on-rubric-v1`, `practice-rubric-v1`, `mock-rubric-v1`) exist nowhere outside `docs/`, and `rubrics`/`rubric_dimensions` hold zero rows. IDK-503 re-run finding B11, `docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md`.
 - Objective: Deliver immutable, append-only evidence and assessments; visible rubric dimensions and assumptions; acceptance of multiple valid solutions; append-only disputes; re-evaluation that creates a successor and marks the predecessor excluded-from-derivation while preserving history; unresolved ambiguity that carries no readiness penalty.
 - User-visible outcome: Submitting an artifact/answer produces a real, permanent evidence record with rubric-based feedback; disputing it never erases the original, and re-evaluation adds a new result rather than overwriting.
 - PRD traceability: EVAL-01 (primary), EVAL-02 (primary)
@@ -1311,7 +1311,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-302 — Practice: hints, per-attempt feedback, append-only retry
 
 - Phase: 3 — MVP interview
-- Status: Complete
+- Status: Content incomplete — the Practice state machine ships and is tested, but the three approved Practice scenario records from IDK-009 content revision `idk009-v1-r1` that this ticket's Scope requires loading exist nowhere outside `docs/`, and IDK-204's rubric registry it consumes is itself unshipped. IDK-503 re-run finding B12, `docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md`.
 - Objective: Implement the Practice lifecycle `ready → answering → follow-up → submitted → evaluating → feedback-ready → failed-recoverable` with hints only after explicit request, feedback only after Submit, facts/trade-offs separation, adaptive follow-ups, and append-only attempts that retry/repair never overwrite.
 - User-visible outcome: A learner answers a Practice question, optionally requests a hint before answering, submits to receive per-attempt feedback that separately labels factual corrections and trade-offs, and can repair or continue without losing any earlier attempt; cancelling an in-flight evaluation preserves the submitted attempt.
 - PRD traceability: QPR-01 (primary), QPR-02 (primary), EVAL-01 (contributing), EVAL-02 (contributing), HND-01 (contributing — Practice's response/evidence pattern reuses the same evaluated-artifact shape whose primary owner is IDK-405), NFR-09 (contributing).
@@ -1367,7 +1367,7 @@ Interview Prep ships as two remaining independently-reachable submodes of `/app/
 ### IDK-303 — Focused Mock: adaptive turns, exact safe-exit draft, terminal Complete
 
 - Phase: 3 — MVP interview
-- Status: Complete
+- Status: Content incomplete — the Mock state machine, exact-draft preservation and terminal Complete ship and are tested, but the three approved Mock scenario records from IDK-009 content revision `idk009-v1-r1` that this ticket's Scope requires loading exist nowhere outside `docs/`, and IDK-204's rubric registry it consumes is itself unshipped. IDK-503 re-run finding B12, `docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md`.
 - Objective: Implement `/app/mock` outside the ordinary global shell with one adaptive interviewer question at a time, no hints or evaluative feedback while nonterminal, byte-for-byte Save & exit draft preservation, resume that changes only status, and an explicit, idempotent, terminal Complete that fixes the transcript and enqueues final evaluation.
 - User-visible outcome: A learner answers a focused Mock interview seeing only status, the current question, the answer field, Save & exit, and terminal completion — no hints, rubric, score, praise, recommendation, evaluation, or Reports link while active; exiting and resuming returns the exact draft unchanged; completing is a deliberate, irreversible action after which the transcript can no longer accept answers.
 - PRD traceability: QMK-01 (primary), EVAL-01 (contributing), EVAL-02 (contributing).
@@ -1683,7 +1683,7 @@ These nine tickets deliver the durable two-lane job engine, SSE, the CLI provide
 ### IDK-405 — Hands-on lifecycle and static/runtime separation
 
 - Phase: 4 — MVP AI and hands-on
-- Status: Complete
+- Status: Content incomplete — the hands-on lifecycle, immutable artifact revisions and static/runtime separation ship and are tested, but the three approved initial and three paired delayed hands-on scenario records from IDK-009 content revision `idk009-v1-r1` that this ticket's Scope requires loading exist nowhere outside `docs/`; every synthesized `HandsOnWork` row still hardcodes `scenario_status="fixture"`, `scenario_id=None`, and `hands_on_work` holds zero rows. IDK-503 re-run findings B10 and B12, `docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md`.
 - Objective: Implement the hands-on lifecycle `scenario → artifact/code/design/decision → visible rubric review → adaptive cross-question → revision → submitted evidence` with every stage and revision linked, static review always labelled static with a required non-empty limitation, and the UI visually distinguishing static analysis, compilation, and test execution, where only Submit appends evidence.
 - User-visible outcome: A learner works a scenario in Topic Studio, submits an artifact for review, sees a rubric-based static review that is unmistakably labelled as static (never claiming runtime behavior), receives an adaptive cross-question, revises, and only an explicit Submit creates evidence; Run remains exploratory and never appends evidence on its own.
 - PRD traceability: HND-01 (primary), HND-02 (primary), HND-03 (co-primary with IDK-503, which owns the scenario-realism review that HND-03's PRD acceptance actually names), EVAL-01 (contributing).
@@ -2391,7 +2391,9 @@ All four tickets carry no MVP dependency, are not reachable through MVP acceptan
 
 Every dependency points backward to a decision ticket or a lower-numbered implementation ticket. No ticket depends on a later one.
 
-Status vocabulary, fixed here because it was previously ambiguous: `Not started` means no implementation exists. `Complete` means the ticket's own acceptance criteria are implemented and its Appendix 8 required automated tests exist and pass; it does not mean the manual reviews Appendix 8 lists for that ticket have been performed — IDK-503 owns those, and IDK-505 is the final release gate. `Approved` applies only to Section 0 decision tickets and means the decision artifact exists and carries a recorded approval. `Blocked by <ID>` means an unresolved decision is required for that ticket's own acceptance. Until 2026-08-14 this table used `Ready` for both "not started" and "implemented and tested", which made it unusable as a readiness signal; `Ready` no longer appears for an implementation ticket.
+Status vocabulary, fixed here because it was previously ambiguous: `Not started` means no implementation exists. `Complete` means the ticket's own acceptance criteria are implemented and its Appendix 8 required automated tests exist and pass; it does not mean the manual reviews Appendix 8 lists for that ticket have been performed — IDK-503 owns those, and IDK-505 is the final release gate. `Content incomplete` means the ticket's code paths are implemented and its Appendix 8 automated tests pass, but at least one acceptance criterion in the ticket's own `Scope` requires loading approved content that does not exist anywhere in the tree; the ticket names the missing content. `Approved` applies only to Section 0 decision tickets and means the decision artifact exists and carries a recorded approval. `Blocked by <ID>` means an unresolved decision is required for that ticket's own acceptance. Until 2026-08-14 this table used `Ready` for both "not started" and "implemented and tested", which made it unusable as a readiness signal; `Ready` no longer appears for an implementation ticket.
+
+`Content incomplete` was added on 2026-08-15 for the same reason `Ready` was retired: IDK-204, IDK-302, IDK-303 and IDK-405 each read `Complete` while the approved rubric manifests and the twelve approved IDK-009 §4 scenario records they are scoped to load existed nowhere — a gap the IDK-503 re-run recorded against all four (`docs/approvals/IDK-503-content-and-safety-review-rerun-2026-08-15.md`, findings B11 and B12). `Complete` cannot carry that state without meaning two different things again.
 
 | Ticket | Phase | Status | Depends on |
 |---|---|---|---|
@@ -2417,20 +2419,20 @@ Status vocabulary, fixed here because it was previously ambiguous: `Not started`
 | IDK-201 | 2 | Complete | IDK-101, IDK-102, IDK-103, IDK-106, IDK-107 |
 | IDK-202 | 2 | Complete | IDK-106 |
 | IDK-203 | 2 | Complete | IDK-101, IDK-102, IDK-105 |
-| IDK-204 | 2 | Complete | IDK-101, IDK-102, IDK-108 |
+| IDK-204 | 2 | Content incomplete | IDK-101, IDK-102, IDK-108 |
 | IDK-205 | 2 | Complete | IDK-101, IDK-108, IDK-204 |
 | IDK-206 | 2 | Complete | IDK-201, IDK-204 |
 | IDK-207 | 2 | Complete | IDK-101, IDK-102, IDK-201, IDK-203 |
 | IDK-208 | 2 | Complete | IDK-108, IDK-204, IDK-205 |
 | IDK-301 | 3 | Complete | IDK-004, IDK-103, IDK-104, IDK-201, IDK-205 |
-| IDK-302 | 3 | Complete | IDK-008, IDK-009, IDK-204, IDK-205, IDK-301 |
-| IDK-303 | 3 | Complete | IDK-009, IDK-104, IDK-301, IDK-302 |
+| IDK-302 | 3 | Content incomplete | IDK-008, IDK-009, IDK-204, IDK-205, IDK-301 |
+| IDK-303 | 3 | Content incomplete | IDK-009, IDK-104, IDK-301, IDK-302 |
 | IDK-304 | 3 | Complete | IDK-009, IDK-204, IDK-301, IDK-302, IDK-303 |
 | IDK-401 | 4 | Complete | IDK-101 |
 | IDK-402 | 4 | Complete | IDK-101, IDK-401 |
 | IDK-403 | 4 | Complete | IDK-006, IDK-101, IDK-401 |
 | IDK-404 | 4 | Complete | IDK-207, IDK-301, IDK-302, IDK-303, IDK-401, IDK-402, IDK-403 |
-| IDK-405 | 4 | Complete | IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
+| IDK-405 | 4 | Content incomplete | IDK-004, IDK-005, IDK-008, IDK-009, IDK-201, IDK-204, IDK-403, IDK-404 |
 | IDK-406 | 4 | Partially implemented; execution deferred by owner decision — isolation layer will not be built, runner stays disabled | IDK-005, IDK-007, IDK-008, IDK-401, IDK-405 |
 | IDK-407 | 4 | Complete | IDK-101, IDK-102, IDK-106, IDK-201 |
 | IDK-408 | 4 | Complete | IDK-101, IDK-201, IDK-204, IDK-206 |
